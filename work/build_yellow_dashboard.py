@@ -482,8 +482,7 @@ def build_fragment(
             }
 
             #yellow-dashboard-root .app-topbar {
-              position: sticky;
-              top: var(--space-4);
+              position: relative;
               z-index: 20;
               display: flex;
               align-items: center;
@@ -2288,7 +2287,6 @@ def build_fragment(
                     </nav>
                   </aside>
                   <article class="legal-document app-card legal-layout__content">
-                    <div class="status-note text-small">הערה: לפני פרסום ציבורי יש לאמת את מדיניות הפרטיות עם אבטחת מידע והייעוץ המשפטי.</div>
                     <section id="privacy-section-1">
                       <h3>1. מידע שנאסף</h3>
                       <p>המערכת עשויה לקלוט נתוני תרומה ותפעול לצורך בקרה ודשבורד, לרבות שם תורם, כתובת דוא״ל, סכום, זמן ביצוע, שיוך לשגריר וסטטוס עסקה.</p>
@@ -3060,7 +3058,6 @@ def build_fragment(
                       </nav>
                     </aside>
                     <article class="legal-document app-card legal-layout__content">
-                      <div class="status-note text-small">הערה חשובה: מסמך המקור נכתב עבור קמפיין קודם, ואילו בתצוגת המערכת עודכן חלון הפרויקט הנוכחי ליום 23.08.2026 עד יום 01.09.2026. הנוסח עדיין דורש אישור משפטי לפני שימוש חי.</div>
                       <section id="rules-section-1">
                         <h3>1. כללי התחרות ומטרותיה</h3>
                         <p>מטרת הפרויקט היא איסוף סכום כסף גדול ככל הניתן עבור רכישת מוצרי מזון שייארזו ויחולקו לנזקקים, בהתאם ליעדי הקמפיין הפעיל.</p>
