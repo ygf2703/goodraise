@@ -2448,11 +2448,11 @@ def build_fragment(
                                 <input id="compare-upload" class="form-control" type="file" accept=".csv,text/csv" />
                               </label>
                               <label class="form-label">
-                                קובץ פרסים
+                                החלפת טבלת פרסים (אופציונלי)
                                 <input id="prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" />
                               </label>
                             </div>
-                            <div id="import-status" class="status-note text-small" aria-live="polite">המערכת מוכנה לקבלת קבצים. קובץ לא תקין לא ידרוס את הנתונים הפעילים.</div>
+                            <div id="import-status" class="status-note text-small" aria-live="polite">טבלת הפרסים הקבועה כבר טעונה במערכת. העלאת קובץ פרסים היא אופציונלית בלבד ונועדה רק להחלפה יזומה.</div>
                           </section>
 
                           <section class="control-group">
@@ -2874,6 +2874,16 @@ def build_fragment(
                 } catch (_error) {
                   return;
                 }
+              }
+
+              function hasPrizeModelContent(model) {
+                return Boolean(model?.placePrizes?.length || model?.tierPrizes?.length);
+              }
+
+              function getDefaultPrizeStatusMessage() {
+                return hasPrizeModelContent(state.prizeModel)
+                  ? "טבלת הפרסים הקבועה כבר טעונה במערכת. העלאת קובץ פרסים היא אופציונלית בלבד ונועדה רק להחלפה יזומה."
+                  : "המערכת מוכנה לקבלת קבצים. קובץ לא תקין לא ידרוס את הנתונים הפעילים.";
               }
 
               function readStoredGoals() {
@@ -5734,8 +5744,8 @@ def build_fragment(
                     storePrizeModel(validation.normalized);
                     setImportMessage(
                       validation.warnings.length
-                        ? `קובץ הפרסים ${file.name} נטען חלקית. מומלץ לבדוק שחסרים פרסים או מדרגות לא נעלמו בטעות.`
-                        : `קובץ הפרסים ${file.name} נטען בהצלחה.`,
+                        ? `טבלת הפרסים הוחלפה מתוך ${file.name} ונשמרה בדפדפן הזה, אך נטענה עם אזהרות. מומלץ לבדוק שלא חסרים פרסים או מדרגות.`
+                        : `טבלת הפרסים הוחלפה מתוך ${file.name} ונשמרה בדפדפן הזה. אין צורך להעלות אותה שוב בכל התחברות.`,
                       validation.warnings.length ? "warning" : "success"
                     );
                     renderAll();
@@ -5760,13 +5770,16 @@ def build_fragment(
                 duplicateIdCount: 0,
               };
               state.prizeModel = normalizePrizeModel(state.prizeModel);
+              if (hasPrizeModelContent(state.prizeModel)) {
+                storePrizeModel(state.prizeModel);
+              }
               hydrateRulesPage();
               resetFilterOptions();
               setSetupMode(false);
               await hydrateAuthSession();
               setPage(state.session ? "admin" : "prizes");
               setLoginMessage("");
-              setImportMessage("המערכת מוכנה לקבלת קבצים. קובץ לא תקין לא ידרוס את הנתונים הפעילים.");
+              setImportMessage(getDefaultPrizeStatusMessage());
               bindEvents();
               renderAll();
             })();
