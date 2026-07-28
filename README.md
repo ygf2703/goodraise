@@ -39,8 +39,10 @@ The app receives campaign export files and turns them into an active dashboard t
 
 - `work/build_yellow_dashboard.py`
   Dashboard builder script. Generates the interactive HTML output.
-- `work/brand-logo.png`
-  Desktop branding asset.
+- `work/assets/achim-lasemel-logo.png`
+  Organization logo for Achim LaSemel.
+- `work/assets/osim-tov-betzahov-logo.png`
+  Campaign logo for Osim Tov BeTzahov.
 - `outputs/dashboard-backlog-priorities.md`
   Working backlog and upgrade notes.
 - `outputs/yellow-project-dashboard.html`

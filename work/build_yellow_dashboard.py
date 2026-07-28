@@ -14,9 +14,12 @@ import pandas as pd
 
 
 WORK_DIR = Path(r"C:\Users\noamf\Documents\Codex\2026-07-27\mu\work")
+ASSETS_DIR = WORK_DIR / "assets"
 SOURCE_CSV = WORK_DIR / "source.csv"
 PRIZES_XLSX = WORK_DIR / "prizes.xlsx"
-LOGO_PATH = WORK_DIR / "brand-logo.png"
+ORG_LOGO_PATH = ASSETS_DIR / "achim-lasemel-logo.png"
+CAMPAIGN_LOGO_PATH = ASSETS_DIR / "osim-tov-betzahov-logo.png"
+LEGACY_LOGO_PATH = WORK_DIR / "brand-logo.png"
 VIS_DIR = Path(r"C:\Users\noamf\.codex\visualizations\2026\07\27\019fa494-6c18-70a0-bbb2-4a92c166188a")
 FRAGMENT_PATH = VIS_DIR / "yellow-project-dashboard.html"
 OUTPUT_HTML = Path(r"C:\Users\noamf\Documents\Codex\2026-07-27\mu\outputs\yellow-project-dashboard.html")
@@ -92,10 +95,10 @@ def build_meta(rows: list[dict]) -> dict:
     }
 
 
-def load_logo_data_uri() -> str:
-    if not LOGO_PATH.exists():
+def load_logo_data_uri(path: Path) -> str:
+    if not path.exists():
         return ""
-    encoded = base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:image/png;base64,{encoded}"
 
 
@@ -169,10 +172,11 @@ def load_prize_model() -> dict:
     }
 
 
-def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model: dict) -> str:
+def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaign_logo_data_uri: str, prize_model: dict) -> str:
     rows_json = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
     meta_json = json.dumps(meta, ensure_ascii=False, separators=(",", ":"))
-    logo_json = json.dumps(logo_data_uri, ensure_ascii=False)
+    org_logo_json = json.dumps(org_logo_data_uri, ensure_ascii=False)
+    campaign_logo_json = json.dumps(campaign_logo_data_uri, ensure_ascii=False)
     prize_json = json.dumps(prize_model, ensure_ascii=False, separators=(",", ":"))
     access_json = json.dumps(
         {
@@ -1165,6 +1169,9 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                     <h2 class="hero-title">דשבורד פרסים ותחרות</h2>
                     <p>תצוגת תחרות ייעודית לזוכים הנוכחיים, למדרגות הפעילות ולמצב הפרסים נכון לרגע זה על בסיס הנתונים שהועלו למערכת.</p>
                   </div>
+                  <div class="logo-wrap">
+                    <img id="public-logo" alt="לוגו עושים טוב בצהוב" />
+                  </div>
                 </div>
                 <div id="public-hero-badges" class="public-badges"></div>
               </article>
@@ -1511,7 +1518,8 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
             (() => {
               const INITIAL_ROWS = __INITIAL_ROWS__;
               const INITIAL_META = __INITIAL_META__;
-              const INITIAL_LOGO = __INITIAL_LOGO__;
+              const INITIAL_ORG_LOGO = __INITIAL_ORG_LOGO__;
+              const INITIAL_CAMPAIGN_LOGO = __INITIAL_CAMPAIGN_LOGO__;
               const INITIAL_PRIZES = __INITIAL_PRIZES__;
               const ACCESS_CONTROL = __ACCESS_CONTROL__;
               const PRIZE_STORAGE_KEY = "yellow-dashboard.prize-model";
@@ -1523,6 +1531,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
               const elements = {
                 topbarLogo: root.querySelector("#topbar-logo"),
                 logo: root.querySelector("#brand-logo"),
+                publicLogo: root.querySelector("#public-logo"),
                 navButtons: Array.from(root.querySelectorAll("[data-page-target]")),
                 pagePrizes: root.querySelector("#page-prizes"),
                 pageRules: root.querySelector("#page-rules"),
@@ -2522,6 +2531,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
               function renderPublicHeroBadges(prizeRows) {
                 const leaderboard = buildLeaderboard(prizeRows);
                 const topLeader = leaderboard[0];
+                elements.publicLogo.src = INITIAL_CAMPAIGN_LOGO;
                 const publicBadges = [
                   `<span class="hero-badge">חלון פרויקט: ${escapeHtml(state.meta.projectWindowLabel || "לא זוהה")}</span>`,
                   `<span class="hero-badge">${escapeHtml(formatNumber(leaderboard.length))} שגרירים מדורגים כרגע</span>`,
@@ -2538,8 +2548,8 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                 const prizeTotal = sumAmount(prizeRows);
                 const ambassadorCount = new Set(prizeRows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך")).size;
 
-                elements.logo.src = INITIAL_LOGO;
-                elements.topbarLogo.src = INITIAL_LOGO;
+                elements.logo.src = INITIAL_ORG_LOGO;
+                elements.topbarLogo.src = INITIAL_ORG_LOGO;
                 const badges = [
                   `<span class="hero-badge">₪ ${escapeHtml(formatNumber(Math.round(filteredTotal)).replace("₪", "").trim())} בגזרת התצוגה</span>`,
                   `<span class="hero-badge">${escapeHtml(formatNumber(ambassadorCount))} שגרירים פעילים בטווח</span>`,
@@ -3720,7 +3730,8 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
     return (
         template.replace("__INITIAL_ROWS__", rows_json)
         .replace("__INITIAL_META__", meta_json)
-        .replace("__INITIAL_LOGO__", logo_json)
+        .replace("__INITIAL_ORG_LOGO__", org_logo_json)
+        .replace("__INITIAL_CAMPAIGN_LOGO__", campaign_logo_json)
         .replace("__INITIAL_PRIZES__", prize_json)
         .replace("__ACCESS_CONTROL__", access_json)
     )
@@ -3744,9 +3755,10 @@ def export_browser_friendly_html() -> None:
 def main() -> None:
     rows = load_rows()
     meta = build_meta(rows)
-    logo_data_uri = load_logo_data_uri()
+    org_logo_data_uri = load_logo_data_uri(ORG_LOGO_PATH if ORG_LOGO_PATH.exists() else LEGACY_LOGO_PATH)
+    campaign_logo_data_uri = load_logo_data_uri(CAMPAIGN_LOGO_PATH)
     prize_model = load_prize_model()
-    fragment = build_fragment(rows, meta, logo_data_uri, prize_model)
+    fragment = build_fragment(rows, meta, org_logo_data_uri, campaign_logo_data_uri, prize_model)
     VIS_DIR.mkdir(parents=True, exist_ok=True)
     FRAGMENT_PATH.write_text(fragment, encoding="utf-8")
 
