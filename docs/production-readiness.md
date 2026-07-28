@@ -9,6 +9,7 @@ This project is still a local-first campaign dashboard, but it now includes a cl
 - Optional external admin access config via `work/config/dashboard-access.local.json`
 - Browser-friendly standalone HTML output even when Codex render tooling is unavailable
 - GitHub Actions build workflow
+- Release verification script for generated HTML outputs
 - Stronger documentation for local-to-production handoff
 
 ## Recommended Release Gates

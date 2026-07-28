@@ -60,6 +60,7 @@ DEFAULT_ACCESS_CONTROL = {
         "Moranmta@gmail.com",
         "4337579@gmail.com",
         "rasherov@gmail.com",
+        "shaywolf251996@gmail.com",
         "Yafit.neveshalev@gmail.com",
         "Yovelk11@gmail.com",
         "Lalobenny@gmail.com",
@@ -4935,7 +4936,7 @@ def export_browser_friendly_html() -> None:
     if end_index == -1 or end_index <= start_index:
         return
     browser_html = unescape(shell_html[start_index:end_index])
-    BROWSER_OUTPUT_HTML.write_text(browser_html, encoding="utf-8")
+    BROWSER_OUTPUT_HTML.write_text(build_browser_document(browser_html), encoding="utf-8")
 
 
 def build_browser_document(fragment: str) -> str:
@@ -4946,7 +4947,9 @@ def build_browser_document(fragment: str) -> str:
           <head>
             <meta charset="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
-            <title>Yellow Project Dashboard</title>
+            <meta name="robots" content="noindex,nofollow" />
+            <meta name="color-scheme" content="light" />
+            <title>Osim Tov BeTzahov Dashboard</title>
             <style>
               html, body {{
                 margin: 0;

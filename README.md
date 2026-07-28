@@ -58,6 +58,8 @@ The app receives campaign export files and turns them into an active dashboard t
   Working backlog and upgrade notes.
 - `docs/production-readiness.md`
   Production checklist, config notes, and release gates.
+- `docs/go-live-checklist.md`
+  Structured go-live checklist with completed repo tasks and external blockers.
 - `outputs/yellow-project-dashboard.html`
   Wrapped preview output. Ignored from git.
 - `outputs/yellow-project-dashboard-browser.html`
@@ -87,6 +89,7 @@ Current local build command:
 
 ```powershell
 python work/build_yellow_dashboard.py
+python scripts/verify_dashboard_release.py
 ```
 
 After build, open:
@@ -97,6 +100,7 @@ Notes:
 
 - If `work/source.csv` is missing, the build falls back to `work/samples/sample-source.csv`.
 - If the Codex visualize renderer is unavailable, the script still produces standalone HTML outputs.
+- Release verification is available through `scripts/verify_dashboard_release.py`.
 
 ## Git Workflow
 
