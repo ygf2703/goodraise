@@ -24,6 +24,7 @@ The app receives campaign export files and turns them into an active dashboard t
   - Manager-only admin dashboard
 - Sticky dual-brand header with manager status and page navigation
 - Public prize page with podium, prize tiers, and live competition summary
+- Public participant view stays open without registration, with a direct manager entry point from the same page
 - SaaS-style manager login screen for local pilot access
 - File upload for base campaign CSV
 - File upload for comparison CSV
@@ -62,6 +63,7 @@ This repository intentionally does not track live campaign data or generated das
 Important:
 
 - The current admin access layer is a local pilot gate implemented in the client.
+- Regular users do not sign in. Only predefined managers can enter the admin dashboard from the public participant page.
 - Before any public deployment, authentication must move to a secure server-side flow.
 
 Ignored from git:

@@ -1491,6 +1491,48 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               font-weight: 800;
             }
 
+            #yellow-dashboard-root .manager-entry-card {
+              display: grid;
+              grid-template-columns: minmax(0, 1.4fr) auto;
+              gap: var(--space-4);
+              align-items: center;
+            }
+
+            #yellow-dashboard-root .manager-entry-copy h3 {
+              margin: 0 0 var(--space-2);
+              color: var(--navy-950);
+              font-size: 1.15rem;
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .manager-entry-copy p {
+              margin: 0;
+              color: var(--graphite);
+              line-height: 1.75;
+            }
+
+            #yellow-dashboard-root .manager-entry-actions {
+              display: flex;
+              justify-content: flex-end;
+              align-items: center;
+              gap: var(--space-3);
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .manager-entry-note {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 48px;
+              padding: 0 var(--space-4);
+              border-radius: 999px;
+              background: rgba(17, 29, 74, 0.06);
+              color: var(--navy-900);
+              font-size: 0.94rem;
+              font-weight: 700;
+              white-space: nowrap;
+            }
+
             #yellow-dashboard-root .action-button:hover,
             #yellow-dashboard-root .button-primary:hover {
               background: var(--yolk-600);
@@ -1529,7 +1571,8 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               #yellow-dashboard-root .admin-overview-grid,
               #yellow-dashboard-root .login-shell,
               #yellow-dashboard-root .public-hero-grid,
-              #yellow-dashboard-root .legal-layout {
+              #yellow-dashboard-root .legal-layout,
+              #yellow-dashboard-root .manager-entry-card {
                 grid-template-columns: 1fr;
               }
 
@@ -1598,6 +1641,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               #yellow-dashboard-root .topbar-meta,
               #yellow-dashboard-root .brand-logo-cluster {
                 width: 100%;
+              }
+
+              #yellow-dashboard-root .manager-entry-actions {
+                justify-content: flex-start;
               }
 
               #yellow-dashboard-root .brand-logo-cluster {
@@ -1701,7 +1748,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 </nav>
                 <div class="session-box">
                   <div id="session-status" class="session-chip" aria-live="polite">מצב ניהול: אורח/ת</div>
-                  <button id="go-admin-login" class="button-secondary action-button secondary" type="button">כניסת מנהלים</button>
+                  <button id="go-admin-login" class="button-secondary action-button secondary" type="button" data-admin-login>כניסת מנהלים</button>
                   <button id="logout-button" class="button-ghost" type="button" hidden>התנתקות</button>
                 </div>
               </div>
@@ -1727,6 +1774,17 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                     </div>
                   </div>
                 </article>
+
+                <section class="app-card manager-entry-card" aria-label="כניסת מנהלים">
+                  <div class="manager-entry-copy">
+                    <h3>כניסת מנהלים מתוך העמוד הציבורי</h3>
+                    <p>תצוגת המשתתפים פתוחה לצפייה שוטפת וללא רישום. רק מנהלים מורשים נכנסים עם מייל מאושר וסיסמה כדי לעבור לדשבורד הניהולי המלא.</p>
+                  </div>
+                  <div class="manager-entry-actions">
+                    <span class="manager-entry-note">למשתתפים אין צורך בהתחברות</span>
+                    <button id="public-admin-login" class="button-secondary action-button secondary" type="button" data-admin-login>כניסת מנהלים</button>
+                  </div>
+                </section>
 
                 <section class="page-panel app-card app-card--elevated">
                   <div class="public-panel-header">
@@ -2234,6 +2292,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 loginCampaignLogo: root.querySelector("#login-campaign-logo"),
                 loginOrgLogo: root.querySelector("#login-org-logo"),
                 navButtons: Array.from(root.querySelectorAll("[data-page-target]")),
+                adminEntryButtons: Array.from(root.querySelectorAll("[data-admin-login]")),
                 metricButtons: Array.from(root.querySelectorAll("[data-metric-select]")),
                 pagePrizes: root.querySelector("#page-prizes"),
                 pageRules: root.querySelector("#page-rules"),
@@ -2241,6 +2300,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 pageAdmin: root.querySelector("#page-admin"),
                 sessionStatus: root.querySelector("#session-status"),
                 goAdminLogin: root.querySelector("#go-admin-login"),
+                publicAdminLogin: root.querySelector("#public-admin-login"),
                 logoutButton: root.querySelector("#logout-button"),
                 publicHeroBadges: root.querySelector("#public-hero-badges"),
                 adminLock: root.querySelector("#admin-lock"),
@@ -2504,6 +2564,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 elements.sessionStatus.textContent = isManager ? `מחובר/ת כמנהל/ת: ${state.session.email}` : "מצב ניהול: אורח/ת";
                 elements.logoutButton.hidden = !isManager;
                 elements.goAdminLogin.hidden = isManager;
+                elements.publicAdminLogin.textContent = isManager ? "מעבר לדשבורד הניהולי" : "כניסת מנהלים";
                 elements.adminLock.hidden = isManager;
                 elements.adminContent.hidden = !isManager;
                 if (state.ui.page === "admin" && !isManager) {
@@ -4495,9 +4556,13 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   });
                 });
 
-                elements.goAdminLogin.addEventListener("click", () => {
-                  setPage("admin");
-                  elements.loginEmail.focus();
+                elements.adminEntryButtons.forEach((button) => {
+                  button.addEventListener("click", () => {
+                    setPage("admin");
+                    if (!isManagerAuthenticated()) {
+                      elements.loginEmail.focus();
+                    }
+                  });
                 });
 
                 elements.logoutButton.addEventListener("click", () => {
