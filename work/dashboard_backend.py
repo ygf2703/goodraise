@@ -21,6 +21,8 @@ WORK_DIR = ROOT_DIR / "work"
 CONFIG_DIR = WORK_DIR / "config"
 DATA_DIR = WORK_DIR / "data"
 OUTPUTS_DIR = ROOT_DIR / "outputs"
+NETLIFY_DATA_DIR = ROOT_DIR / "netlify" / "data"
+ADMIN_DATASET_PATH = NETLIFY_DATA_DIR / "admin-dataset.json"
 ACCESS_CONTROL_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_ACCESS_CONTROL_JSON", str(CONFIG_DIR / "dashboard-access.local.json"))
 ).resolve()
@@ -50,6 +52,15 @@ ALLOWED_ORIGINS = {
     "http://localhost:8766",
     "http://localhost:8767",
 }
+SECURITY_HEADERS = (
+    ("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:8767 http://localhost:8767; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"),
+    ("Referrer-Policy", "strict-origin-when-cross-origin"),
+    ("X-Content-Type-Options", "nosniff"),
+    ("X-Frame-Options", "DENY"),
+    ("Cross-Origin-Opener-Policy", "same-origin"),
+    ("Cross-Origin-Resource-Policy", "same-origin"),
+    ("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
+)
 
 
 def normalize_email(value: str) -> str:
@@ -284,7 +295,19 @@ def build_set_cookie(token: str | None, max_age: int) -> str:
     morsel["httponly"] = True
     morsel["samesite"] = "Lax"
     morsel["max-age"] = max_age
+    if os.getenv("YELLOW_DASHBOARD_SECURE_COOKIES", "").strip().lower() in {"1", "true", "yes", "on"}:
+        morsel["secure"] = True
     return cookie.output(header="").strip()
+
+
+def load_admin_dataset_payload() -> dict[str, Any] | None:
+    if not ADMIN_DATASET_PATH.exists():
+        return None
+    try:
+        payload = json.loads(ADMIN_DATASET_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 class DashboardServer(ThreadingHTTPServer):
@@ -307,6 +330,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         super().log_message(format, *args)
 
+    def send_security_headers(self) -> None:
+        for key, value in SECURITY_HEADERS:
+            self.send_header(key, value)
+
+    def is_request_origin_allowed(self) -> bool:
+        origin = (self.headers.get("Origin") or "").strip()
+        return not origin or origin in ALLOWED_ORIGINS
+
     def get_cors_headers(self) -> list[tuple[str, str]]:
         origin = (self.headers.get("Origin") or "").strip()
         if origin and origin in ALLOWED_ORIGINS:
@@ -320,7 +351,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         return []
 
     def do_OPTIONS(self) -> None:
+        if not self.is_request_origin_allowed():
+            self.send_response(HTTPStatus.FORBIDDEN)
+            self.send_security_headers()
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_security_headers()
         for key, value in self.get_cors_headers():
             self.send_header(key, value)
         self.send_header("Content-Length", "0")
@@ -334,6 +372,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/auth/status":
             self.handle_auth_status()
             return
+        if parsed.path == "/api/admin/dataset":
+            self.handle_admin_dataset()
+            return
         if parsed.path in {"/", "/index.html", "/yellow-project-dashboard-browser.html"}:
             self.serve_file(self.dashboard_server.browser_output, "text/html; charset=utf-8")
             return
@@ -343,6 +384,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.respond_json(HTTPStatus.NOT_FOUND, {"message": "הנתיב המבוקש לא נמצא."})
 
     def do_POST(self) -> None:
+        if not self.is_request_origin_allowed():
+            self.respond_json(HTTPStatus.FORBIDDEN, {"message": "מקור הבקשה אינו מורשה."})
+            return
         parsed = urlparse(self.path)
         if parsed.path == "/api/auth/login":
             self.handle_auth_login()
@@ -372,6 +416,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     ) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        self.send_security_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
@@ -392,6 +437,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         content = path.read_bytes()
         self.send_response(HTTPStatus.OK)
+        self.send_security_headers()
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(content)))
@@ -423,6 +469,37 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "authenticated": bool(authenticated_email),
                 "email": authenticated_email or "",
                 "setupSupported": True,
+            },
+        )
+
+    def handle_admin_dataset(self) -> None:
+        token = self.get_session_token()
+        authenticated_email = None
+        if token:
+            with get_connection() as connection:
+                ensure_schema(connection)
+                seed_admins(connection)
+                authenticated_email = get_authenticated_email(connection, token)
+
+        if not authenticated_email:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים."})
+            return
+
+        payload = load_admin_dataset_payload()
+        if not payload:
+            self.respond_json(
+                HTTPStatus.NOT_FOUND,
+                {"message": "מאגר הנתונים הניהולי לא זמין כרגע. אפשר להעלות קובץ עסקאות ידנית לאחר הכניסה."},
+            )
+            return
+
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "rows": payload.get("rows", []),
+                "meta": payload.get("meta", {}),
+                "sourceLabel": payload.get("sourceLabel", "קובץ בסיס מאובטח"),
+                "generatedAt": payload.get("generatedAt", ""),
             },
         )
 

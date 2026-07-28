@@ -13,6 +13,10 @@ This project is still a campaign dashboard that can run locally, but it now also
 - Netlify build configuration with a published `index.html`
 - Netlify Functions auth endpoint mapped to `/api/auth/*`
 - Netlify Blobs persistence for approved manager passwords and sessions after deploy
+- Public dashboard output sanitized so donor-identifying fields are not embedded in the public HTML payload
+- Protected admin dataset generated separately and fetched only after authenticated manager login
+- Auth rate limiting and lightweight audit-event persistence for the Netlify login flow
+- Security headers added for Netlify delivery and local backend responses
 - Browser-friendly standalone HTML output even when Codex render tooling is unavailable
 - GitHub Actions build workflow
 - Release verification script for generated HTML outputs
@@ -23,14 +27,14 @@ This project is still a campaign dashboard that can run locally, but it now also
 
 Before a real public launch, complete the following:
 
-1. Add password reset / recovery, audit logging, and stronger operational controls.
+1. Add password reset / recovery and stronger manager lifecycle controls.
 2. Add server-side authorization and role separation beyond the current single manager tier.
 3. Replace file-only ingestion with a persistent campaign data source when live sync is required.
 4. Approve the legal text for rules and privacy.
-5. Add error monitoring and deployment health checks.
-6. Define backup, retention, and deletion policies for donor data.
-7. Run a full staging QA pass with real structure and sanitized data.
-8. Configure the final Netlify project settings and validate the first deployed manager setup flow.
+5. Add error monitoring, auth-alerting, and deployment health checks.
+6. Define backup, retention, deletion, and audit review policies for donor data.
+7. Run a full staging QA pass with sanitized data and real manager onboarding.
+8. Configure final Netlify secrets and validate the deployed first-login flow end-to-end.
 
 ## Local Config
 
@@ -56,6 +60,7 @@ Environment overrides are also supported:
 
 - `YELLOW_DASHBOARD_MANAGER_EMAILS`
 - `YELLOW_DASHBOARD_AUTH_DB_PATH`
+- `YELLOW_DASHBOARD_SECURE_COOKIES`
 - `YELLOW_DASHBOARD_SOURCE_CSV`
 - `YELLOW_DASHBOARD_PRIZES_XLSX`
 - `YELLOW_DASHBOARD_PRIZES_CSV`
@@ -71,3 +76,5 @@ Environment overrides are also supported:
   Netlify publish entrypoint generated from the same dashboard build.
 - `outputs/yellow-project-dashboard.html`
   Rendered shell output when the Codex visualize renderer exists, otherwise a standalone fallback copy.
+- `netlify/data/admin-dataset.json`
+  Protected admin-only dataset generated during build, bundled for authenticated backend access, and ignored from git.

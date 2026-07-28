@@ -5,6 +5,7 @@ work/prizes.xlsx
 work/prizes.csv
 work/config/dashboard-access.local.json
 work/data/
+netlify/data/
 outputs/index.html
 outputs/yellow-project-dashboard.html
 outputs/yellow-project-dashboard-browser.html

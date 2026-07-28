@@ -22,7 +22,7 @@ The app receives campaign export files and turns them into an active dashboard t
   - Public participation rules page
   - Public privacy page
   - Manager-only admin dashboard
-- Sticky dual-brand header with manager status and page navigation
+- Fixed dual-brand header with manager status and page navigation
 - Public prize page with podium, prize tiers, and live competition summary
 - Public campaign snapshot hero with immediate KPI-style status cards
 - Daily winners / "Olim LaDeshe" section across the 10 campaign days
@@ -35,6 +35,8 @@ The app receives campaign export files and turns them into an active dashboard t
 - Filters for ambassador, project day, exact date, date range, exact hour, hour range, donor name, and amount range
 - Local backend with SQLite admin table, first-password setup, login session, and logout
 - Netlify deployment path with Functions-based auth and persistent manager/session storage
+- Public HTML ships only a sanitized public dataset, while full donor-level admin data is loaded after authenticated manager login
+- Login hardening with rate limiting, audit events, and stricter deployment security headers
 - Manager-only graph mode controls for daily chart, heatmap, and ambassador movement views
 - Executive summary cards and KPI blocks
 - Grouped control center for data files, time filters, people, amounts, and goals
@@ -95,8 +97,11 @@ Important:
 - Admin access is backed by a server-side session cookie.
 - Regular users do not sign in. Only predefined managers can enter the admin dashboard from the public participant page.
 - First login for each approved manager is a password-setup flow.
+- The generated public HTML intentionally hides donor-identifying fields and does not embed the full admin dataset.
+- The full admin dataset is generated into `netlify/data/admin-dataset.json`, is ignored from git, and is served only after an authenticated admin session.
 - In local mode, manager auth is stored in `work/data/dashboard-auth.sqlite3`.
 - In Netlify mode, manager auth is stored through Netlify Functions plus Netlify Blobs persistence.
+- Netlify deploys include CSP, frame protection, content-type hardening, referrer policy, and basic auth rate limiting.
 - Recommended local override file: `work/config/dashboard-access.local.json` (ignored from git).
 
 Ignored from git:
@@ -104,6 +109,7 @@ Ignored from git:
 - `work/source.csv`
 - `work/prizes.xlsx`
 - `work/data/`
+- `netlify/data/`
 - `node_modules/`
 - `outputs/index.html`
 - `outputs/yellow-project-dashboard.html`
@@ -140,6 +146,7 @@ Notes:
 - The backend seeds the admin table from `work/config/dashboard-access.local.json` or the built-in manager list.
 - On first login with an approved email, the manager is prompted to define a personal password.
 - The preview on `8766` can authenticate against the local backend on `8767` through the configured local cross-origin auth flow.
+- If you place the local backend behind HTTPS, set `YELLOW_DASHBOARD_SECURE_COOKIES=1` to force `Secure` cookies.
 
 ## Netlify Deployment
 
@@ -149,11 +156,14 @@ This repository now includes the minimum files Netlify needs in order to actuall
 - the build now creates `outputs/index.html`
 - `netlify/functions/auth.mjs` serves:
   - `/api/health`
+  - `/api/admin/dataset`
   - `/api/auth/status`
   - `/api/auth/login`
   - `/api/auth/setup`
   - `/api/auth/logout`
+- the build writes the protected admin dataset to `netlify/data/admin-dataset.json` for authenticated manager fetches
 - manager passwords and sessions are persisted with Netlify Blobs
+- login attempts are rate-limited and written to a lightweight audit trail in the auth store
 - `/admin`, `/rules`, and `/privacy` are rewritten to the dashboard app shell
 
 Before the first real deploy, verify in Netlify:
@@ -162,6 +172,7 @@ Before the first real deploy, verify in Netlify:
 2. Publish directory is `outputs`.
 3. Functions directory is `netlify/functions`.
 4. If you want to override the built-in manager list, define `YELLOW_DASHBOARD_MANAGER_EMAILS` in the Netlify UI as a JSON array or comma-separated string.
+5. Keep the default security headers from `netlify.toml`, and deploy only on HTTPS domains.
 
 Useful local verification commands:
 
@@ -182,5 +193,6 @@ Useful local verification commands:
 - Add target forecasting and end-of-campaign projection
 - Add deeper donor analysis: new vs returning, large donors, retention
 - Add password reset / recovery flow and role-based authorization
+- Add centralized monitoring for auth failures and unusual usage patterns
 - Move from file-based local mode to a structured persistent data layer
 - Prepare deployment flow after design and product specification are finalized

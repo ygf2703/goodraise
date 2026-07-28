@@ -1,4 +1,5 @@
 import {
+  getAdminDataset,
   getAuthStatus,
   jsonResponse,
   loginManager,
@@ -45,12 +46,16 @@ export default async (request) => {
     });
   }
 
+  if (url.pathname === "/api/admin/dataset" && request.method === "GET") {
+    return getAdminDataset(request);
+  }
+
   if (url.pathname === "/api/auth/login" && request.method === "POST") {
     const payload = await readRequestPayload(request);
     return loginManager({
       email: payload.email,
       password: payload.password,
-      requestUrl: request.url,
+      request,
     });
   }
 
@@ -60,7 +65,7 @@ export default async (request) => {
       email: payload.email,
       password: payload.password,
       confirmPassword: payload.confirmPassword,
-      requestUrl: request.url,
+      request,
     });
   }
 
@@ -74,6 +79,7 @@ export default async (request) => {
 export const config = {
   path: [
     "/api/health",
+    "/api/admin/dataset",
     "/api/auth/status",
     "/api/auth/login",
     "/api/auth/setup",

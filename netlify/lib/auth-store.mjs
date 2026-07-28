@@ -6,10 +6,14 @@ import { fileURLToPath } from "node:url";
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const DEV_STORE_PATH = resolve(ROOT_DIR, "work", "data", "netlify-auth-dev.json");
+const ADMIN_DATASET_PATH = resolve(ROOT_DIR, "netlify", "data", "admin-dataset.json");
 const STORE_NAME = "yellow-dashboard-auth";
 const SESSION_COOKIE_NAME = "yellow_dashboard_admin_session";
 const SESSION_DURATION_HOURS = 12;
 const PASSWORD_ITERATIONS = 200_000;
+const MAX_AUTH_ATTEMPTS = 5;
+const AUTH_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_LOCKOUT_MS = 20 * 60 * 1000;
 const DEFAULT_MANAGER_EMAILS = [
   "noamfrostig@gmail.com",
   "themoti@gmail.com",
@@ -44,6 +48,14 @@ function adminKey(email) {
 
 function sessionKey(token) {
   return `session:${token}`;
+}
+
+function rateLimitKey(email, clientAddress) {
+  return `ratelimit:${normalizeEmail(email)}:${clientAddress || "unknown"}`;
+}
+
+function auditKey() {
+  return `audit:${Date.now()}:${randomBytes(6).toString("hex")}`;
 }
 
 function parseManagerEmails(rawValue) {
@@ -123,6 +135,25 @@ function buildCookieValue(token, requestUrl, maxAgeSeconds) {
   }
 
   return parts.join("; ");
+}
+
+function getClientAddress(request) {
+  const forwarded = request.headers.get("x-forwarded-for") || request.headers.get("x-nf-client-connection-ip") || "";
+  return forwarded.split(",")[0].trim() || "unknown";
+}
+
+function getUserAgent(request) {
+  return request.headers.get("user-agent") || "";
+}
+
+async function loadAdminDatasetPayload() {
+  try {
+    const content = await readFile(ADMIN_DATASET_PATH, "utf8");
+    const payload = JSON.parse(content);
+    return payload && typeof payload === "object" ? payload : null;
+  } catch {
+    return null;
+  }
 }
 
 async function readDevStore() {
@@ -220,6 +251,72 @@ function getPersistence() {
   return createFileStore();
 }
 
+async function recordAuditEvent(store, event) {
+  await store.setJSON(auditKey(), {
+    at: isoNow(),
+    ...event,
+  });
+}
+
+async function getRateLimitRecord(store, email, clientAddress) {
+  return (await store.getJSON(rateLimitKey(email, clientAddress))) ?? null;
+}
+
+async function clearFailedAttempts(store, email, clientAddress) {
+  await store.delete(rateLimitKey(email, clientAddress));
+}
+
+async function recordFailedAttempt(store, email, clientAddress) {
+  const key = rateLimitKey(email, clientAddress);
+  const now = Date.now();
+  const existing = await getRateLimitRecord(store, email, clientAddress);
+  const windowStartedAt =
+    existing && now - toMillis(existing.windowStartedAt) <= AUTH_WINDOW_MS
+      ? existing.windowStartedAt
+      : new Date(now).toISOString();
+  const count =
+    existing && now - toMillis(existing.windowStartedAt) <= AUTH_WINDOW_MS
+      ? Number(existing.count || 0) + 1
+      : 1;
+  const blockedUntil =
+    count >= MAX_AUTH_ATTEMPTS ? new Date(now + AUTH_LOCKOUT_MS).toISOString() : existing?.blockedUntil || "";
+
+  await store.setJSON(key, {
+    email: normalizeEmail(email),
+    clientAddress,
+    count,
+    windowStartedAt,
+    blockedUntil,
+  });
+
+  return {
+    count,
+    blockedUntil,
+  };
+}
+
+async function ensureNotRateLimited(store, email, clientAddress) {
+  const record = await getRateLimitRecord(store, email, clientAddress);
+  if (!record) {
+    return null;
+  }
+  if (record.blockedUntil && toMillis(record.blockedUntil) > Date.now()) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((toMillis(record.blockedUntil) - Date.now()) / 1000));
+    return failureResponse(
+      429,
+      "יותר מדי ניסיונות התחברות. נסו שוב בעוד מספר דקות.",
+      {
+        code: "rate_limited",
+        retryAfterSeconds,
+      },
+      {
+        "retry-after": String(retryAfterSeconds),
+      },
+    );
+  }
+  return null;
+}
+
 async function ensureAdminSeed(store) {
   const createdAt = isoNow();
   for (const email of loadManagerEmails()) {
@@ -278,9 +375,45 @@ export async function getAuthStatus(request) {
   };
 }
 
-export async function loginManager({ email, password, requestUrl }) {
+export async function getAdminDataset(request) {
+  const store = getPersistence();
+  const token = getSessionToken(request);
+  const session = await getSessionRecord(store, token);
+  if (!session?.adminEmail) {
+    return failureResponse(401, "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים.");
+  }
+
+  const payload = await loadAdminDatasetPayload();
+  if (!payload) {
+    return failureResponse(404, "מאגר הנתונים הניהולי לא זמין כרגע. אפשר להעלות קובץ עסקאות ידנית לאחר הכניסה.");
+  }
+
+  return jsonResponse(200, {
+    rows: Array.isArray(payload.rows) ? payload.rows : [],
+    meta: payload.meta && typeof payload.meta === "object" ? payload.meta : {},
+    sourceLabel: payload.sourceLabel || "קובץ בסיס מאובטח",
+    generatedAt: payload.generatedAt || "",
+  });
+}
+
+export async function loginManager({ email, password, request }) {
   const normalizedEmail = normalizeEmail(email);
   const store = getPersistence();
+  const clientAddress = getClientAddress(request);
+  const userAgent = getUserAgent(request);
+
+  const rateLimitResponse = await ensureNotRateLimited(store, normalizedEmail, clientAddress);
+  if (rateLimitResponse) {
+    await recordAuditEvent(store, {
+      type: "login_blocked",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "blocked",
+    });
+    return rateLimitResponse;
+  }
+
   const admin = await getAdminRecord(store, normalizedEmail);
 
   if (!normalizedEmail || !password) {
@@ -288,10 +421,25 @@ export async function loginManager({ email, password, requestUrl }) {
   }
 
   if (!admin || !admin.isActive) {
+    await recordFailedAttempt(store, normalizedEmail, clientAddress);
+    await recordAuditEvent(store, {
+      type: "login_denied",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "denied",
+    });
     return failureResponse(403, "המייל שהוזן אינו מורשה לגישה לפאנל הניהול.");
   }
 
   if (!admin.passwordHash) {
+    await recordAuditEvent(store, {
+      type: "login_setup_required",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "setup_required",
+    });
     return failureResponse(
       409,
       "זו כניסה ראשונה עבור המייל הזה. יש להגדיר סיסמה אישית לפני כניסה.",
@@ -300,6 +448,15 @@ export async function loginManager({ email, password, requestUrl }) {
   }
 
   if (!verifyPassword(password, admin.passwordHash)) {
+    const failedAttempt = await recordFailedAttempt(store, normalizedEmail, clientAddress);
+    await recordAuditEvent(store, {
+      type: "login_failed",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "invalid_password",
+      detail: failedAttempt.count >= MAX_AUTH_ATTEMPTS ? "locked" : "",
+    });
     return failureResponse(401, "הסיסמה שגויה. נסו שוב.");
   }
 
@@ -308,12 +465,20 @@ export async function loginManager({ email, password, requestUrl }) {
   const token = randomBytes(32).toString("base64url");
   admin.lastLoginAt = now;
 
+  await clearFailedAttempts(store, normalizedEmail, clientAddress);
   await saveAdminRecord(store, admin);
   await store.setJSON(sessionKey(token), {
     token,
     adminEmail: normalizedEmail,
     createdAt: now,
     expiresAt,
+  });
+  await recordAuditEvent(store, {
+    type: "login_success",
+    email: normalizedEmail,
+    clientAddress,
+    userAgent,
+    outcome: "success",
   });
 
   return successResponse(
@@ -322,14 +487,29 @@ export async function loginManager({ email, password, requestUrl }) {
       email: normalizedEmail,
       message: "הכניסה הצליחה. הדשבורד הניהולי נפתח.",
     },
-    requestUrl,
+    request.url,
     token,
   );
 }
 
-export async function setupManagerPassword({ email, password, confirmPassword, requestUrl }) {
+export async function setupManagerPassword({ email, password, confirmPassword, request }) {
   const normalizedEmail = normalizeEmail(email);
   const store = getPersistence();
+  const clientAddress = getClientAddress(request);
+  const userAgent = getUserAgent(request);
+
+  const rateLimitResponse = await ensureNotRateLimited(store, normalizedEmail, clientAddress);
+  if (rateLimitResponse) {
+    await recordAuditEvent(store, {
+      type: "setup_blocked",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "blocked",
+    });
+    return rateLimitResponse;
+  }
+
   const admin = await getAdminRecord(store, normalizedEmail);
 
   if (!normalizedEmail || !password || !confirmPassword) {
@@ -337,6 +517,14 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
   }
 
   if (!admin || !admin.isActive) {
+    await recordFailedAttempt(store, normalizedEmail, clientAddress);
+    await recordAuditEvent(store, {
+      type: "setup_denied",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "denied",
+    });
     return failureResponse(403, "המייל שהוזן אינו מורשה להגדיר גישת מנהל.");
   }
 
@@ -360,12 +548,20 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
   admin.passwordSetAt = now;
   admin.lastLoginAt = now;
 
+  await clearFailedAttempts(store, normalizedEmail, clientAddress);
   await saveAdminRecord(store, admin);
   await store.setJSON(sessionKey(token), {
     token,
     adminEmail: normalizedEmail,
     createdAt: now,
     expiresAt,
+  });
+  await recordAuditEvent(store, {
+    type: "setup_success",
+    email: normalizedEmail,
+    clientAddress,
+    userAgent,
+    outcome: "success",
   });
 
   return successResponse(
@@ -374,7 +570,7 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
       email: normalizedEmail,
       message: "הסיסמה נשמרה והגישה לפאנל הניהול נפתחה.",
     },
-    requestUrl,
+    request.url,
     token,
   );
 }
@@ -382,10 +578,18 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
 export async function logoutManager(request) {
   const token = getSessionToken(request);
   const store = getPersistence();
+  const session = await getSessionRecord(store, token);
 
   if (token) {
     await store.delete(sessionKey(token));
   }
+  await recordAuditEvent(store, {
+    type: "logout",
+    email: normalizeEmail(session?.adminEmail || ""),
+    clientAddress: getClientAddress(request),
+    userAgent: getUserAgent(request),
+    outcome: "success",
+  });
 
   return jsonResponse(
     200,
@@ -418,11 +622,15 @@ export function jsonResponse(status, payload, extraHeaders = {}) {
   return new Response(JSON.stringify(payload), { status, headers });
 }
 
-function failureResponse(status, message, extraPayload = {}) {
-  return jsonResponse(status, {
-    message,
-    ...extraPayload,
-  });
+function failureResponse(status, message, extraPayload = {}, extraHeaders = {}) {
+  return jsonResponse(
+    status,
+    {
+      message,
+      ...extraPayload,
+    },
+    extraHeaders,
+  );
 }
 
 function successResponse(payload, requestUrl, token) {

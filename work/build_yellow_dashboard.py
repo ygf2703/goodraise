@@ -28,6 +28,10 @@ CAMPAIGN_LOGO_PATH = ASSETS_DIR / "osim-tov-betzahov-logo.png"
 BACKDROP_PATH = ASSETS_DIR / "dashboard-backdrop.png"
 LEGACY_LOGO_PATH = WORK_DIR / "brand-logo.png"
 OUTPUTS_DIR = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_DIR", str(ROOT_DIR / "outputs"))).resolve()
+NETLIFY_DATA_DIR = Path(os.getenv("YELLOW_DASHBOARD_NETLIFY_DATA_DIR", str(ROOT_DIR / "netlify" / "data"))).resolve()
+ADMIN_DATASET_OUTPUT_PATH = Path(
+    os.getenv("YELLOW_DASHBOARD_ADMIN_DATASET_OUTPUT_PATH", str(NETLIFY_DATA_DIR / "admin-dataset.json"))
+).resolve()
 VIS_DIR = Path(os.getenv("YELLOW_DASHBOARD_VIS_DIR", str(OUTPUTS_DIR / ".render-cache"))).resolve()
 FRAGMENT_PATH = VIS_DIR / "yellow-project-dashboard-fragment.html"
 OUTPUT_HTML = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-dashboard.html"))).resolve()
@@ -115,6 +119,13 @@ def load_rows() -> list[dict]:
     return rows
 
 
+def get_source_label() -> str:
+    source_path = get_source_csv_path()
+    if source_path is None:
+        return "קובץ בסיס"
+    return source_path.name
+
+
 def build_meta(rows: list[dict]) -> dict:
     unique_dates = sorted({row["date"] for row in rows})
     project_dates = unique_dates[:10]
@@ -190,6 +201,27 @@ def compute_public_snapshot(rows: list[dict], meta: dict, prize_model: dict) -> 
         "podium": podium,
         "tiers": tiers,
     }
+
+
+def build_public_rows(rows: list[dict]) -> list[dict]:
+    public_rows: list[dict] = []
+    for row in rows:
+        public_rows.append(
+            {
+                "id": row.get("id", ""),
+                "createdIso": row.get("createdIso", ""),
+                "date": row.get("date", ""),
+                "hour": row.get("hour", 0),
+                "email": "",
+                "donor": "מוסתר בצפייה ציבורית",
+                "ambassador": row.get("ambassador", ""),
+                "amount": row.get("amount", 0),
+                "city": "",
+                "status": row.get("status", ""),
+                "chargeResult": "",
+            }
+        )
+    return public_rows
 
 
 def load_logo_data_uri(path: Path) -> str:
@@ -271,6 +303,23 @@ def load_prize_model() -> dict:
     }
 
 
+def write_admin_dataset(rows: list[dict], meta: dict, source_label: str) -> None:
+    ADMIN_DATASET_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ADMIN_DATASET_OUTPUT_PATH.write_text(
+        json.dumps(
+            {
+                "rows": rows,
+                "meta": meta,
+                "sourceLabel": source_label,
+                "generatedAt": datetime.now().isoformat(timespec="seconds"),
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+
+
 def build_auth_config() -> dict:
     deploy_mode = (os.getenv("YELLOW_DASHBOARD_DEPLOY_MODE") or "").strip().lower()
     use_netlify_paths = deploy_mode == "netlify" or os.getenv("NETLIFY") == "true"
@@ -284,6 +333,7 @@ def build_auth_config() -> dict:
             "loginEndpoint": f"{prefix}/login",
             "setupEndpoint": f"{prefix}/setup",
             "logoutEndpoint": f"{prefix}/logout",
+            "datasetEndpoint": f"{base_url}/api/admin/dataset" if base_url else "/api/admin/dataset",
         }
 
     return {
@@ -293,12 +343,14 @@ def build_auth_config() -> dict:
         "loginEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGIN_ENDPOINT", "http://127.0.0.1:8767/api/auth/login"),
         "setupEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_SETUP_ENDPOINT", "http://127.0.0.1:8767/api/auth/setup"),
         "logoutEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGOUT_ENDPOINT", "http://127.0.0.1:8767/api/auth/logout"),
+        "datasetEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_DATASET_ENDPOINT", "http://127.0.0.1:8767/api/admin/dataset"),
     }
 
 
 def build_fragment(
     rows: list[dict],
     meta: dict,
+    source_label: str,
     org_logo_data_uri: str,
     campaign_logo_data_uri: str,
     backdrop_data_uri: str,
@@ -306,6 +358,7 @@ def build_fragment(
 ) -> str:
     rows_json = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
     meta_json = json.dumps(meta, ensure_ascii=False, separators=(",", ":"))
+    source_label_json = json.dumps(source_label, ensure_ascii=False)
     org_logo_json = json.dumps(org_logo_data_uri, ensure_ascii=False)
     campaign_logo_json = json.dumps(campaign_logo_data_uri, ensure_ascii=False)
     backdrop_json = json.dumps(backdrop_data_uri, ensure_ascii=False)
@@ -2371,6 +2424,7 @@ def build_fragment(
                           <input id="login-password" class="form-control" type="password" autocomplete="current-password" placeholder="הקלד/י סיסמה" />
                           <button id="login-password-toggle" class="button-ghost password-toggle" type="button" aria-label="הצג או הסתר סיסמה">הצג</button>
                         </div>
+                        <div class="text-small text-muted">בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.</div>
                       </label>
                       <label id="login-password-confirm-label" class="form-label" hidden>
                         אימות סיסמה
@@ -2688,6 +2742,7 @@ def build_fragment(
             (async () => {
               const INITIAL_ROWS = __INITIAL_ROWS__;
               const INITIAL_META = __INITIAL_META__;
+              const INITIAL_SOURCE_LABEL = __INITIAL_SOURCE_LABEL__;
               const INITIAL_ORG_LOGO = __INITIAL_ORG_LOGO__;
               const INITIAL_CAMPAIGN_LOGO = __INITIAL_CAMPAIGN_LOGO__;
               const INITIAL_BACKDROP = __INITIAL_BACKDROP__;
@@ -2793,9 +2848,9 @@ def build_fragment(
               };
 
               const state = {
-                rows: INITIAL_ROWS,
-                meta: INITIAL_META,
-                sourceLabel: "קובץ בסיס",
+                rows: cloneSerializable(INITIAL_ROWS),
+                meta: cloneSerializable(INITIAL_META),
+                sourceLabel: INITIAL_SOURCE_LABEL,
                 compare: {
                   rows: [],
                   meta: null,
@@ -2811,8 +2866,9 @@ def build_fragment(
                 auth: {
                   backendAvailable: false,
                   setupMode: false,
+                  adminDatasetLoaded: false,
                 },
-                filters: getDefaultFilters(INITIAL_META),
+                filters: getDefaultFilters(cloneSerializable(INITIAL_META)),
                 view: {
                   dailyMetric: "amount",
                   heatmapMetric: "amount",
@@ -2840,6 +2896,40 @@ def build_fragment(
                 maximumFractionDigits: 0,
               });
               const numberFormatter = new Intl.NumberFormat("he-IL");
+
+              function cloneSerializable(value) {
+                return JSON.parse(JSON.stringify(value));
+              }
+
+              function buildBaseValidationSnapshot(rows, label) {
+                return {
+                  label: label || "קובץ בסיס",
+                  totalRows: rows.length,
+                  validRows: rows,
+                  errors: [],
+                  warnings: [],
+                  missingColumns: [],
+                  invalidDateRows: 0,
+                  invalidAmountRows: 0,
+                  missingAmbassadorRows: rows.filter((row) => row.ambassador === "ללא שיוך").length,
+                  missingEmailRows: rows.filter((row) => !row.email).length,
+                  duplicateIdCount: 0,
+                };
+              }
+
+              function restorePublicDataset() {
+                state.rows = enrichRows(cloneSerializable(INITIAL_ROWS), cloneSerializable(INITIAL_META));
+                state.meta = cloneSerializable(INITIAL_META);
+                state.sourceLabel = INITIAL_SOURCE_LABEL;
+                state.compare = {
+                  rows: [],
+                  meta: null,
+                  label: "",
+                };
+                state.validation.compare = null;
+                state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
+                state.auth.adminDatasetLoaded = false;
+              }
 
               function getDefaultFilters(meta) {
                 return {
@@ -2940,6 +3030,7 @@ def build_fragment(
               function clearSessionState() {
                 state.session = null;
                 setSetupMode(false);
+                restorePublicDataset();
               }
 
               function isManagerAuthenticated() {
@@ -2976,10 +3067,33 @@ def build_fragment(
                   state.auth.backendAvailable = response.ok;
                   if (response.ok && payload?.authenticated && payload?.email) {
                     setAuthenticatedSession(payload.email);
+                    await loadAdminDataset();
                   }
                 } catch (_error) {
                   state.auth.backendAvailable = false;
                 }
+              }
+
+              async function loadAdminDataset() {
+                if (!canUseBackendAuth() || !AUTH_CONFIG.datasetEndpoint || !isManagerAuthenticated()) {
+                  state.auth.adminDatasetLoaded = false;
+                  return false;
+                }
+
+                const { response, payload } = await authRequest(AUTH_CONFIG.datasetEndpoint);
+                if (!response.ok || !Array.isArray(payload?.rows) || !payload?.meta) {
+                  state.auth.adminDatasetLoaded = false;
+                  throw new Error(payload?.message || "טעינת הנתונים המוגנים נכשלה.");
+                }
+
+                state.rows = enrichRows(payload.rows, payload.meta);
+                state.meta = payload.meta;
+                state.sourceLabel = payload.sourceLabel || "קובץ בסיס מאובטח";
+                state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
+                state.auth.adminDatasetLoaded = true;
+                state.filters = getDefaultFilters(state.meta);
+                resetFilterOptions();
+                return true;
               }
 
               function setLoginMessage(message, tone = "") {
@@ -5511,7 +5625,15 @@ def build_fragment(
                   if (elements.loginPasswordConfirm) {
                     elements.loginPasswordConfirm.value = "";
                   }
+                  if (elements.upload) {
+                    elements.upload.value = "";
+                  }
+                  if (elements.compareUpload) {
+                    elements.compareUpload.value = "";
+                  }
                   setLoginMessage("");
+                  setImportMessage(getDefaultPrizeStatusMessage());
+                  resetFilterOptions();
                   setPage("prizes");
                   renderAll();
                 });
@@ -5533,6 +5655,14 @@ def build_fragment(
                     setLoginMessage("יש לאשר את הסיסמה כדי להשלים את ההגדרה הראשונית.", "error");
                     return;
                   }
+                  if (state.auth.setupMode && password.length < 8) {
+                    setLoginMessage("בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.", "error");
+                    return;
+                  }
+                  if (state.auth.setupMode && password !== confirmPassword) {
+                    setLoginMessage("אימות הסיסמה לא תואם.", "error");
+                    return;
+                  }
                   try {
                     const endpoint = state.auth.setupMode ? AUTH_CONFIG.setupEndpoint : AUTH_CONFIG.loginEndpoint;
                     const { response, payload } = await authRequest(endpoint, {
@@ -5545,6 +5675,11 @@ def build_fragment(
 
                     if (response.ok && payload?.authenticated && payload?.email) {
                       setAuthenticatedSession(payload.email);
+                      try {
+                        await loadAdminDataset();
+                      } catch (datasetError) {
+                        setImportMessage(datasetError?.message || "הכניסה הצליחה, אך טעינת הנתונים המוגנים נכשלה. אפשר להעלות קובץ עסקאות ידנית.", "warning");
+                      }
                       setSetupMode(false);
                       elements.loginPassword.value = "";
                       if (elements.loginPasswordConfirm) {
@@ -5753,19 +5888,7 @@ def build_fragment(
               }
 
               state.rows = enrichRows(state.rows, state.meta);
-              state.validation.base = {
-                label: state.sourceLabel,
-                totalRows: state.rows.length,
-                validRows: state.rows,
-                errors: [],
-                warnings: [],
-                missingColumns: [],
-                invalidDateRows: 0,
-                invalidAmountRows: 0,
-                missingAmbassadorRows: state.rows.filter((row) => row.ambassador === "ללא שיוך").length,
-                missingEmailRows: state.rows.filter((row) => !row.email).length,
-                duplicateIdCount: 0,
-              };
+              state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
               state.prizeModel = normalizePrizeModel(state.prizeModel);
               if (hasPrizeModelContent(state.prizeModel)) {
                 storePrizeModel(state.prizeModel);
@@ -5788,6 +5911,7 @@ def build_fragment(
     return (
         template.replace("__INITIAL_ROWS__", rows_json)
         .replace("__INITIAL_META__", meta_json)
+        .replace("__INITIAL_SOURCE_LABEL__", source_label_json)
         .replace("__INITIAL_ORG_LOGO__", org_logo_json)
         .replace("__INITIAL_CAMPAIGN_LOGO__", campaign_logo_json)
         .replace("__INITIAL_BACKDROP__", backdrop_json)
@@ -6147,11 +6271,22 @@ def render_shell_output() -> bool:
 def main() -> None:
     rows = load_rows()
     meta = build_meta(rows)
+    source_label = get_source_label()
+    public_rows = build_public_rows(rows)
     org_logo_data_uri = load_logo_data_uri(ORG_LOGO_PATH if ORG_LOGO_PATH.exists() else LEGACY_LOGO_PATH)
     campaign_logo_data_uri = load_logo_data_uri(CAMPAIGN_LOGO_PATH)
     backdrop_data_uri = load_logo_data_uri(BACKDROP_PATH)
     prize_model = load_prize_model()
-    fragment = build_fragment(rows, meta, org_logo_data_uri, campaign_logo_data_uri, backdrop_data_uri, prize_model)
+    write_admin_dataset(rows, meta, source_label)
+    fragment = build_fragment(
+        public_rows,
+        meta,
+        source_label,
+        org_logo_data_uri,
+        campaign_logo_data_uri,
+        backdrop_data_uri,
+        prize_model,
+    )
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     VIS_DIR.mkdir(parents=True, exist_ok=True)
     FRAGMENT_PATH.write_text(fragment, encoding="utf-8")
