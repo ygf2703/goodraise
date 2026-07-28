@@ -37,6 +37,9 @@ OUTPUT_HTML = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_HTML", str(OUTPUTS_DIR / "
 BROWSER_OUTPUT_HTML = Path(
     os.getenv("YELLOW_DASHBOARD_BROWSER_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-dashboard-browser.html"))
 ).resolve()
+PUBLIC_BROWSER_OUTPUT_HTML = Path(
+    os.getenv("YELLOW_DASHBOARD_PUBLIC_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-public-dashboard.html"))
+).resolve()
 DEFAULT_RENDER_SCRIPT = (
     Path.home()
     / ".codex"
@@ -143,6 +146,66 @@ def build_meta(rows: list[dict]) -> dict:
         "maxDate": unique_dates[-1] if unique_dates else "",
         "rowCount": len(rows),
         "projectWindowLabel": f"{default_from} עד {default_to}" if default_from and default_to else "",
+    }
+
+
+def build_leaderboard(rows: list[dict]) -> list[dict]:
+    grouped: dict[str, dict] = {}
+    for row in rows:
+        ambassador = (row.get("ambassador") or "").strip()
+        if not ambassador or ambassador == "×œ×œ× ×©×™×•×š":
+            continue
+        current = grouped.setdefault(ambassador, {"ambassador": ambassador, "total": 0.0, "deals": 0})
+        current["total"] += float(row.get("amount") or 0)
+        current["deals"] += 1
+    return sorted(grouped.values(), key=lambda item: item["total"], reverse=True)
+
+
+def compute_public_snapshot(rows: list[dict], meta: dict, prize_model: dict) -> dict:
+    leaderboard = build_leaderboard(rows)
+    total_raised = sum(float(row.get("amount") or 0) for row in rows)
+    latest_created = max((row.get("createdIso") or "" for row in rows), default="")
+    active_ambassadors = len(leaderboard)
+    place_prizes = sorted(prize_model.get("placePrizes", []), key=lambda item: item.get("place", 0))
+    tier_prizes = sorted(prize_model.get("tierPrizes", []), key=lambda item: item.get("threshold", 0))
+
+    podium = []
+    for item in place_prizes[:3]:
+        winner = leaderboard[item["place"] - 1] if len(leaderboard) >= item["place"] else None
+        podium.append(
+            {
+                "place": item["place"],
+                "label": item.get("label") or f"מקום {item['place']}",
+                "prize": item.get("prize") or "",
+                "winner": winner["ambassador"] if winner else "טרם נקבע",
+                "amount": winner["total"] if winner else 0,
+                "deals": winner["deals"] if winner else 0,
+            }
+        )
+
+    tiers = []
+    for tier in tier_prizes:
+        winners = [entry for entry in leaderboard if entry["total"] >= tier["threshold"]]
+        next_up = next((entry for entry in leaderboard if entry["total"] < tier["threshold"]), None)
+        tiers.append(
+            {
+                "threshold": tier["threshold"],
+                "prize": tier["prize"],
+                "winnerCount": len(winners),
+                "winnerNames": [entry["ambassador"] for entry in winners[:5]],
+                "nextUpName": next_up["ambassador"] if next_up else "",
+                "nextUpGap": max(tier["threshold"] - next_up["total"], 0) if next_up else 0,
+            }
+        )
+
+    return {
+        "projectWindowLabel": meta.get("projectWindowLabel", ""),
+        "totalRaised": total_raised,
+        "latestCreated": latest_created,
+        "activeAmbassadors": active_ambassadors,
+        "leaderboard": leaderboard[:12],
+        "podium": podium,
+        "tiers": tiers,
     }
 
 
@@ -1127,6 +1190,21 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               gap: var(--space-4);
             }
 
+            #yellow-dashboard-root .chart-surface {
+              width: 100%;
+              min-height: 320px;
+              overflow-x: auto;
+              overflow-y: hidden;
+            }
+
+            #yellow-dashboard-root .chart-surface--wide {
+              min-height: 520px;
+            }
+
+            #yellow-dashboard-root .chart-surface > svg {
+              min-width: 100%;
+            }
+
             #yellow-dashboard-root .metric-toolbar {
               justify-content: flex-end;
             }
@@ -1339,6 +1417,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               border: 1px solid rgba(17, 29, 74, 0.12);
               background: rgba(255, 255, 255, 0.98);
               max-inline-size: 100%;
+            }
+
+            #yellow-dashboard-root .table-panel[hidden] {
+              display: none;
             }
 
             #yellow-dashboard-root table {
@@ -2261,7 +2343,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                           <option value="count">מספר עסקאות</option>
                           <option value="average">ממוצע לעסקה</option>
                         </select>
-                        <div id="daily-chart"></div>
+                        <div id="daily-chart" class="chart-surface"></div>
                       </div>
                       <div id="daily-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                     </section>
@@ -2285,7 +2367,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                           <option value="amount">סכום גיוס</option>
                           <option value="count">מספר עסקאות</option>
                         </select>
-                        <div id="heatmap-chart"></div>
+                        <div id="heatmap-chart" class="chart-surface chart-surface--wide"></div>
                       </div>
                       <div id="heatmap-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                     </section>
@@ -2306,7 +2388,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                           <option value="amount">סכום גיוס</option>
                           <option value="count">מספר עסקאות</option>
                         </select>
-                        <div id="movement-chart"></div>
+                        <div id="movement-chart" class="chart-surface chart-surface--wide"></div>
                       </div>
                       <div id="movement-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                     </section>
@@ -2346,9 +2428,14 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                     <section class="dashboard-section">
                       <div class="section-header">
                         <h3>טבלת הרשומות</h3>
-                        <div id="table-summary" class="text-small text-muted"></div>
+                        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                          <div id="table-summary" class="text-small text-muted"></div>
+                          <button id="table-toggle" class="button-ghost" type="button" aria-expanded="false" aria-controls="table-panel">הצג רשומות</button>
+                        </div>
                       </div>
-                      <div id="table-root" class="table-wrap"></div>
+                      <div id="table-panel" class="table-panel" hidden>
+                        <div id="table-root" class="table-wrap"></div>
+                      </div>
                     </section>
                   </div>
                 </div>
@@ -2454,6 +2541,8 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 movementSummary: root.querySelector("#movement-summary"),
                 tableRoot: root.querySelector("#table-root"),
                 tableSummary: root.querySelector("#table-summary"),
+                tablePanel: root.querySelector("#table-panel"),
+                tableToggle: root.querySelector("#table-toggle"),
               };
 
               const state = {
@@ -2480,6 +2569,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 },
                 ui: {
                   page: "prizes",
+                  tableExpanded: false,
                 },
               };
 
@@ -2607,6 +2697,15 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
               function hasBlockingValidation(validation) {
                 return Boolean(validation.missingColumns.length || !validation.validRows.length);
+              }
+
+              function updateTableVisibility() {
+                if (!elements.tablePanel || !elements.tableToggle) {
+                  return;
+                }
+                elements.tablePanel.hidden = !state.ui.tableExpanded;
+                elements.tableToggle.setAttribute("aria-expanded", String(state.ui.tableExpanded));
+                elements.tableToggle.textContent = state.ui.tableExpanded ? "הסתר רשומות" : "הצג רשומות";
               }
 
               function renderBrandAssets() {
@@ -4255,7 +4354,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
               function createSvg(width, height, ariaLabel) {
                 return `
-                  <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeAttribute(ariaLabel)}">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeAttribute(ariaLabel)}">
                     <rect x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
                   </svg>
                 `;
@@ -4650,6 +4749,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 const prizeRows = getPrizeScopeRows();
                 renderBrandAssets();
                 refreshAccessUi();
+                updateTableVisibility();
                 renderActiveFilterSummary();
                 updateMetricToolbarState();
                 setControlNote(filteredRows, prizeRows);
@@ -4794,6 +4894,11 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   state.filters = getDefaultFilters(state.meta);
                   resetFilterOptions();
                   renderAll();
+                });
+
+                elements.tableToggle.addEventListener("click", () => {
+                  state.ui.tableExpanded = !state.ui.tableExpanded;
+                  updateTableVisibility();
                 });
 
                 elements.upload.addEventListener("change", async (event) => {
@@ -4960,6 +5065,294 @@ def build_browser_document(fragment: str) -> str:
           </head>
           <body>
             {fragment}
+          </body>
+        </html>
+        """
+    ).strip()
+
+
+def render_public_dashboard_html(snapshot: dict, org_logo_data_uri: str, campaign_logo_data_uri: str) -> str:
+    def format_amount(value: float) -> str:
+        return f"{value:,.0f} ₪"
+
+    def format_datetime(value: str) -> str:
+        if not value:
+            return "אין עדכון"
+        try:
+            return datetime.fromisoformat(value).strftime("%d.%m.%Y %H:%M")
+        except ValueError:
+            return value
+
+    podium_html = "".join(
+        f"""
+        <article class="podium-card podium-card--{item['place']}">
+          <div class="podium-place">מקום {item['place']}</div>
+          <h3>{item['winner']}</h3>
+          <div class="podium-amount">{format_amount(item['amount'])}</div>
+          <div class="podium-meta">{item['prize']}</div>
+          <div class="podium-meta">{item['deals']} עסקאות</div>
+        </article>
+        """
+        for item in snapshot["podium"]
+    )
+
+    tier_html = "".join(
+        f"""
+        <article class="tier-card">
+          <div class="tier-threshold">{format_amount(item['threshold'])}</div>
+          <h3>{item['prize']}</h3>
+          <div class="tier-meta">זוכים כרגע: {item['winnerCount']}</div>
+          <div class="tier-meta">מובילים במדרגה: {", ".join(item['winnerNames']) if item['winnerNames'] else "עדיין אין"}</div>
+          <div class="tier-meta">{f"קרוב/ה להשגה: {item['nextUpName']} (פער {format_amount(item['nextUpGap'])})" if item['nextUpName'] else "אין מועמד קרוב נוסף כרגע"}</div>
+        </article>
+        """
+        for item in snapshot["tiers"]
+    )
+
+    return textwrap.dedent(
+        f"""
+        <!doctype html>
+        <html lang="he" dir="rtl">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <meta name="robots" content="noindex,nofollow" />
+            <title>עושים טוב בצהוב | דשבורד ציבורי</title>
+            <style>
+              :root {{
+                --navy-1000: #070D24;
+                --navy-950: #0B1435;
+                --navy-900: #111D4A;
+                --navy-800: #19275F;
+                --yolk-600: #F4C900;
+                --yolk-500: #FFD629;
+                --yolk-200: #FFF2AD;
+                --white: #FFFFFF;
+                --off-white: #F6F7FA;
+                --graphite: #252934;
+                --text-muted: #697080;
+                --border-light: rgba(17, 29, 74, 0.12);
+              }}
+              * {{ box-sizing: border-box; }}
+              body {{
+                margin: 0;
+                font-family: "Assistant", Arial, sans-serif;
+                background: linear-gradient(180deg, rgba(17,29,74,0.06), var(--off-white) 20%);
+                color: var(--graphite);
+              }}
+              .shell {{
+                max-width: 1280px;
+                margin: 0 auto;
+                padding: 24px;
+              }}
+              .topbar {{
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 16px;
+                padding: 18px 22px;
+                border-radius: 24px;
+                background: var(--navy-950);
+                color: var(--white);
+              }}
+              .brand {{
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                flex-wrap: wrap;
+              }}
+              .brand img {{
+                display: block;
+                max-height: 52px;
+                width: auto;
+              }}
+              .brand small {{
+                opacity: 0.86;
+                font-size: 0.94rem;
+              }}
+              .nav {{
+                display: flex;
+                gap: 12px;
+                flex-wrap: wrap;
+              }}
+              .nav a {{
+                color: var(--white);
+                text-decoration: none;
+                padding: 10px 14px;
+                border-radius: 999px;
+                background: rgba(255,255,255,0.08);
+              }}
+              .hero {{
+                margin-top: 20px;
+                padding: 28px;
+                border-radius: 24px;
+                background: linear-gradient(135deg, var(--navy-900), var(--navy-800));
+                color: var(--white);
+              }}
+              .hero h1 {{ margin: 0 0 10px; font-size: clamp(2rem, 4vw, 3.2rem); }}
+              .hero p {{ margin: 0; max-width: 760px; line-height: 1.8; }}
+              .badge-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                gap: 14px;
+                margin-top: 22px;
+              }}
+              .badge {{
+                padding: 16px;
+                border-radius: 18px;
+                background: rgba(255,255,255,0.08);
+                border: 1px solid rgba(255,255,255,0.12);
+              }}
+              .badge strong {{
+                display: block;
+                margin-top: 8px;
+                color: var(--yolk-500);
+                font-size: 1.18rem;
+              }}
+              .section {{
+                margin-top: 22px;
+                padding: 24px;
+                border-radius: 24px;
+                background: var(--white);
+                box-shadow: 0 12px 30px rgba(11,20,53,0.08);
+              }}
+              .section h2 {{ margin: 0 0 8px; color: var(--navy-950); }}
+              .section p {{ margin: 0 0 18px; color: var(--text-muted); line-height: 1.75; }}
+              .podium-grid, .tier-grid {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 16px;
+              }}
+              .podium-card, .tier-card {{
+                padding: 20px;
+                border-radius: 20px;
+                border: 1px solid var(--border-light);
+                background: var(--off-white);
+              }}
+              .podium-card--1 {{
+                background: linear-gradient(180deg, rgba(255,214,41,0.24), rgba(255,255,255,0.92));
+              }}
+              .podium-place, .tier-threshold {{
+                font-weight: 800;
+                color: var(--navy-950);
+              }}
+              .podium-card h3, .tier-card h3 {{
+                margin: 12px 0 8px;
+                color: var(--navy-950);
+              }}
+              .podium-amount {{
+                color: var(--navy-900);
+                font-size: 1.5rem;
+                font-weight: 800;
+              }}
+              .podium-meta, .tier-meta {{
+                margin-top: 8px;
+                color: var(--graphite);
+                line-height: 1.7;
+              }}
+              .legal {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 16px;
+              }}
+              .legal article {{
+                padding: 18px;
+                border-radius: 18px;
+                background: var(--off-white);
+                border: 1px solid var(--border-light);
+              }}
+              .legal h3 {{ margin-top: 0; color: var(--navy-950); }}
+              .legal ul {{ margin: 0; padding-inline-start: 18px; line-height: 1.8; }}
+              @media (max-width: 768px) {{
+                .shell {{ padding: 16px; }}
+                .topbar {{ padding: 16px; }}
+              }}
+            </style>
+          </head>
+          <body>
+            <div class="shell">
+              <header class="topbar">
+                <div class="brand">
+                  <img src="{campaign_logo_data_uri}" alt="לוגו עושים טוב בצהוב" />
+                  <img src="{org_logo_data_uri}" alt="לוגו אחים לסמל" />
+                  <small>דשבורד ציבורי למשתתפים וצופים | גישת מנהלים דרך כניסה נפרדת</small>
+                </div>
+                <nav class="nav">
+                  <a href="#podium">מובילים וזוכים</a>
+                  <a href="#tiers">מדרגות פרס</a>
+                  <a href="#rules">תקנון</a>
+                  <a href="#privacy">פרטיות</a>
+                  <a href="/admin">כניסת מנהלים</a>
+                </nav>
+              </header>
+
+              <section class="hero">
+                <h1>הזוכים והמובילים של עושים טוב בצהוב</h1>
+                <p>תצוגה ציבורית נקייה ומעודכנת של מצב הקמפיין. הדשבורד הניהולי המלא זמין למנהלים מורשים בלבד, בעוד שכאן מוצגים נתוני סיכום ותחרות ללא חשיפת רשומות תורמים.</p>
+                <div class="badge-grid">
+                  <div class="badge">חלון פרויקט<strong>{snapshot['projectWindowLabel'] or "לא זוהה"}</strong></div>
+                  <div class="badge">סך גיוס<strong>{format_amount(snapshot['totalRaised'])}</strong></div>
+                  <div class="badge">שגרירים פעילים<strong>{snapshot['activeAmbassadors']}</strong></div>
+                  <div class="badge">עדכון אחרון<strong>{format_datetime(snapshot['latestCreated'])}</strong></div>
+                </div>
+              </section>
+
+              <section id="podium" class="section">
+                <h2>פודיום מובילים</h2>
+                <p>שלושת המקומות הראשונים נכון לקובץ הפעיל.</p>
+                <div class="podium-grid">{podium_html}</div>
+              </section>
+
+              <section id="tiers" class="section">
+                <h2>מדרגות פרס</h2>
+                <p>תמונת מצב חגיגית ונקייה של מדרגות הפרסים, עם ספירת זכאים וקרובים להשגה.</p>
+                <div class="tier-grid">{tier_html}</div>
+              </section>
+
+              <section id="rules" class="section">
+                <h2>תקנון השתתפות</h2>
+                <div class="legal">
+                  <article>
+                    <h3>עקרונות בסיס</h3>
+                    <ul>
+                      <li>ההשתתפות כפופה לרישום כשגריר או שגרירה לפי כללי הקמפיין.</li>
+                      <li>רק עסקאות שנקלטו ושויכו כדין נחשבות לתחרות ולפרסים.</li>
+                      <li>הנהלת הקמפיין רשאית לבצע בקרה, תיקון והחרגת רשומות חריגות.</li>
+                    </ul>
+                  </article>
+                  <article>
+                    <h3>חישוב זכאות</h3>
+                    <ul>
+                      <li>הזכאות לפרסים נקבעת לפי נתוני המערכת הפעילה והקובץ האחרון שאושר.</li>
+                      <li>מדרגות פרס משודרגות בהתאם לספי הגיוס שהוגדרו.</li>
+                      <li>במקרה של שוויון או חריגה, הנהלת הקמפיין תכריע לפי כללי הבקרה.</li>
+                    </ul>
+                  </article>
+                </div>
+              </section>
+
+              <section id="privacy" class="section">
+                <h2>מדיניות פרטיות</h2>
+                <div class="legal">
+                  <article>
+                    <h3>מידע ותכלית שימוש</h3>
+                    <ul>
+                      <li>התצוגה הציבורית אינה כוללת נתוני תורמים ברמת רשומה.</li>
+                      <li>המערכת הניהולית מיועדת למנהלים מורשים בלבד.</li>
+                      <li>המידע משמש לצורכי ניהול קמפיין, פרסים, בקרה ותובנות.</li>
+                    </ul>
+                  </article>
+                  <article>
+                    <h3>שמירה ואבטחה</h3>
+                    <ul>
+                      <li>לפני עליה חיצונית יש להשלים אישור משפטי ואבטחת מידע.</li>
+                      <li>יש להגדיר מדיניות שמירה, מחיקה, גיבוי והרשאות לפי תפקיד.</li>
+                      <li>חיבור לשרת חי ולמקור נתונים קבוע יבוצע בשלב הבא של המוצר.</li>
+                    </ul>
+                  </article>
+                </div>
+              </section>
+            </div>
           </body>
         </html>
         """
