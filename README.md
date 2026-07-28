@@ -15,12 +15,16 @@ The app receives campaign export files and turns them into an active dashboard t
 
 ## Current Capabilities
 
-- Blue/yellow branded dashboard with the Achim LaSemel logo
+- Premium blue/yellow executive UI with both campaign and organization logos
+- Assistant typography and shared design-system classes across all pages
 - Multi-page experience:
   - Public prizes and competition page
   - Public participation rules page
   - Public privacy page
   - Manager-only admin dashboard
+- Sticky dual-brand header with manager status and page navigation
+- Public prize page with podium, prize tiers, and live competition summary
+- SaaS-style manager login screen for local pilot access
 - File upload for base campaign CSV
 - File upload for comparison CSV
 - File upload for prize model from Excel or CSV
@@ -28,6 +32,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Admin login gate with predefined manager emails and password-based access for local pilot use
 - Manager-only graph mode controls for daily chart, heatmap, and ambassador movement views
 - Executive summary cards and KPI blocks
+- Grouped control center for data files, time filters, people, amounts, and goals
 - Data quality and validation board
 - Donor and transaction segmentation
 - Ambassador movement view across campaign days

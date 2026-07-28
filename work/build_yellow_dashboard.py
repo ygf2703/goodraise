@@ -191,798 +191,873 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
         """
         <div id="yellow-dashboard-root" dir="rtl">
           <style>
+            @import url("https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700;800&display=swap");
+
             #yellow-dashboard-root {
-              --brand-blue-950: #131750;
-              --brand-blue-900: #1c2368;
-              --brand-blue-700: #2d3998;
-              --brand-blue-500: #4b65d9;
-              --brand-yellow-500: #ffd93d;
-              --brand-yellow-400: #ffe66d;
-              --brand-yellow-200: #fff4b3;
-              --brand-black: #101010;
-              --brand-white: #ffffff;
-              color: var(--brand-black);
+              --navy-1000: #070D24;
+              --navy-950: #0B1435;
+              --navy-900: #111D4A;
+              --navy-800: #19275F;
+              --navy-700: #24377C;
+              --yolk-600: #F4C900;
+              --yolk-500: #FFD629;
+              --yolk-400: #FFE266;
+              --yolk-200: #FFF2AD;
+              --white: #FFFFFF;
+              --off-white: #F6F7FA;
+              --surface-soft: #EEF0F5;
+              --black: #090B10;
+              --graphite: #252934;
+              --text-muted: #697080;
+              --border-light: rgba(17, 29, 74, 0.12);
+              --space-1: 4px;
+              --space-2: 8px;
+              --space-3: 12px;
+              --space-4: 16px;
+              --space-5: 24px;
+              --space-6: 32px;
+              --space-7: 48px;
+              --radius-sm: 8px;
+              --radius-md: 12px;
+              --radius-lg: 18px;
+              --radius-xl: 24px;
+              --shadow-soft: 0 20px 48px rgba(11, 20, 53, 0.08);
+              --shadow-card: 0 12px 30px rgba(11, 20, 53, 0.08);
+              --brand-pattern-campaign: none;
+              --brand-pattern-organization: none;
+              position: relative;
+              isolation: isolate;
+              color: var(--graphite);
+              font-family: "Assistant", Arial, sans-serif;
               font-size: var(--font-size-base);
               background:
-                radial-gradient(circle at top right, rgba(255, 217, 61, 0.24), transparent 28rem),
-                linear-gradient(180deg, rgba(28, 35, 104, 0.06), rgba(255, 255, 255, 0.96) 28%);
-              padding: 0.25rem 0 1rem;
+                radial-gradient(circle at top left, rgba(255, 214, 41, 0.18), transparent 24rem),
+                radial-gradient(circle at top right, rgba(17, 29, 74, 0.08), transparent 28rem),
+                linear-gradient(180deg, rgba(17, 29, 74, 0.05), var(--off-white) 18%);
+              padding: var(--space-4);
+              min-height: 100%;
             }
 
-            #yellow-dashboard-root .dashboard-shell {
-              display: grid;
-              gap: 1rem;
+            #yellow-dashboard-root::before {
+              content: "";
+              position: absolute;
+              inset: 0;
+              z-index: 0;
+              pointer-events: none;
+              background-image: var(--brand-pattern-campaign), var(--brand-pattern-organization);
+              background-size: 160px 160px, 128px 128px;
+              background-position: 3rem 8rem, 10rem 15rem;
+              background-repeat: repeat;
+              opacity: 0.03;
+            }
+
+            #yellow-dashboard-root,
+            #yellow-dashboard-root button,
+            #yellow-dashboard-root input,
+            #yellow-dashboard-root select,
+            #yellow-dashboard-root textarea {
+              font-family: "Assistant", Arial, sans-serif;
+            }
+
+            #yellow-dashboard-root * {
+              box-sizing: border-box;
+            }
+
+            #yellow-dashboard-root svg text,
+            #yellow-dashboard-root .metric-value,
+            #yellow-dashboard-root .comparison-value,
+            #yellow-dashboard-root .amount-cell,
+            #yellow-dashboard-root .winner-amount,
+            #yellow-dashboard-root .hero-meta strong,
+            #yellow-dashboard-root .status-chip,
+            #yellow-dashboard-root .prize-pill,
+            #yellow-dashboard-root .tooltip,
+            #yellow-dashboard-root input[type="number"],
+            #yellow-dashboard-root input[type="date"] {
+              font-variant-numeric: tabular-nums;
             }
 
             #yellow-dashboard-root .app-shell {
+              position: relative;
+              z-index: 1;
               display: grid;
-              gap: 1rem;
+              gap: var(--space-5);
+              max-width: 1600px;
+              margin: 0 auto;
             }
 
-            #yellow-dashboard-root .app-topbar,
-            #yellow-dashboard-root .page-panel,
-            #yellow-dashboard-root .legal-card,
-            #yellow-dashboard-root .admin-lock,
-            #yellow-dashboard-root .public-hero {
-              background: rgba(255, 255, 255, 0.94);
-              border: 2px solid rgba(19, 23, 80, 0.12);
-              border-radius: 1.25rem;
-              box-shadow: 0 12px 34px rgba(19, 23, 80, 0.08);
-            }
-
-            #yellow-dashboard-root .app-topbar {
-              padding: 0.9rem 1rem;
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              gap: 1rem;
-              flex-wrap: wrap;
-              position: sticky;
-              top: 0.5rem;
-              z-index: 20;
-              backdrop-filter: blur(12px);
-            }
-
-            #yellow-dashboard-root .topbar-brand {
-              display: flex;
-              align-items: center;
-              gap: 0.75rem;
-              color: var(--brand-blue-950);
-              font-weight: 600;
-            }
-
-            #yellow-dashboard-root .topbar-logo {
-              width: 3rem;
-              height: 3rem;
-              border-radius: 0.9rem;
-              background: rgba(255, 217, 61, 0.18);
-              padding: 0.3rem;
-              object-fit: contain;
-            }
-
-            #yellow-dashboard-root .topbar-meta {
+            #yellow-dashboard-root .app-content,
+            #yellow-dashboard-root .dashboard-shell,
+            #yellow-dashboard-root .page-shell,
+            #yellow-dashboard-root .prize-shell,
+            #yellow-dashboard-root .analysis-shell,
+            #yellow-dashboard-root .comparison-shell {
               display: grid;
-              gap: 0.15rem;
-            }
-
-            #yellow-dashboard-root .topbar-title {
-              font-size: 1.05rem;
-            }
-
-            #yellow-dashboard-root .topbar-subtitle {
-              color: rgba(16, 16, 16, 0.64);
-              font-size: 0.9em;
-            }
-
-            #yellow-dashboard-root .topbar-actions {
-              display: flex;
-              align-items: center;
-              gap: 0.75rem;
-              flex-wrap: wrap;
-              justify-content: flex-end;
-            }
-
-            #yellow-dashboard-root .top-nav {
-              display: flex;
-              gap: 0.55rem;
-              flex-wrap: wrap;
-            }
-
-            #yellow-dashboard-root .nav-button {
-              border: 1px solid rgba(19, 23, 80, 0.12);
-              border-radius: 999px;
-              padding: 0.55rem 0.9rem;
-              font: inherit;
-              font-weight: 500;
-              cursor: pointer;
-              background: rgba(28, 35, 104, 0.05);
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .nav-button.is-active {
-              background: var(--brand-blue-950);
-              color: var(--brand-yellow-500);
-              border-color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .session-box {
-              display: flex;
-              align-items: center;
-              gap: 0.55rem;
-              flex-wrap: wrap;
-            }
-
-            #yellow-dashboard-root .session-chip {
-              display: inline-flex;
-              align-items: center;
-              gap: 0.4rem;
-              padding: 0.45rem 0.8rem;
-              border-radius: 999px;
-              background: rgba(255, 217, 61, 0.18);
-              color: var(--brand-blue-950);
-              font-size: 0.92em;
+              gap: var(--space-5);
             }
 
             #yellow-dashboard-root .page-shell {
               display: none;
-              gap: 1rem;
+              animation: pageFade 180ms ease;
             }
 
             #yellow-dashboard-root .page-shell.is-active {
               display: grid;
             }
 
+            @keyframes pageFade {
+              from {
+                opacity: 0;
+                transform: translateY(6px);
+              }
+              to {
+                opacity: 1;
+                transform: translateY(0);
+              }
+            }
+
+            #yellow-dashboard-root .app-card,
+            #yellow-dashboard-root .app-topbar,
             #yellow-dashboard-root .page-panel,
+            #yellow-dashboard-root .chart-panel,
+            #yellow-dashboard-root .comparison-card,
+            #yellow-dashboard-root .comparison-list,
+            #yellow-dashboard-root .analysis-card,
+            #yellow-dashboard-root .metric-card,
+            #yellow-dashboard-root .prize-card,
+            #yellow-dashboard-root .admin-lock,
+            #yellow-dashboard-root .legal-document,
+            #yellow-dashboard-root .legal-sidebar,
             #yellow-dashboard-root .public-hero,
-            #yellow-dashboard-root .legal-card {
-              padding: 1rem;
+            #yellow-dashboard-root .legal-hero {
+              background: rgba(255, 255, 255, 0.96);
+              border: 1px solid var(--border-light);
+              border-radius: var(--radius-xl);
+              box-shadow: var(--shadow-card);
             }
 
-            #yellow-dashboard-root .public-hero {
+            #yellow-dashboard-root .app-card--elevated {
+              box-shadow: var(--shadow-soft);
+            }
+
+            #yellow-dashboard-root .app-card--dark,
+            #yellow-dashboard-root .public-hero,
+            #yellow-dashboard-root .brand-command,
+            #yellow-dashboard-root .login-visual {
               background:
-                linear-gradient(140deg, rgba(28, 35, 104, 0.98) 0%, rgba(28, 35, 104, 0.98) 60%, rgba(255, 217, 61, 0.98) 60%, rgba(255, 217, 61, 0.98) 100%);
-              color: var(--brand-white);
-              display: grid;
-              gap: 0.85rem;
+                linear-gradient(135deg, rgba(7, 13, 36, 0.98), rgba(17, 29, 74, 0.96) 54%, rgba(36, 55, 124, 0.95) 100%);
+              color: var(--white);
+              border-color: rgba(255, 214, 41, 0.16);
             }
 
-            #yellow-dashboard-root .public-hero h2,
-            #yellow-dashboard-root .legal-card h2,
-            #yellow-dashboard-root .legal-card h3,
-            #yellow-dashboard-root .admin-lock h3 {
-              margin: 0;
-            }
-
-            #yellow-dashboard-root .public-hero p {
-              margin: 0;
-              max-width: 42rem;
-              color: rgba(255, 255, 255, 0.9);
-            }
-
-            #yellow-dashboard-root .public-badges {
+            #yellow-dashboard-root .app-topbar {
+              position: sticky;
+              top: var(--space-4);
+              z-index: 20;
               display: flex;
-              gap: 0.6rem;
+              align-items: center;
+              justify-content: space-between;
+              gap: var(--space-5);
+              padding: var(--space-4) var(--space-5);
+              background: rgba(11, 20, 53, 0.96);
+              border-color: rgba(255, 214, 41, 0.14);
+              backdrop-filter: blur(14px);
+            }
+
+            #yellow-dashboard-root .brand-header::after {
+              content: "";
+              position: absolute;
+              inset-inline: var(--space-5);
+              inset-block-end: 0;
+              height: 1px;
+              background: linear-gradient(90deg, transparent, rgba(255, 214, 41, 0.55), transparent);
+            }
+
+            #yellow-dashboard-root .topbar-brand,
+            #yellow-dashboard-root .topbar-actions,
+            #yellow-dashboard-root .session-box,
+            #yellow-dashboard-root .brand-row,
+            #yellow-dashboard-root .prize-title-row,
+            #yellow-dashboard-root .brand-command-head,
+            #yellow-dashboard-root .control-group-header,
+            #yellow-dashboard-root .bucket-head,
+            #yellow-dashboard-root .comparison-main,
+            #yellow-dashboard-root .login-brand-row {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: var(--space-4);
               flex-wrap: wrap;
             }
 
+            #yellow-dashboard-root .brand-logo-cluster,
+            #yellow-dashboard-root .public-brand-cluster,
+            #yellow-dashboard-root .brand-command-logos,
+            #yellow-dashboard-root .login-logos {
+              display: flex;
+              align-items: center;
+              gap: var(--space-4);
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .topbar-campaign-logo,
+            #yellow-dashboard-root .topbar-logo {
+              object-fit: contain;
+              display: block;
+            }
+
+            #yellow-dashboard-root .topbar-campaign-logo {
+              height: 54px;
+              width: auto;
+              max-width: 156px;
+            }
+
+            #yellow-dashboard-root .topbar-logo {
+              height: 48px;
+              width: auto;
+              max-width: 110px;
+            }
+
+            #yellow-dashboard-root .brand-divider {
+              inline-size: 1px;
+              block-size: 52px;
+              background: rgba(255, 255, 255, 0.22);
+              flex: 0 0 auto;
+            }
+
+            #yellow-dashboard-root .topbar-meta {
+              display: grid;
+              gap: var(--space-1);
+              color: var(--white);
+            }
+
+            #yellow-dashboard-root .topbar-title {
+              font-size: 1.12rem;
+              font-weight: 700;
+              letter-spacing: 0.01em;
+            }
+
+            #yellow-dashboard-root .topbar-subtitle {
+              color: rgba(255, 255, 255, 0.7);
+              font-size: 0.94rem;
+              font-weight: 400;
+            }
+
+            #yellow-dashboard-root .topbar-actions {
+              justify-content: flex-end;
+            }
+
+            #yellow-dashboard-root .top-nav,
+            #yellow-dashboard-root .action-row,
+            #yellow-dashboard-root .data-toolbar,
+            #yellow-dashboard-root .public-badges,
+            #yellow-dashboard-root .hero-badges,
+            #yellow-dashboard-root .legend-row,
+            #yellow-dashboard-root .control-actions {
+              display: flex;
+              align-items: center;
+              gap: var(--space-3);
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .nav-button,
+            #yellow-dashboard-root .button-primary,
+            #yellow-dashboard-root .button-secondary,
+            #yellow-dashboard-root .button-ghost,
+            #yellow-dashboard-root .action-button {
+              border-radius: 999px;
+              border: 1px solid transparent;
+              padding: 0.72rem 1.05rem;
+              font: inherit;
+              font-weight: 700;
+              line-height: 1;
+              cursor: pointer;
+              transition:
+                background-color 180ms ease,
+                color 180ms ease,
+                border-color 180ms ease,
+                box-shadow 180ms ease,
+                transform 180ms ease;
+            }
+
+            #yellow-dashboard-root .nav-button {
+              background: transparent;
+              color: rgba(255, 255, 255, 0.74);
+              border-color: transparent;
+              border-radius: var(--radius-md);
+              font-weight: 600;
+              padding-inline: 0.9rem;
+              position: relative;
+            }
+
+            #yellow-dashboard-root .nav-button::after {
+              content: "";
+              position: absolute;
+              inset-inline: 0.9rem;
+              inset-block-end: 0.22rem;
+              height: 2px;
+              border-radius: 999px;
+              background: transparent;
+            }
+
+            #yellow-dashboard-root .nav-button.is-active {
+              color: var(--white);
+              background: rgba(255, 255, 255, 0.06);
+            }
+
+            #yellow-dashboard-root .nav-button.is-active::after {
+              background: var(--yolk-500);
+            }
+
+            #yellow-dashboard-root .button-primary,
+            #yellow-dashboard-root .action-button,
+            #yellow-dashboard-root .action-button.primary {
+              background: var(--yolk-500);
+              color: var(--navy-950);
+              box-shadow: 0 10px 24px rgba(255, 214, 41, 0.24);
+            }
+
+            #yellow-dashboard-root .button-secondary,
+            #yellow-dashboard-root .action-button.secondary {
+              background: var(--navy-950);
+              color: var(--white);
+              border-color: rgba(255, 255, 255, 0.14);
+            }
+
+            #yellow-dashboard-root .button-ghost {
+              background: transparent;
+              color: var(--navy-900);
+              border-color: rgba(17, 29, 74, 0.14);
+            }
+
+            #yellow-dashboard-root .app-topbar .button-ghost {
+              color: var(--white);
+              border-color: rgba(255, 255, 255, 0.16);
+              background: rgba(255, 255, 255, 0.05);
+            }
+
+            #yellow-dashboard-root .session-chip,
+            #yellow-dashboard-root .status-chip,
+            #yellow-dashboard-root .hero-badge,
+            #yellow-dashboard-root .prize-pill {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.45rem;
+              padding: 0.48rem 0.82rem;
+              border-radius: 999px;
+              font-size: 0.92rem;
+              font-weight: 600;
+              white-space: nowrap;
+            }
+
+            #yellow-dashboard-root .session-chip {
+              background: rgba(255, 214, 41, 0.16);
+              color: var(--white);
+              border: 1px solid rgba(255, 214, 41, 0.18);
+              max-width: 100%;
+              white-space: normal;
+            }
+
+            #yellow-dashboard-root .status-chip,
+            #yellow-dashboard-root .status-note {
+              background: rgba(255, 214, 41, 0.12);
+              color: var(--navy-950);
+              border: 1px solid rgba(17, 29, 74, 0.12);
+            }
+
+            #yellow-dashboard-root .hero-badge {
+              background: rgba(255, 255, 255, 0.1);
+              color: rgba(255, 255, 255, 0.92);
+              border: 1px solid rgba(255, 255, 255, 0.1);
+            }
+
+            #yellow-dashboard-root .text-small {
+              font-size: 0.92rem;
+            }
+
+            #yellow-dashboard-root .text-muted,
+            #yellow-dashboard-root .view-note,
+            #yellow-dashboard-root .control-note {
+              color: var(--text-muted);
+            }
+
+            #yellow-dashboard-root .public-hero,
+            #yellow-dashboard-root .brand-command,
+            #yellow-dashboard-root .legal-hero,
             #yellow-dashboard-root .admin-lock {
-              padding: 1rem;
+              position: relative;
+              overflow: hidden;
+            }
+
+            #yellow-dashboard-root .public-hero::after,
+            #yellow-dashboard-root .brand-command::after,
+            #yellow-dashboard-root .login-visual::after {
+              content: "";
+              position: absolute;
+              inset-inline-end: -8%;
+              inset-block-end: -14%;
+              width: 280px;
+              height: 280px;
+              border-radius: 50%;
+              background: radial-gradient(circle, rgba(255, 214, 41, 0.26), transparent 72%);
+            }
+
+            #yellow-dashboard-root .public-hero,
+            #yellow-dashboard-root .legal-hero,
+            #yellow-dashboard-root .brand-command,
+            #yellow-dashboard-root .control-panel,
+            #yellow-dashboard-root .page-panel,
+            #yellow-dashboard-root .admin-lock {
+              padding: var(--space-6);
+            }
+
+            #yellow-dashboard-root .public-hero-grid,
+            #yellow-dashboard-root .admin-overview-grid,
+            #yellow-dashboard-root .login-shell,
+            #yellow-dashboard-root .legal-layout {
               display: grid;
-              gap: 1rem;
+              gap: var(--space-5);
             }
 
-            #yellow-dashboard-root .admin-lock-grid {
+            #yellow-dashboard-root .public-hero-grid {
+              grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
+              align-items: center;
+            }
+
+            #yellow-dashboard-root .public-hero-copy,
+            #yellow-dashboard-root .brand-copy,
+            #yellow-dashboard-root .login-copy {
               display: grid;
-              gap: 1rem;
-              grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
+              gap: var(--space-4);
             }
 
-            #yellow-dashboard-root .login-card {
+            #yellow-dashboard-root .brand-kicker {
+              display: inline-flex;
+              align-items: center;
+              width: fit-content;
+              padding: 0.42rem 0.85rem;
+              border-radius: 999px;
+              background: rgba(255, 214, 41, 0.16);
+              color: var(--yolk-200);
+              font-weight: 700;
+              font-size: 0.92rem;
+            }
+
+            #yellow-dashboard-root .hero-title,
+            #yellow-dashboard-root .public-hero-title {
+              margin: 0;
+              line-height: 1.02;
+              font-size: clamp(2rem, 3.6vw, 3.2rem);
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .public-hero-title {
+              color: var(--white);
+            }
+
+            #yellow-dashboard-root .hero-subtitle,
+            #yellow-dashboard-root .public-hero p,
+            #yellow-dashboard-root .login-copy p {
+              margin: 0;
+              max-width: 48rem;
+              color: rgba(255, 255, 255, 0.82);
+              line-height: 1.75;
+            }
+
+            #yellow-dashboard-root .public-hero-brand {
               display: grid;
-              gap: 0.8rem;
-              padding: 1rem;
-              border-radius: 1rem;
-              background: rgba(28, 35, 104, 0.04);
-              border: 1px solid rgba(19, 23, 80, 0.08);
+              justify-items: end;
+              gap: var(--space-4);
             }
 
-            #yellow-dashboard-root .login-help {
+            #yellow-dashboard-root .public-logo-frame,
+            #yellow-dashboard-root .logo-wrap,
+            #yellow-dashboard-root .login-logo-frame {
               display: grid;
-              gap: 0.5rem;
+              place-items: center;
+              padding: var(--space-4);
+              background: rgba(255, 255, 255, 0.96);
+              border-radius: var(--radius-lg);
+              box-shadow: 0 16px 30px rgba(7, 13, 36, 0.18);
             }
 
-            #yellow-dashboard-root .login-message {
-              min-height: 1.3rem;
+            #yellow-dashboard-root .public-logo-frame--campaign,
+            #yellow-dashboard-root .logo-wrap--campaign {
+              min-height: 122px;
             }
 
-            #yellow-dashboard-root .login-message.is-error {
-              color: #8b1e1e;
+            #yellow-dashboard-root .public-logo-frame--organization,
+            #yellow-dashboard-root .logo-wrap--organization {
+              min-height: 96px;
             }
 
-            #yellow-dashboard-root .login-message.is-success {
-              color: #1b5e20;
+            #yellow-dashboard-root .public-logo-frame img,
+            #yellow-dashboard-root .logo-wrap img,
+            #yellow-dashboard-root .login-logo-frame img {
+              display: block;
+              max-width: 100%;
+              max-height: 92px;
+              object-fit: contain;
             }
 
-            #yellow-dashboard-root .manager-only-note {
-              padding: 0.75rem 0.85rem;
-              border-radius: 0.9rem;
-              background: rgba(255, 217, 61, 0.16);
-              color: var(--brand-blue-950);
+            #yellow-dashboard-root .section-header,
+            #yellow-dashboard-root .section-head {
+              display: flex;
+              align-items: baseline;
+              justify-content: space-between;
+              gap: var(--space-4);
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .section-header h2,
+            #yellow-dashboard-root .section-header h3,
+            #yellow-dashboard-root .section-head h3,
+            #yellow-dashboard-root .legal-document h2,
+            #yellow-dashboard-root .legal-document h3,
+            #yellow-dashboard-root .legal-document h4,
+            #yellow-dashboard-root .analysis-card h4,
+            #yellow-dashboard-root .comparison-card h4,
+            #yellow-dashboard-root .comparison-list h4,
+            #yellow-dashboard-root .prize-card h4,
+            #yellow-dashboard-root .control-panel h3,
+            #yellow-dashboard-root .login-card h2 {
+              margin: 0;
+              color: var(--navy-950);
+            }
+
+            #yellow-dashboard-root .section-header h3,
+            #yellow-dashboard-root .section-head h3 {
+              font-size: 1.25rem;
+              font-weight: 700;
             }
 
             #yellow-dashboard-root .admin-content[hidden] {
               display: none !important;
             }
 
-            #yellow-dashboard-root .page-hero-row {
-              display: flex;
-              justify-content: space-between;
-              gap: 1rem;
-              flex-wrap: wrap;
-              align-items: flex-start;
+            #yellow-dashboard-root .admin-overview-grid {
+              grid-template-columns: minmax(0, 1.15fr) minmax(380px, 0.85fr);
+              align-items: start;
             }
 
-            #yellow-dashboard-root .legal-grid {
+            #yellow-dashboard-root .brand-command {
               display: grid;
-              gap: 1rem;
+              gap: var(--space-5);
+              padding: var(--space-6);
             }
 
-            #yellow-dashboard-root .legal-card {
+            #yellow-dashboard-root .brand-command-head {
+              align-items: start;
+            }
+
+            #yellow-dashboard-root .brand-command .hero-title,
+            #yellow-dashboard-root .brand-command .hero-subtitle,
+            #yellow-dashboard-root .brand-command .hero-badge,
+            #yellow-dashboard-root .brand-command .brand-kicker,
+            #yellow-dashboard-root .login-visual .brand-kicker,
+            #yellow-dashboard-root .login-visual h2,
+            #yellow-dashboard-root .login-visual p {
+              color: var(--white);
+            }
+
+            #yellow-dashboard-root .hero-meta-grid {
               display: grid;
-              gap: 0.8rem;
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+              gap: var(--space-3);
             }
 
-            #yellow-dashboard-root .legal-card p,
-            #yellow-dashboard-root .legal-card li {
-              margin: 0;
-              color: rgba(16, 16, 16, 0.82);
-            }
-
-            #yellow-dashboard-root .legal-card ul {
-              margin: 0;
-              padding-inline-start: 1.25rem;
+            #yellow-dashboard-root .hero-meta {
+              padding: var(--space-4);
+              border-radius: var(--radius-lg);
+              background: rgba(255, 255, 255, 0.08);
+              border: 1px solid rgba(255, 255, 255, 0.08);
               display: grid;
-              gap: 0.45rem;
+              gap: var(--space-1);
             }
 
-            #yellow-dashboard-root .graph-control-row {
-              display: grid;
-              gap: 0.75rem;
-              grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+            #yellow-dashboard-root .hero-meta span {
+              color: rgba(255, 255, 255, 0.72);
+              font-size: 0.9rem;
             }
 
-            #yellow-dashboard-root .view-note {
-              color: rgba(16, 16, 16, 0.64);
-            }
-
-            #yellow-dashboard-root .hero {
-              display: grid;
-              gap: 1rem;
-              grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
-              align-items: stretch;
-            }
-
-            #yellow-dashboard-root .hero-panel,
-            #yellow-dashboard-root .control-panel,
-            #yellow-dashboard-root .metric-card,
-            #yellow-dashboard-root .prize-card {
-              background: var(--brand-white);
-              border: 2px solid rgba(19, 23, 80, 0.12);
-              border-radius: 1.25rem;
-              box-shadow: 0 12px 34px rgba(19, 23, 80, 0.08);
-            }
-
-            #yellow-dashboard-root .hero-panel {
-              position: relative;
-              overflow: hidden;
-              padding: 1.25rem;
-              background:
-                linear-gradient(120deg, rgba(28, 35, 104, 0.98) 0%, rgba(28, 35, 104, 0.98) 54%, rgba(255, 217, 61, 0.98) 54%, rgba(255, 217, 61, 0.98) 100%);
-              color: var(--brand-white);
-            }
-
-            #yellow-dashboard-root .hero-panel::after {
-              content: "";
-              position: absolute;
-              inset-inline-end: -2rem;
-              bottom: -2rem;
-              width: 12rem;
-              height: 12rem;
-              border-radius: 50%;
-              background: rgba(255, 255, 255, 0.14);
-            }
-
-            #yellow-dashboard-root .brand-layout {
-              position: relative;
-              z-index: 1;
-              display: grid;
-              gap: 1rem;
-            }
-
-            #yellow-dashboard-root .brand-row {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 1rem;
-              flex-wrap: wrap;
-            }
-
-            #yellow-dashboard-root .logo-wrap {
-              width: 8.5rem;
-              height: 8.5rem;
-              border-radius: 1.1rem;
-              background: rgba(255, 255, 255, 0.94);
-              display: grid;
-              place-items: center;
-              padding: 0.7rem;
-            }
-
-            #yellow-dashboard-root .logo-wrap img {
-              width: 100%;
-              height: 100%;
-              object-fit: contain;
-            }
-
-            #yellow-dashboard-root .brand-copy {
-              display: grid;
-              gap: 0.35rem;
-              min-width: 16rem;
-            }
-
-            #yellow-dashboard-root .brand-kicker {
-              display: inline-flex;
-              align-items: center;
-              gap: 0.45rem;
-              padding: 0.28rem 0.75rem;
-              border-radius: 999px;
-              background: rgba(255, 255, 255, 0.14);
-              color: var(--brand-yellow-400);
-              width: fit-content;
-              font-size: 0.92em;
-            }
-
-            #yellow-dashboard-root .hero-title {
-              margin: 0;
-              font-size: clamp(1.9rem, 4vw, 2.8rem);
-              line-height: 1.05;
-              color: var(--brand-white);
-            }
-
-            #yellow-dashboard-root .hero-subtitle {
-              margin: 0;
-              max-width: 36rem;
-              color: rgba(255, 255, 255, 0.9);
-            }
-
-            #yellow-dashboard-root .hero-badges {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 0.6rem;
-            }
-
-            #yellow-dashboard-root .hero-badge {
-              display: inline-flex;
-              align-items: center;
-              gap: 0.4rem;
-              padding: 0.45rem 0.8rem;
-              border-radius: 999px;
-              background: rgba(255, 255, 255, 0.12);
-              color: var(--brand-white);
-              white-space: nowrap;
+            #yellow-dashboard-root .hero-meta strong {
+              color: var(--white);
+              font-size: 1.02rem;
+              font-weight: 700;
             }
 
             #yellow-dashboard-root .control-panel {
-              padding: 1rem;
               display: grid;
-              gap: 0.9rem;
+              gap: var(--space-5);
             }
 
-            #yellow-dashboard-root .control-panel h3,
-            #yellow-dashboard-root .section-head h3 {
+            #yellow-dashboard-root .control-groups {
+              display: grid;
+              gap: var(--space-4);
+            }
+
+            #yellow-dashboard-root .control-group {
+              display: grid;
+              gap: var(--space-4);
+              padding: var(--space-4);
+              border-radius: var(--radius-lg);
+              background: var(--off-white);
+              border: 1px solid rgba(17, 29, 74, 0.08);
+            }
+
+            #yellow-dashboard-root .control-group-header {
+              align-items: baseline;
+            }
+
+            #yellow-dashboard-root .control-group-header h4 {
               margin: 0;
-              font-weight: 500;
-              color: var(--brand-blue-950);
+              color: var(--navy-950);
+              font-size: 1.02rem;
+              font-weight: 700;
+            }
+
+            #yellow-dashboard-root .control-group-header p {
+              margin: 0;
+              color: var(--text-muted);
+              font-size: 0.9rem;
             }
 
             #yellow-dashboard-root .filters-grid {
               display: grid;
-              gap: 0.75rem;
-              grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+              gap: var(--space-4);
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            #yellow-dashboard-root .filters-grid.filters-grid--three {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
             }
 
             #yellow-dashboard-root .form-label {
               display: grid;
-              gap: 0.35rem;
-              color: var(--brand-blue-950);
-              font-weight: 500;
+              gap: var(--space-2);
+              color: var(--navy-900);
+              font-size: 0.96rem;
+              font-weight: 600;
             }
 
             #yellow-dashboard-root .form-control,
             #yellow-dashboard-root .form-select {
               width: 100%;
-              border: 1px solid rgba(19, 23, 80, 0.2);
-              border-radius: 0.85rem;
-              background: var(--brand-white);
-              color: var(--brand-black);
-              padding: 0.7rem 0.85rem;
+              min-height: 52px;
+              padding: 0.82rem 0.95rem;
+              border-radius: var(--radius-md);
+              border: 1px solid rgba(17, 29, 74, 0.16);
+              background: var(--white);
+              color: var(--graphite);
+              box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+            }
+
+            #yellow-dashboard-root .form-control::placeholder {
+              color: rgba(105, 112, 128, 0.76);
+            }
+
+            #yellow-dashboard-root .form-control:focus-visible,
+            #yellow-dashboard-root .form-select:focus-visible,
+            #yellow-dashboard-root .nav-button:focus-visible,
+            #yellow-dashboard-root .button-primary:focus-visible,
+            #yellow-dashboard-root .button-secondary:focus-visible,
+            #yellow-dashboard-root .button-ghost:focus-visible,
+            #yellow-dashboard-root .action-button:focus-visible,
+            #yellow-dashboard-root .metric-toggle:focus-visible {
+              outline: 2px solid var(--navy-950);
+              outline-offset: 2px;
+              box-shadow: 0 0 0 4px rgba(255, 214, 41, 0.48);
+            }
+
+            #yellow-dashboard-root input[type="file"]::file-selector-button {
+              margin-inline-end: var(--space-3);
+              border: 1px solid rgba(17, 29, 74, 0.12);
+              border-radius: 999px;
+              padding: 0.58rem 0.9rem;
+              background: var(--navy-950);
+              color: var(--white);
               font: inherit;
-              box-sizing: border-box;
+              font-weight: 700;
+              cursor: pointer;
             }
 
-            #yellow-dashboard-root .control-note,
-            #yellow-dashboard-root .text-small {
-              font-size: 0.9em;
+            #yellow-dashboard-root .control-actions {
+              justify-content: flex-start;
             }
 
-            #yellow-dashboard-root .text-muted {
-              color: rgba(16, 16, 16, 0.66);
-            }
-
-            #yellow-dashboard-root .section-head {
+            #yellow-dashboard-root .active-filter-summary {
+              min-height: 50px;
               display: flex;
-              justify-content: space-between;
-              gap: 1rem;
-              flex-wrap: wrap;
-              align-items: baseline;
+              align-items: center;
             }
 
             #yellow-dashboard-root .metric-grid {
               display: grid;
-              gap: 0.9rem;
-              grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+              gap: var(--space-4);
             }
 
+            #yellow-dashboard-root .kpi-card,
             #yellow-dashboard-root .metric-card {
-              padding: 1rem;
+              padding: var(--space-5);
               display: grid;
-              gap: 0.35rem;
+              gap: var(--space-2);
+              position: relative;
+              overflow: hidden;
+            }
+
+            #yellow-dashboard-root .kpi-card::before,
+            #yellow-dashboard-root .metric-card::before {
+              content: "";
+              position: absolute;
+              inset-inline: var(--space-4);
+              inset-block-start: 0;
+              height: 4px;
+              border-radius: 999px;
+              background: linear-gradient(90deg, var(--yolk-500), rgba(255, 214, 41, 0.1));
             }
 
             #yellow-dashboard-root .metric-label {
-              color: rgba(16, 16, 16, 0.66);
+              color: var(--text-muted);
+              font-size: 0.9rem;
+              font-weight: 600;
             }
 
             #yellow-dashboard-root .metric-value {
-              font-size: clamp(1.5rem, 3vw, 2rem);
-              font-weight: 500;
-              color: var(--brand-blue-950);
+              color: var(--navy-950);
+              font-size: clamp(1.65rem, 2.6vw, 2.5rem);
+              font-weight: 800;
             }
 
-            #yellow-dashboard-root .prize-shell {
-              display: grid;
-              gap: 1rem;
+            #yellow-dashboard-root .metric-detail {
+              color: var(--text-muted);
+              font-size: 0.92rem;
             }
 
-            #yellow-dashboard-root .comparison-shell {
-              display: grid;
-              gap: 1rem;
-            }
-
-            #yellow-dashboard-root .comparison-metric-grid {
-              display: grid;
-              gap: 0.9rem;
-              grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-            }
-
-            #yellow-dashboard-root .comparison-card {
-              background: var(--brand-white);
-              border: 2px solid rgba(19, 23, 80, 0.12);
-              border-radius: 1.15rem;
-              padding: 1rem;
-              display: grid;
-              gap: 0.55rem;
-              box-shadow: 0 12px 34px rgba(19, 23, 80, 0.08);
-            }
-
-            #yellow-dashboard-root .comparison-card h4 {
-              margin: 0;
-              font-weight: 500;
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .comparison-main {
-              display: flex;
-              justify-content: space-between;
-              gap: 0.75rem;
-              align-items: baseline;
-              flex-wrap: wrap;
-            }
-
-            #yellow-dashboard-root .comparison-value {
-              font-size: 1.35rem;
-              font-weight: 500;
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .comparison-delta {
-              display: inline-flex;
-              align-items: center;
-              gap: 0.4rem;
-              padding: 0.28rem 0.65rem;
-              border-radius: 999px;
-              font-size: 0.92em;
-              font-weight: 500;
-              background: rgba(19, 23, 80, 0.08);
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .comparison-delta.is-up {
-              background: rgba(255, 217, 61, 0.3);
-            }
-
-            #yellow-dashboard-root .comparison-delta.is-down {
-              background: rgba(16, 16, 16, 0.1);
-            }
-
-            #yellow-dashboard-root .comparison-lists {
-              display: grid;
-              gap: 0.9rem;
-              grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-            }
-
+            #yellow-dashboard-root .analysis-card,
+            #yellow-dashboard-root .comparison-card,
             #yellow-dashboard-root .comparison-list {
-              background: rgba(255, 255, 255, 0.92);
-              border: 2px solid rgba(19, 23, 80, 0.12);
-              border-radius: 1.15rem;
-              padding: 1rem;
+              padding: var(--space-5);
               display: grid;
-              gap: 0.7rem;
+              gap: var(--space-3);
+              background: rgba(255, 255, 255, 0.98);
             }
 
-            #yellow-dashboard-root .comparison-list h4 {
-              margin: 0;
-              font-weight: 500;
-              color: var(--brand-blue-950);
-            }
-
+            #yellow-dashboard-root .analysis-card ul,
             #yellow-dashboard-root .comparison-list ul {
               margin: 0;
               padding: 0;
               list-style: none;
               display: grid;
-              gap: 0.55rem;
+              gap: var(--space-2);
             }
 
+            #yellow-dashboard-root .analysis-card li,
             #yellow-dashboard-root .comparison-list li {
-              padding: 0.55rem 0.65rem;
-              border-radius: 0.85rem;
-              background: rgba(28, 35, 104, 0.05);
-              color: var(--brand-black);
+              padding: var(--space-3);
+              border-radius: var(--radius-md);
+              background: rgba(17, 29, 74, 0.05);
+              color: var(--graphite);
             }
 
+            #yellow-dashboard-root .analysis-card.quality li,
             #yellow-dashboard-root .comparison-list.critical li {
-              background: rgba(255, 217, 61, 0.2);
-              color: var(--brand-blue-950);
+              border-inline-start: 4px solid var(--yolk-500);
+              background: rgba(255, 214, 41, 0.16);
             }
 
-            #yellow-dashboard-root .comparison-list.insights li {
-              background: rgba(28, 35, 104, 0.08);
-            }
-
-            #yellow-dashboard-root .analysis-shell,
-            #yellow-dashboard-root .signal-grid,
-            #yellow-dashboard-root .segment-grid {
-              display: grid;
-              gap: 0.9rem;
-            }
-
-            #yellow-dashboard-root .signal-grid,
-            #yellow-dashboard-root .segment-grid {
-              grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-            }
-
-            #yellow-dashboard-root .analysis-card {
-              background: rgba(255, 255, 255, 0.92);
-              border: 2px solid rgba(19, 23, 80, 0.12);
-              border-radius: 1.15rem;
-              padding: 1rem;
-              display: grid;
-              gap: 0.7rem;
-            }
-
-            #yellow-dashboard-root .analysis-card h4 {
-              margin: 0;
-              font-weight: 500;
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .analysis-card ul {
-              margin: 0;
-              padding: 0;
-              list-style: none;
-              display: grid;
-              gap: 0.5rem;
-            }
-
-            #yellow-dashboard-root .analysis-card li {
-              padding: 0.52rem 0.65rem;
-              border-radius: 0.85rem;
-              background: rgba(28, 35, 104, 0.05);
-            }
-
-            #yellow-dashboard-root .analysis-card.quality li {
-              background: rgba(255, 217, 61, 0.2);
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .bucket-row {
-              display: grid;
-              gap: 0.55rem;
-            }
-
-            #yellow-dashboard-root .bucket-item {
-              display: grid;
-              gap: 0.25rem;
-            }
-
-            #yellow-dashboard-root .bucket-head {
-              display: flex;
-              justify-content: space-between;
-              gap: 0.75rem;
-              align-items: center;
-            }
-
-            #yellow-dashboard-root .bucket-bar {
-              height: 0.55rem;
-              border-radius: 999px;
-              overflow: hidden;
-              background: rgba(19, 23, 80, 0.08);
-            }
-
-            #yellow-dashboard-root .bucket-fill {
-              height: 100%;
-              border-radius: inherit;
-              background: linear-gradient(90deg, rgba(255, 217, 61, 0.95), rgba(28, 35, 104, 0.95));
-            }
-
-            #yellow-dashboard-root .action-row {
-              display: flex;
-              gap: 0.75rem;
-              flex-wrap: wrap;
-            }
-
-            #yellow-dashboard-root .action-button {
-              border: 0;
-              border-radius: 0.9rem;
-              padding: 0.72rem 1rem;
-              font: inherit;
-              font-weight: 500;
-              cursor: pointer;
-              background: var(--brand-blue-950);
-              color: var(--brand-yellow-500);
-            }
-
-            #yellow-dashboard-root .action-button.secondary {
-              background: rgba(255, 217, 61, 0.24);
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .podium-grid,
-            #yellow-dashboard-root .tier-grid {
-              display: grid;
-              gap: 0.9rem;
-              grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-            }
-
-            #yellow-dashboard-root .prize-card {
-              overflow: hidden;
-              display: grid;
-            }
-
-            #yellow-dashboard-root .prize-visual {
-              min-height: 8rem;
-              padding: 1rem;
-              background:
-                linear-gradient(160deg, rgba(255, 217, 61, 0.96) 0%, rgba(255, 217, 61, 0.96) 58%, rgba(28, 35, 104, 0.96) 58%, rgba(28, 35, 104, 0.96) 100%);
-            }
-
-            #yellow-dashboard-root .prize-card.place-card .prize-visual {
-              background:
-                linear-gradient(180deg, rgba(28, 35, 104, 0.98) 0%, rgba(28, 35, 104, 0.98) 56%, rgba(255, 217, 61, 0.98) 56%, rgba(255, 217, 61, 0.98) 100%);
-            }
-
-            #yellow-dashboard-root .podium-mark,
-            #yellow-dashboard-root .tier-mark {
-              width: 100%;
-              height: 100%;
-              display: grid;
-              place-items: center;
-            }
-
-            #yellow-dashboard-root .prize-content {
-              padding: 1rem;
-              display: grid;
-              gap: 0.7rem;
-            }
-
-            #yellow-dashboard-root .prize-title-row {
-              display: flex;
-              justify-content: space-between;
-              gap: 0.75rem;
-              align-items: center;
-              flex-wrap: wrap;
-            }
-
-            #yellow-dashboard-root .prize-title {
-              font-size: 1.05rem;
-              font-weight: 500;
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .prize-pill {
+            #yellow-dashboard-root .comparison-delta {
               display: inline-flex;
               align-items: center;
-              gap: 0.4rem;
+              padding: 0.38rem 0.7rem;
               border-radius: 999px;
-              padding: 0.35rem 0.65rem;
-              background: rgba(255, 217, 61, 0.24);
-              color: var(--brand-blue-950);
-              font-weight: 500;
+              background: rgba(17, 29, 74, 0.07);
+              color: var(--navy-950);
+              font-weight: 700;
             }
 
+            #yellow-dashboard-root .comparison-delta.is-up {
+              background: rgba(255, 214, 41, 0.22);
+            }
+
+            #yellow-dashboard-root .comparison-delta.is-down {
+              background: rgba(9, 11, 16, 0.08);
+            }
+
+            #yellow-dashboard-root .signal-grid,
+            #yellow-dashboard-root .segment-grid,
+            #yellow-dashboard-root .comparison-metric-grid,
+            #yellow-dashboard-root .comparison-lists {
+              display: grid;
+              gap: var(--space-4);
+              grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            }
+
+            #yellow-dashboard-root .bucket-row,
+            #yellow-dashboard-root .bucket-item,
             #yellow-dashboard-root .winner-list {
               display: grid;
-              gap: 0.55rem;
+              gap: var(--space-3);
             }
 
-            #yellow-dashboard-root .winner-item {
-              display: grid;
-              grid-template-columns: auto 1fr auto;
-              gap: 0.6rem;
-              align-items: center;
-              padding: 0.55rem 0.65rem;
-              border-radius: 0.9rem;
-              background: rgba(28, 35, 104, 0.05);
+            #yellow-dashboard-root .bucket-bar,
+            #yellow-dashboard-root .progress-track {
+              height: 10px;
+              border-radius: 999px;
+              background: rgba(17, 29, 74, 0.08);
+              overflow: hidden;
             }
 
-            #yellow-dashboard-root .winner-item.is-focus {
-              outline: 2px solid var(--brand-yellow-500);
-              background: rgba(255, 217, 61, 0.22);
-            }
-
-            #yellow-dashboard-root .winner-rank {
-              width: 1.7rem;
-              height: 1.7rem;
-              border-radius: 50%;
-              display: grid;
-              place-items: center;
-              background: var(--brand-blue-950);
-              color: var(--brand-yellow-500);
-              font-size: 0.88em;
-              font-weight: 500;
-            }
-
-            #yellow-dashboard-root .winner-name {
-              color: var(--brand-blue-950);
-              font-weight: 500;
-            }
-
-            #yellow-dashboard-root .winner-amount {
-              color: rgba(16, 16, 16, 0.72);
-              white-space: nowrap;
-            }
-
-            #yellow-dashboard-root .status-note {
-              padding: 0.7rem 0.8rem;
-              border-radius: 0.9rem;
-              background: rgba(255, 217, 61, 0.22);
-              color: var(--brand-blue-950);
-            }
-
-            #yellow-dashboard-root .dashboard-section {
-              display: grid;
-              gap: 0.75rem;
+            #yellow-dashboard-root .bucket-fill,
+            #yellow-dashboard-root .progress-fill {
+              height: 100%;
+              border-radius: inherit;
+              background: linear-gradient(90deg, var(--yolk-500), var(--navy-800));
             }
 
             #yellow-dashboard-root .chart-frame {
               position: relative;
             }
 
+            #yellow-dashboard-root .chart-card,
             #yellow-dashboard-root .chart-panel {
-              padding: 1rem;
-              border-radius: 1.25rem;
-              background: rgba(255, 255, 255, 0.92);
-              border: 2px solid rgba(19, 23, 80, 0.12);
+              padding: var(--space-5);
+            }
+
+            #yellow-dashboard-root .chart-card {
+              display: grid;
+              gap: var(--space-4);
+            }
+
+            #yellow-dashboard-root .metric-toolbar {
+              justify-content: flex-end;
+            }
+
+            #yellow-dashboard-root .metric-toggle {
+              border: 1px solid rgba(17, 29, 74, 0.14);
+              border-radius: 999px;
+              padding: 0.6rem 0.9rem;
+              background: rgba(17, 29, 74, 0.04);
+              color: var(--navy-900);
+              font: inherit;
+              font-weight: 700;
+              cursor: pointer;
+              transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+            }
+
+            #yellow-dashboard-root .metric-toggle.is-active {
+              background: var(--navy-950);
+              color: var(--yolk-500);
+              border-color: var(--navy-950);
+            }
+
+            #yellow-dashboard-root .visually-hidden-select {
+              position: absolute;
+              inline-size: 1px;
+              block-size: 1px;
+              overflow: hidden;
+              clip-path: inset(50%);
+              white-space: nowrap;
             }
 
             #yellow-dashboard-root svg {
@@ -995,18 +1070,18 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
             #yellow-dashboard-root .tooltip {
               position: absolute;
               inset-inline-start: 0;
-              top: 0;
+              inset-block-start: 0;
               transform: translate(-9999px, -9999px);
               visibility: hidden;
               pointer-events: none;
-              max-width: 16rem;
-              padding: 0.55rem 0.75rem;
-              border: 1px solid rgba(19, 23, 80, 0.24);
-              border-radius: 0.9rem;
-              background: var(--brand-white);
-              color: var(--brand-black);
-              box-shadow: 0 18px 36px rgba(19, 23, 80, 0.14);
-              z-index: 10;
+              max-width: 18rem;
+              padding: 0.75rem 0.85rem;
+              border: 1px solid rgba(17, 29, 74, 0.14);
+              border-radius: var(--radius-md);
+              background: rgba(255, 255, 255, 0.98);
+              color: var(--graphite);
+              box-shadow: 0 18px 36px rgba(11, 20, 53, 0.16);
+              z-index: 12;
             }
 
             #yellow-dashboard-root .tooltip.is-visible {
@@ -1015,135 +1090,596 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
             #yellow-dashboard-root .matrix-label {
               cursor: pointer;
-              fill: var(--brand-blue-950);
-              font-weight: 500;
+              fill: var(--navy-900);
+              font-weight: 700;
             }
 
             #yellow-dashboard-root .matrix-label.is-active {
-              fill: var(--brand-blue-500);
+              fill: var(--navy-700);
             }
 
             #yellow-dashboard-root .clickable-cell {
               cursor: pointer;
             }
 
-            #yellow-dashboard-root .legend-row {
-              display: flex;
-              gap: 0.75rem;
-              flex-wrap: wrap;
-              align-items: center;
-            }
-
             #yellow-dashboard-root .legend-item {
               display: inline-flex;
-              gap: 0.4rem;
               align-items: center;
+              gap: var(--space-2);
             }
 
             #yellow-dashboard-root .legend-swatch {
-              width: 0.95rem;
-              height: 0.95rem;
-              border-radius: 0.25rem;
+              width: 14px;
+              height: 14px;
+              border-radius: 4px;
               display: inline-block;
-              vertical-align: middle;
+            }
+
+            #yellow-dashboard-root .podium-grid {
+              display: grid;
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              gap: var(--space-4);
+              align-items: end;
+            }
+
+            #yellow-dashboard-root .tier-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+              gap: var(--space-4);
+            }
+
+            #yellow-dashboard-root .prize-card {
+              overflow: hidden;
+              display: grid;
+              gap: 0;
+            }
+
+            #yellow-dashboard-root .prize-visual {
+              min-height: 132px;
+              padding: var(--space-4);
+              background: linear-gradient(165deg, rgba(17, 29, 74, 0.96), rgba(36, 55, 124, 0.96) 58%, rgba(255, 214, 41, 0.94));
+            }
+
+            #yellow-dashboard-root .place-card--1 {
+              order: 2;
+              transform: translateY(-18px);
+            }
+
+            #yellow-dashboard-root .place-card--2 {
+              order: 1;
+            }
+
+            #yellow-dashboard-root .place-card--3 {
+              order: 3;
+            }
+
+            #yellow-dashboard-root .place-card--1 .prize-visual {
+              min-height: 164px;
+            }
+
+            #yellow-dashboard-root .place-card--2 .prize-visual,
+            #yellow-dashboard-root .place-card--3 .prize-visual {
+              min-height: 142px;
+            }
+
+            #yellow-dashboard-root .podium-mark,
+            #yellow-dashboard-root .tier-mark {
+              width: 100%;
+              height: 100%;
+              display: grid;
+              place-items: center;
+            }
+
+            #yellow-dashboard-root .prize-content {
+              padding: var(--space-5);
+              display: grid;
+              gap: var(--space-3);
+            }
+
+            #yellow-dashboard-root .prize-title {
+              font-size: 1.12rem;
+              font-weight: 700;
+              color: var(--navy-950);
+            }
+
+            #yellow-dashboard-root .prize-pill {
+              background: rgba(255, 214, 41, 0.18);
+              color: var(--navy-950);
+              border: 1px solid rgba(17, 29, 74, 0.08);
+            }
+
+            #yellow-dashboard-root .winner-item {
+              display: grid;
+              grid-template-columns: auto 1fr auto;
+              gap: var(--space-3);
+              align-items: center;
+              padding: var(--space-3) var(--space-4);
+              border-radius: var(--radius-md);
+              background: rgba(17, 29, 74, 0.05);
+              border: 1px solid transparent;
+            }
+
+            #yellow-dashboard-root .winner-item.is-focus {
+              background: rgba(255, 214, 41, 0.18);
+              border-color: rgba(17, 29, 74, 0.14);
+            }
+
+            #yellow-dashboard-root .winner-rank {
+              width: 32px;
+              height: 32px;
+              border-radius: 50%;
+              display: grid;
+              place-items: center;
+              background: var(--navy-950);
+              color: var(--yolk-500);
+              font-size: 0.94rem;
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .winner-name {
+              color: var(--navy-950);
+              font-weight: 700;
+            }
+
+            #yellow-dashboard-root .winner-amount {
+              color: var(--graphite);
+              white-space: nowrap;
+              font-weight: 700;
+            }
+
+            #yellow-dashboard-root .prize-meta {
+              display: flex;
+              gap: var(--space-3);
+              flex-wrap: wrap;
+              color: var(--text-muted);
+              font-size: 0.92rem;
             }
 
             #yellow-dashboard-root .table-wrap {
-              overflow-x: auto;
-              border-radius: 1rem;
-              border: 2px solid rgba(19, 23, 80, 0.12);
-              background: var(--brand-white);
+              overflow: auto;
+              border-radius: var(--radius-lg);
+              border: 1px solid rgba(17, 29, 74, 0.12);
+              background: rgba(255, 255, 255, 0.98);
+              max-inline-size: 100%;
             }
 
             #yellow-dashboard-root table {
               width: 100%;
+              min-width: 760px;
               border-collapse: collapse;
             }
 
             #yellow-dashboard-root th,
             #yellow-dashboard-root td {
-              padding: 0.7rem 0.6rem;
-              border-bottom: 1px solid rgba(19, 23, 80, 0.08);
+              padding: 0.92rem 0.82rem;
               text-align: right;
               vertical-align: top;
+              border-bottom: 1px solid rgba(17, 29, 74, 0.08);
             }
 
-            #yellow-dashboard-root th {
-              background: rgba(28, 35, 104, 0.05);
-              color: var(--brand-blue-950);
-              font-weight: 500;
+            #yellow-dashboard-root thead th {
+              position: sticky;
+              top: 0;
+              z-index: 2;
+              background: rgba(17, 29, 74, 0.04);
+              color: var(--navy-950);
+              font-weight: 700;
+            }
+
+            #yellow-dashboard-root tbody tr:nth-child(even) {
+              background: rgba(246, 247, 250, 0.9);
             }
 
             #yellow-dashboard-root tbody tr:hover {
-              background: rgba(255, 217, 61, 0.15);
+              background: rgba(255, 214, 41, 0.12);
             }
 
             #yellow-dashboard-root .amount-cell {
+              color: var(--navy-950);
+              font-weight: 700;
               white-space: nowrap;
-              font-weight: 500;
-              color: var(--brand-blue-950);
             }
 
             #yellow-dashboard-root .status-badge {
               display: inline-flex;
-              padding: 0.22rem 0.55rem;
+              align-items: center;
+              padding: 0.3rem 0.62rem;
               border-radius: 999px;
-              font-size: 0.86em;
-              background: rgba(28, 35, 104, 0.12);
-              color: var(--brand-blue-950);
+              background: rgba(17, 29, 74, 0.09);
+              color: var(--navy-950);
+              font-size: 0.88rem;
+              font-weight: 700;
             }
 
             #yellow-dashboard-root .status-badge.failed {
-              background: rgba(16, 16, 16, 0.12);
-              color: var(--brand-black);
+              background: rgba(9, 11, 16, 0.08);
+              color: var(--black);
             }
 
             #yellow-dashboard-root .empty-state {
-              padding: 0.9rem 0;
-              color: rgba(16, 16, 16, 0.66);
+              padding: var(--space-5);
+              border-radius: var(--radius-lg);
+              border: 1px dashed rgba(17, 29, 74, 0.18);
+              background: rgba(246, 247, 250, 0.88);
+              color: var(--text-muted);
             }
 
-            @media (max-width: 840px) {
-              #yellow-dashboard-root .admin-lock-grid {
+            #yellow-dashboard-root .legal-hero {
+              padding: var(--space-6);
+            }
+
+            #yellow-dashboard-root .legal-hero h2 {
+              margin: 0 0 var(--space-3);
+              color: var(--navy-950);
+              font-size: 2rem;
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .legal-hero p {
+              margin: 0;
+              color: var(--text-muted);
+              line-height: 1.8;
+              max-width: 60rem;
+            }
+
+            #yellow-dashboard-root .legal-layout {
+              grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+              align-items: start;
+            }
+
+            #yellow-dashboard-root .legal-sidebar,
+            #yellow-dashboard-root .legal-document {
+              padding: var(--space-6);
+            }
+
+            #yellow-dashboard-root .legal-sidebar {
+              position: sticky;
+              top: 112px;
+              display: grid;
+              gap: var(--space-4);
+            }
+
+            #yellow-dashboard-root .legal-sidebar nav {
+              display: grid;
+              gap: var(--space-2);
+            }
+
+            #yellow-dashboard-root .legal-sidebar a {
+              color: var(--navy-900);
+              text-decoration: none;
+              padding: 0.52rem 0.7rem;
+              border-radius: var(--radius-md);
+              background: rgba(17, 29, 74, 0.04);
+              font-weight: 600;
+            }
+
+            #yellow-dashboard-root .legal-document {
+              max-width: 900px;
+              justify-self: center;
+              width: 100%;
+              display: grid;
+              gap: var(--space-6);
+            }
+
+            #yellow-dashboard-root .legal-document section {
+              display: grid;
+              gap: var(--space-3);
+            }
+
+            #yellow-dashboard-root .legal-document h3 {
+              font-size: 1.28rem;
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .legal-document h4 {
+              font-size: 1.02rem;
+              font-weight: 700;
+            }
+
+            #yellow-dashboard-root .legal-document p,
+            #yellow-dashboard-root .legal-document li {
+              margin: 0;
+              line-height: 1.9;
+              color: var(--graphite);
+            }
+
+            #yellow-dashboard-root .legal-document ol,
+            #yellow-dashboard-root .legal-document ul {
+              margin: 0;
+              padding-inline-start: 1.35rem;
+              display: grid;
+              gap: var(--space-2);
+            }
+
+            #yellow-dashboard-root .admin-lock {
+              padding: var(--space-4);
+            }
+
+            #yellow-dashboard-root .login-shell {
+              grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+            }
+
+            #yellow-dashboard-root .login-visual {
+              padding: var(--space-6);
+              border-radius: var(--radius-xl);
+              display: grid;
+              gap: var(--space-5);
+            }
+
+            #yellow-dashboard-root .login-logo-frame {
+              min-height: 96px;
+            }
+
+            #yellow-dashboard-root .login-card {
+              display: grid;
+              gap: var(--space-4);
+              align-content: center;
+              padding: var(--space-6);
+            }
+
+            #yellow-dashboard-root .login-card h2 {
+              font-size: 1.75rem;
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .password-field {
+              position: relative;
+            }
+
+            #yellow-dashboard-root .password-field .form-control {
+              padding-inline-end: 5.5rem;
+            }
+
+            #yellow-dashboard-root .password-toggle {
+              position: absolute;
+              inset-inline-end: var(--space-2);
+              inset-block-end: var(--space-2);
+              min-height: 38px;
+              padding: 0.45rem 0.8rem;
+            }
+
+            #yellow-dashboard-root .login-message {
+              min-height: 1.4rem;
+              padding: 0.75rem 0.9rem;
+              border-radius: var(--radius-md);
+              border-inline-start: 4px solid transparent;
+            }
+
+            #yellow-dashboard-root .login-message.is-error {
+              color: var(--navy-950);
+              background: rgba(255, 214, 41, 0.16);
+              border-inline-start-color: var(--black);
+            }
+
+            #yellow-dashboard-root .login-message.is-success {
+              color: var(--navy-950);
+              background: rgba(17, 29, 74, 0.08);
+              border-inline-start-color: var(--yolk-500);
+            }
+
+            #yellow-dashboard-root .manager-only-note {
+              padding: var(--space-4);
+              border-radius: var(--radius-lg);
+              background: rgba(255, 255, 255, 0.08);
+              border: 1px solid rgba(255, 255, 255, 0.08);
+              color: rgba(255, 255, 255, 0.86);
+              line-height: 1.75;
+            }
+
+            #yellow-dashboard-root .public-panel-header {
+              display: flex;
+              align-items: baseline;
+              justify-content: space-between;
+              gap: var(--space-4);
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .public-panel-header h3 {
+              margin: 0;
+              color: var(--navy-950);
+              font-size: 1.38rem;
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .action-button:hover,
+            #yellow-dashboard-root .button-primary:hover {
+              background: var(--yolk-600);
+              transform: translateY(-1px);
+            }
+
+            #yellow-dashboard-root .button-secondary:hover,
+            #yellow-dashboard-root .action-button.secondary:hover {
+              background: var(--navy-900);
+            }
+
+            #yellow-dashboard-root .button-ghost:hover,
+            #yellow-dashboard-root .nav-button:hover {
+              background: rgba(17, 29, 74, 0.08);
+            }
+
+            #yellow-dashboard-root .app-card:hover,
+            #yellow-dashboard-root .metric-card:hover,
+            #yellow-dashboard-root .analysis-card:hover,
+            #yellow-dashboard-root .comparison-card:hover,
+            #yellow-dashboard-root .prize-card:hover {
+              box-shadow: 0 18px 36px rgba(11, 20, 53, 0.11);
+            }
+
+            @media (max-width: 1440px) {
+              #yellow-dashboard-root .metric-grid {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+              }
+
+              #yellow-dashboard-root .hero-meta-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+            }
+
+            @media (max-width: 1200px) {
+              #yellow-dashboard-root .admin-overview-grid,
+              #yellow-dashboard-root .login-shell,
+              #yellow-dashboard-root .public-hero-grid,
+              #yellow-dashboard-root .legal-layout {
                 grid-template-columns: 1fr;
               }
 
-              #yellow-dashboard-root .hero {
-                grid-template-columns: 1fr;
+              #yellow-dashboard-root .metric-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+
+              #yellow-dashboard-root .public-hero-brand,
+              #yellow-dashboard-root .brand-command-logos {
+                justify-items: start;
+                justify-content: flex-start;
+              }
+
+              #yellow-dashboard-root .legal-sidebar {
+                position: static;
               }
             }
 
-            @media (max-width: 560px) {
-              #yellow-dashboard-root .app-topbar,
+            @media (max-width: 1024px) {
+              #yellow-dashboard-root {
+                padding: var(--space-3);
+              }
+
+              #yellow-dashboard-root .filters-grid,
+              #yellow-dashboard-root .filters-grid.filters-grid--three {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+
+              #yellow-dashboard-root .podium-grid {
+                grid-template-columns: 1fr;
+              }
+
+              #yellow-dashboard-root .place-card--1 {
+                transform: none;
+              }
+            }
+
+            @media (max-width: 768px) {
+              #yellow-dashboard-root::before {
+                opacity: 0.018;
+                background-size: 112px 112px, 96px 96px;
+              }
+
+              #yellow-dashboard-root .app-topbar {
+                padding: var(--space-4);
+                gap: var(--space-4);
+              }
+
+              #yellow-dashboard-root .topbar-brand,
+              #yellow-dashboard-root .topbar-actions,
+              #yellow-dashboard-root .session-box,
+              #yellow-dashboard-root .section-header,
+              #yellow-dashboard-root .section-head,
+              #yellow-dashboard-root .brand-command-head,
+              #yellow-dashboard-root .control-group-header {
+                align-items: stretch;
+              }
+
               #yellow-dashboard-root .topbar-actions,
               #yellow-dashboard-root .session-box {
-                align-items: stretch;
+                width: 100%;
+                justify-content: flex-start;
               }
 
-              #yellow-dashboard-root .hero-panel {
-                padding: 1rem;
+              #yellow-dashboard-root .topbar-brand,
+              #yellow-dashboard-root .topbar-meta,
+              #yellow-dashboard-root .brand-logo-cluster {
+                width: 100%;
               }
 
-              #yellow-dashboard-root .brand-row,
-              #yellow-dashboard-root .section-head {
-                flex-direction: column;
-                align-items: stretch;
+              #yellow-dashboard-root .brand-logo-cluster {
+                justify-content: flex-start;
+                gap: var(--space-3);
               }
 
-              #yellow-dashboard-root .logo-wrap {
-                width: 6.8rem;
-                height: 6.8rem;
+              #yellow-dashboard-root .topbar-meta {
+                gap: var(--space-2);
+              }
+
+              #yellow-dashboard-root .session-chip,
+              #yellow-dashboard-root .hero-badge {
+                white-space: normal;
+              }
+
+              #yellow-dashboard-root .top-nav {
+                width: 100%;
+                overflow-x: auto;
+                padding-block-end: 2px;
+              }
+
+              #yellow-dashboard-root .nav-button {
+                flex: 0 0 auto;
+              }
+
+              #yellow-dashboard-root .hero-meta-grid,
+              #yellow-dashboard-root .metric-grid,
+              #yellow-dashboard-root .filters-grid,
+              #yellow-dashboard-root .filters-grid.filters-grid--three {
+                grid-template-columns: 1fr;
+              }
+
+              #yellow-dashboard-root .public-hero,
+              #yellow-dashboard-root .legal-hero,
+              #yellow-dashboard-root .brand-command,
+              #yellow-dashboard-root .control-panel,
+              #yellow-dashboard-root .page-panel,
+              #yellow-dashboard-root .login-card,
+              #yellow-dashboard-root .login-visual,
+              #yellow-dashboard-root .legal-sidebar,
+              #yellow-dashboard-root .legal-document {
+                padding: var(--space-5);
+              }
+            }
+
+            @media (max-width: 390px) {
+              #yellow-dashboard-root .topbar-campaign-logo {
+                max-width: 118px;
+                height: 42px;
+              }
+
+              #yellow-dashboard-root .topbar-logo {
+                max-width: 88px;
+                height: 38px;
+              }
+
+              #yellow-dashboard-root .brand-divider {
+                block-size: 40px;
+              }
+
+              #yellow-dashboard-root .topbar-title {
+                font-size: 1rem;
+              }
+            }
+
+            @media (prefers-reduced-motion: reduce) {
+              #yellow-dashboard-root .page-shell,
+              #yellow-dashboard-root .action-button,
+              #yellow-dashboard-root .button-primary,
+              #yellow-dashboard-root .button-secondary,
+              #yellow-dashboard-root .button-ghost,
+              #yellow-dashboard-root .metric-toggle,
+              #yellow-dashboard-root .nav-button,
+              #yellow-dashboard-root .app-card {
+                animation: none !important;
+                transition: none !important;
               }
             }
           </style>
 
           <div class="app-shell">
-            <header class="app-topbar">
+            <header class="app-topbar brand-header">
               <div class="topbar-brand">
-                <img id="topbar-logo" class="topbar-logo" alt="לוגו אחים לסמל" />
+                <div class="brand-logo-cluster">
+                  <img id="topbar-campaign-logo" class="topbar-campaign-logo" alt="לוגו עושים טוב בצהוב" />
+                  <span class="brand-divider" aria-hidden="true"></span>
+                  <img id="topbar-logo" class="topbar-logo" alt="לוגו אחים לסמל" />
+                </div>
                 <div class="topbar-meta">
-                  <div class="topbar-title">אחים לסמל · מערכת ניהול קמפיין</div>
-                  <div class="topbar-subtitle">דשבורד רב־עמודי למנהלים, משתתפים ותצוגת תחרות</div>
+                  <div class="topbar-title">מערכת ניהול קמפיין</div>
+                  <div class="topbar-subtitle">עושים טוב בצהוב · אחים לסמל · בקרה, תחרות ותובנות מנהלים</div>
                 </div>
               </div>
               <div class="topbar-actions">
@@ -1154,365 +1690,513 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   <button class="nav-button" type="button" data-page-target="admin">דשבורד ניהולי</button>
                 </nav>
                 <div class="session-box">
-                  <div id="session-status" class="session-chip">מצב ניהול: אורח/ת</div>
-                  <button id="go-admin-login" class="action-button secondary" type="button">כניסת מנהלים</button>
-                  <button id="logout-button" class="action-button secondary" type="button" hidden>התנתקות</button>
+                  <div id="session-status" class="session-chip" aria-live="polite">מצב ניהול: אורח/ת</div>
+                  <button id="go-admin-login" class="button-secondary action-button secondary" type="button">כניסת מנהלים</button>
+                  <button id="logout-button" class="button-ghost" type="button" hidden>התנתקות</button>
                 </div>
               </div>
             </header>
 
-            <section id="page-prizes" class="page-shell is-active">
-              <article class="public-hero">
-                <div class="page-hero-row">
-                  <div class="brand-copy">
-                    <span class="brand-kicker">ציבורי למשתתפים ולמנהלים</span>
-                    <h2 class="hero-title">דשבורד פרסים ותחרות</h2>
-                    <p>תצוגת תחרות ייעודית לזוכים הנוכחיים, למדרגות הפעילות ולמצב הפרסים נכון לרגע זה על בסיס הנתונים שהועלו למערכת.</p>
+            <main class="app-content">
+              <section id="page-prizes" class="page-shell is-active">
+                <article class="public-hero app-card--dark">
+                  <div class="public-hero-grid">
+                    <div class="public-hero-copy">
+                      <span class="brand-kicker">עמוד ציבורי למשתתפים ולמנהלים</span>
+                      <h1 class="public-hero-title">הזוכים והמובילים של עושים טוב בצהוב</h1>
+                      <p>תצוגת תחרות חיה, ברורה ומכובדת המציגה את מצב הקמפיין, דירוג השגרירים, הזוכים בפרסים ומדרגות הפרס הנוכחיות על בסיס הקובץ הפעיל.</p>
+                      <div id="public-hero-badges" class="public-badges" aria-live="polite"></div>
+                    </div>
+                    <div class="public-hero-brand">
+                      <div class="public-logo-frame public-logo-frame--campaign">
+                        <img id="public-logo" alt="לוגו עושים טוב בצהוב" />
+                      </div>
+                      <div class="public-logo-frame public-logo-frame--organization">
+                        <img id="public-org-logo" alt="לוגו אחים לסמל" />
+                      </div>
+                    </div>
                   </div>
-                  <div class="logo-wrap">
-                    <img id="public-logo" alt="לוגו עושים טוב בצהוב" />
-                  </div>
-                </div>
-                <div id="public-hero-badges" class="public-badges"></div>
-              </article>
+                </article>
 
-              <section class="page-panel">
-                <div class="section-head">
-                  <h3>פרסים, מדרגות וזוכים חיים</h3>
-                  <div id="prize-summary" class="text-small text-muted"></div>
-                </div>
-                <div id="prize-board" class="prize-shell"></div>
+                <section class="page-panel app-card app-card--elevated">
+                  <div class="public-panel-header">
+                    <h3>פודיום, מדרגות פרס וזוכים חיים</h3>
+                    <div id="prize-summary" class="text-small text-muted"></div>
+                  </div>
+                  <div id="prize-board" class="prize-shell"></div>
+                </section>
               </section>
-            </section>
 
-            <section id="page-rules" class="page-shell">
-              <div class="legal-grid">
-                <article class="legal-card">
+              <section id="page-rules" class="page-shell">
+                <article class="legal-hero app-card app-card--elevated">
                   <h2>תקנון השתתפות</h2>
-                  <p>זהו נוסח עבודה ראשוני לשימוש פנימי ולהצגה במוצר. לפני עלייה לאוויר מומלץ לבצע אישור משפטי וניסוח סופי מטעם הארגון.</p>
+                  <p>עמוד זה מרכז את נוסח העבודה הנוכחי עבור השתתפות, פרסים, זכאות, הכרעות ועדכונים. לפני פרסום חיצוני יש לאשר את הנוסח הסופי מול הייעוץ המשפטי של הארגון.</p>
                 </article>
-                <article class="legal-card">
-                  <h3>זכאות להשתתפות</h3>
-                  <ul>
-                    <li>השתתפות בתחרות ובמסלולי הפרסים כפופה לרישום כשגריר/ה במערכת ולפעילות במהלך ימי הקמפיין.</li>
-                    <li>הארגון רשאי להגדיר תנאי סף, שיוך לקבוצות, או החרגת משתמשים שאינם עומדים בכללי הפעילות.</li>
-                    <li>רק עסקאות שנקלטו במערכת באופן תקין ושויכו בהתאם לכללי הקמפיין ייחשבו לצורך התחרות.</li>
-                  </ul>
-                </article>
-                <article class="legal-card">
-                  <h3>חישוב תוצאות וזכייה</h3>
-                  <ul>
-                    <li>הדירוג נקבע לפי טבלת הפרסים ומדרגות הפרס המעודכנות במערכת.</li>
-                    <li>הנהלת הקמפיין רשאית לקבוע האם הזכאות מבוססת על סכום גיוס, מספר עסקאות, או שילוב של שניהם.</li>
-                    <li>במקרה של פערי מידע, כפילויות, כשלי סליקה, ביטולים או עסקאות חוזרות, הכרעת הנהלת הקמפיין היא הקובעת.</li>
-                  </ul>
-                </article>
-                <article class="legal-card">
-                  <h3>עדכונים, שוויון ותיקונים</h3>
-                  <ul>
-                    <li>הדשבורד מתעדכן לפי נתוני המקור שהועלו, ולכן ייתכנו שינויים במהלך הקמפיין.</li>
-                    <li>במקרה של שוויון בין משתתפים, הארגון רשאי להפעיל כללי הכרעה משלימים.</li>
-                    <li>הארגון שומר לעצמו את הזכות לעדכן את התקנון, את מדרגות הפרסים או את מנגנון החישוב, בכפוף לדין ולהודעה מתאימה.</li>
-                  </ul>
-                </article>
-              </div>
-            </section>
-
-            <section id="page-privacy" class="page-shell">
-              <div class="legal-grid">
-                <article class="legal-card">
-                  <h2>מדיניות פרטיות</h2>
-                  <p>זהו נוסח עבודה ראשוני. לפני פרסום חיצוני מומלץ לאמת את הנוסח עם ייעוץ משפטי, אבטחת מידע ונהלי הארגון.</p>
-                </article>
-                <article class="legal-card">
-                  <h3>אילו נתונים עשויים להיקלט</h3>
-                  <ul>
-                    <li>שם תורם/ת, כתובת דוא"ל, סכום תרומה, זמן ביצוע, שיוך לשגריר/ה, סטטוס עסקה ושדות תפעוליים נוספים.</li>
-                    <li>במסכי הניהול ניתן לנתח את הנתונים לצורך תפעול, בקרה, תחרות, פרסים וקבלת החלטות.</li>
-                  </ul>
-                </article>
-                <article class="legal-card">
-                  <h3>מטרות השימוש</h3>
-                  <ul>
-                    <li>הצגת נתונים ניהוליים בזמן אמת.</li>
-                    <li>זיהוי מגמות גיוס, זוכים, שגרירים מובילים, תקלות וחריגות.</li>
-                    <li>השוואות בין קבצים, בין תקופות ובין מחזורי קמפיין שונים.</li>
-                  </ul>
-                </article>
-                <article class="legal-card">
-                  <h3>גישה והרשאות</h3>
-                  <ul>
-                    <li>העמודים הציבוריים נגישים למשתתפים ולמנהלים.</li>
-                    <li>הדשבורד הניהולי זמין רק למשתמשים מורשים לפי מייל שהוגדר מראש ובאמצעות סיסמה.</li>
-                    <li>לפני עלייה לאוויר יש להעביר את מנגנון הזיהוי לאימות שרת אמיתי ולא להסתמך על קוד צד־לקוח בלבד.</li>
-                  </ul>
-                </article>
-                <article class="legal-card">
-                  <h3>שמירת מידע ואבטחה</h3>
-                  <ul>
-                    <li>בגרסת הפיילוט המערכת עובדת מקומית ומקטינה את חשיפת המידע, אך עדיין יש לנהוג בזהירות בקבצי המקור.</li>
-                    <li>מומלץ להגדיר מדיניות שמירה, מחיקה, גיבוי והרשאות צפייה לפי תפקיד.</li>
-                    <li>בעתיד יש להוסיף שכבת Backend, ניהול משתמשים, ורישום פעולות לצורכי בקרה.</li>
-                  </ul>
-                </article>
-              </div>
-            </section>
-
-            <section id="page-admin" class="page-shell">
-              <section id="admin-lock" class="admin-lock">
-                <div class="section-head">
-                  <h3>כניסה לפאנל הניהול</h3>
-                  <div class="text-small text-muted">גישה מוגבלת למנהלים מורשים מראש לפי מייל וסיסמה.</div>
-                </div>
-                <div class="admin-lock-grid">
-                  <div class="login-help">
-                    <div class="manager-only-note">
-                      הדשבורד הניהולי כולל פילוח מתקדם, שינוי תצוגות גרפיות, השוואה בין קבצים, ייצוא נתונים ותמונת מצב תפעולית.
+                <div class="legal-layout">
+                  <aside class="legal-sidebar app-card">
+                    <div class="section-header">
+                      <h3>תוכן עניינים</h3>
                     </div>
-                    <div class="manager-only-note">
-                      הערת אבטחה: בגרסה זו מדובר בשער גישה מקומי המבוסס צד־לקוח. לפני פרסום חיצוני חובה להעביר את האימות לשרת מאובטח.
-                    </div>
-                  </div>
-                  <form id="login-form" class="login-card">
-                    <label class="form-label">
-                      מייל מנהל/ת
-                      <input id="login-email" class="form-control" type="email" placeholder="name@example.org" />
-                    </label>
-                    <label class="form-label">
-                      סיסמה
-                      <input id="login-password" class="form-control" type="password" placeholder="הקלד/י סיסמה" />
-                    </label>
-                    <button id="login-button" class="action-button" type="submit">כניסה לפאנל הניהול</button>
-                    <div id="login-message" class="login-message text-small"></div>
-                  </form>
+                    <nav aria-label="תוכן עניינים - תקנון">
+                      <a href="#rules-section-1">1. זכאות להשתתפות</a>
+                      <a href="#rules-section-2">2. רישום ונתונים</a>
+                      <a href="#rules-section-3">3. חישוב תוצאות וזכייה</a>
+                      <a href="#rules-section-4">4. שוויון, תיקונים וחריגים</a>
+                      <a href="#rules-section-5">5. עדכונים ואישור משפטי</a>
+                    </nav>
+                  </aside>
+                  <article class="legal-document app-card legal-layout__content">
+                    <div class="status-note text-small">הערה: זהו נוסח עבודה המצורף למערכת ודורש אישור משפטי לפני עלייה לאוויר.</div>
+                    <section id="rules-section-1">
+                      <h3>1. זכאות להשתתפות</h3>
+                      <p>השתתפות בתחרות ובמסלולי הפרסים כפופה לרישום כשגריר או שגרירה במערכת ולפעילות במהלך ימי הקמפיין כפי שהוגדרו על ידי הנהלת הקמפיין.</p>
+                      <ol>
+                        <li>הארגון רשאי להגדיר תנאי סף, שיוך לקבוצות או החרגת משתמשים שאינם עומדים בכללי הפעילות.</li>
+                        <li>רק עסקאות שנקלטו במערכת באופן תקין ושויכו בהתאם לכללי הקמפיין ייחשבו לצורך התחרות.</li>
+                        <li>השתתפות פעילה כפופה לנתוני הקלט שמוזנים למערכת ולבדיקות הבקרה של הנהלת הקמפיין.</li>
+                      </ol>
+                    </section>
+                    <section id="rules-section-2">
+                      <h3>2. רישום ונתונים</h3>
+                      <p>המערכת מבוססת על קובצי המקור שהועלו על ידי מנהלי הקמפיין ולכן מציגה תמונת מצב עדכנית בהתאם לנתונים שנקלטו באותו רגע.</p>
+                      <ol>
+                        <li>שדות כמו שם שגריר, שם תורם, תאריך, שעה, סכום וסטטוס עסקה משפיעים על החישובים והדירוגים.</li>
+                        <li>הארגון רשאי לבצע טיוב נתונים, איחוד כפילויות, השלמת שיוך או נטרול עסקאות לא תקינות.</li>
+                      </ol>
+                    </section>
+                    <section id="rules-section-3">
+                      <h3>3. חישוב תוצאות וזכייה</h3>
+                      <p>הדירוגים והזכאות לפרסים נקבעים לפי טבלת הפרסים ומדרגות הפרס המעודכנות במערכת.</p>
+                      <ol>
+                        <li>הנהלת הקמפיין רשאית לקבוע אם הזכאות מבוססת על סכום גיוס, מספר עסקאות או שילוב של שניהם.</li>
+                        <li>עסקאות שבוטלו, נכשלו, הוחזרו או סומנו כלא תקינות עשויות שלא להיכלל בחישוב הסופי.</li>
+                        <li>במקרה של פערי מידע, הכרעת הנהלת הקמפיין היא הקובעת.</li>
+                      </ol>
+                    </section>
+                    <section id="rules-section-4">
+                      <h3>4. שוויון, תיקונים וחריגים</h3>
+                      <p>ייתכנו מצבים של שוויון, כפילויות, השהיית עסקאות או תיקוני נתונים במהלך הקמפיין.</p>
+                      <ol>
+                        <li>במקרה של שוויון, הארגון רשאי להפעיל כללי הכרעה משלימים.</li>
+                        <li>הארגון רשאי לבצע בדיקה חוזרת של עסקאות חריגות או רשומות חסרות לפני הכרזה על זכייה.</li>
+                        <li>עדכוני נתונים עשויים להשפיע על הדירוג והמדרגות המוצגות במערכת.</li>
+                      </ol>
+                    </section>
+                    <section id="rules-section-5">
+                      <h3>5. עדכונים ואישור משפטי</h3>
+                      <p>הארגון שומר לעצמו את הזכות לעדכן את התקנון, את מדרגות הפרסים או את מנגנון החישוב, בכפוף לדין ולהודעה מתאימה.</p>
+                      <ol>
+                        <li>תאריך עדכון נוכחי: טיוטת מערכת ליום 28.07.2026.</li>
+                        <li>לפני פרסום חיצוני יש לאשר את הנוסח הסופי מול הייעוץ המשפטי של הארגון.</li>
+                      </ol>
+                    </section>
+                  </article>
                 </div>
               </section>
 
-              <div id="admin-content" class="admin-content" hidden>
-                <div class="dashboard-shell">
-                  <section class="hero">
-                    <article class="hero-panel">
-                      <div class="brand-layout">
-                        <div class="brand-row">
-                          <div class="brand-copy">
-                            <span class="brand-kicker">ממשק כחול־צהוב חי</span>
-                            <h1 class="hero-title">דשבורד הגיוס של אחים לסמל</h1>
-                            <p class="hero-subtitle">פילוח לפי תאריך, שעה, טווח שעות, יום פרויקט, שגריר/ה ותורם/ת, עם יכולת שינוי גרפים, השוואת קבצים ותמונת מצב ניהולית.</p>
+              <section id="page-privacy" class="page-shell">
+                <article class="legal-hero app-card app-card--elevated">
+                  <h2>מדיניות פרטיות</h2>
+                  <p>עמוד זה מציג את מבנה הפרטיות והמידע עבור גרסת הפיילוט של המערכת, בלי להוסיף התחייבויות משפטיות חדשות מעבר לנוסח שכבר הוגדר.</p>
+                </article>
+                <div class="legal-layout">
+                  <aside class="legal-sidebar app-card">
+                    <div class="section-header">
+                      <h3>תוכן עניינים</h3>
+                    </div>
+                    <nav aria-label="תוכן עניינים - פרטיות">
+                      <a href="#privacy-section-1">1. מידע שנאסף</a>
+                      <a href="#privacy-section-2">2. מטרות השימוש</a>
+                      <a href="#privacy-section-3">3. הרשאות וגישה</a>
+                      <a href="#privacy-section-4">4. שמירת מידע</a>
+                      <a href="#privacy-section-5">5. אבטחת מידע</a>
+                      <a href="#privacy-section-6">6. זכויות המשתמשים</a>
+                      <a href="#privacy-section-7">7. יצירת קשר</a>
+                      <a href="#privacy-section-8">8. תאריך עדכון</a>
+                    </nav>
+                  </aside>
+                  <article class="legal-document app-card legal-layout__content">
+                    <div class="status-note text-small">הערה: לפני פרסום ציבורי יש לאמת את מדיניות הפרטיות עם אבטחת מידע והייעוץ המשפטי.</div>
+                    <section id="privacy-section-1">
+                      <h3>1. מידע שנאסף</h3>
+                      <p>המערכת עשויה לקלוט נתוני תרומה ותפעול לצורך בקרה ודשבורד, לרבות שם תורם, כתובת דוא״ל, סכום, זמן ביצוע, שיוך לשגריר וסטטוס עסקה.</p>
+                    </section>
+                    <section id="privacy-section-2">
+                      <h3>2. מטרות השימוש</h3>
+                      <ul>
+                        <li>הצגת נתונים ניהוליים בזמן אמת.</li>
+                        <li>זיהוי מגמות גיוס, זוכים, שגרירים מובילים, תקלות וחריגות.</li>
+                        <li>השוואות בין קבצים, בין תקופות ובין מחזורי קמפיין שונים.</li>
+                      </ul>
+                    </section>
+                    <section id="privacy-section-3">
+                      <h3>3. הרשאות וגישה</h3>
+                      <ul>
+                        <li>עמודי התקנון, הפרטיות והפרסים זמינים גם למשתתפים וגם למנהלים.</li>
+                        <li>הדשבורד הניהולי זמין למשתמשים מורשים לפי מייל שהוגדר מראש ובאמצעות סיסמה.</li>
+                        <li>לפני עלייה לאוויר יש להעביר את מנגנון הזיהוי לאימות שרת אמיתי.</li>
+                      </ul>
+                    </section>
+                    <section id="privacy-section-4">
+                      <h3>4. שמירת מידע</h3>
+                      <p>בגרסת הפיילוט המערכת עובדת מקומית ולכן מצמצמת חשיפה, אך עדיין יש לנהוג בזהירות בקובצי המקור ובהרשאות הגישה אליהם.</p>
+                    </section>
+                    <section id="privacy-section-5">
+                      <h3>5. אבטחת מידע</h3>
+                      <ul>
+                        <li>מומלץ להגדיר מדיניות שמירה, מחיקה, גיבוי והרשאות צפייה לפי תפקיד.</li>
+                        <li>בעתיד יש להוסיף שכבת Backend, ניהול משתמשים ורישום פעולות לצורכי בקרה.</li>
+                      </ul>
+                    </section>
+                    <section id="privacy-section-6">
+                      <h3>6. זכויות המשתמשים</h3>
+                      <p>כל בקשה לעדכון, מחיקה, תיקון או בירור נתונים צריכה להתבצע לפי נהלי הארגון והדין החל.</p>
+                    </section>
+                    <section id="privacy-section-7">
+                      <h3>7. יצירת קשר</h3>
+                      <p>לצורכי בקרה, פרטיות או אבטחת מידע יש לפנות לארגון המנהל את הקמפיין ולגורמים המורשים מטעמו.</p>
+                    </section>
+                    <section id="privacy-section-8">
+                      <h3>8. תאריך עדכון</h3>
+                      <p>טיוטת מערכת ליום 28.07.2026. לפני שימוש חיצוני יש להשלים אישור סופי.</p>
+                    </section>
+                  </article>
+                </div>
+              </section>
+
+              <section id="page-admin" class="page-shell">
+                <section id="admin-lock" class="admin-lock app-card app-card--elevated">
+                  <div class="login-shell">
+                    <div class="login-visual app-card--dark">
+                      <div class="login-brand-row">
+                        <div class="login-copy">
+                          <span class="brand-kicker">גישה למנהלים מורשים בלבד</span>
+                          <h2>כניסה למערכת הניהול</h2>
+                          <p>מסך הכניסה מספק גישה לפאנל הניהול, לבקרה על קבצי המקור, לפילוחים המתקדמים, להשוואות הקבצים ולכל שכבת האנליטיקה של הקמפיין.</p>
+                        </div>
+                        <div class="login-logos">
+                          <div class="login-logo-frame">
+                            <img id="login-campaign-logo" alt="לוגו עושים טוב בצהוב" />
                           </div>
-                          <div class="logo-wrap">
-                            <img id="brand-logo" alt="לוגו אחים לסמל" />
+                          <div class="login-logo-frame">
+                            <img id="login-org-logo" alt="לוגו אחים לסמל" />
                           </div>
                         </div>
-                        <div id="hero-badges" class="hero-badges"></div>
                       </div>
-                    </article>
-
-                    <aside class="control-panel">
-                      <div class="section-head">
-                        <h3>קלטים ושליטה</h3>
-                        <div class="control-note text-muted">אפשר להחליף את קובץ העסקאות, קובץ ההשוואה וקובץ הפרסים.</div>
-                      </div>
-                      <div class="filters-grid">
-                        <label class="form-label">
-                          קובץ עסקאות
-                          <input id="csv-upload" class="form-control" type="file" accept=".csv,text/csv" />
-                        </label>
-                        <label class="form-label">
-                          קובץ השוואה
-                          <input id="compare-upload" class="form-control" type="file" accept=".csv,text/csv" />
-                        </label>
-                        <label class="form-label">
-                          קובץ פרסים
-                          <input id="prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" />
-                        </label>
-                        <label class="form-label">
-                          שגריר/ה
-                          <select id="ambassador-filter" class="form-select"></select>
-                        </label>
-                        <label class="form-label">
-                          יום פרויקט
-                          <select id="project-day-filter" class="form-select"></select>
-                        </label>
-                        <label class="form-label">
-                          תאריך מדויק
-                          <select id="date-exact" class="form-select"></select>
-                        </label>
-                        <label class="form-label">
-                          תאריך התחלה
-                          <input id="date-from" class="form-control" type="date" />
-                        </label>
-                        <label class="form-label">
-                          תאריך סיום
-                          <input id="date-to" class="form-control" type="date" />
-                        </label>
-                        <label class="form-label">
-                          שעה
-                          <select id="hour-filter" class="form-select"></select>
-                        </label>
-                        <label class="form-label">
-                          משעה
-                          <select id="hour-from-filter" class="form-select"></select>
-                        </label>
-                        <label class="form-label">
-                          עד שעה
-                          <select id="hour-to-filter" class="form-select"></select>
-                        </label>
-                        <label class="form-label">
-                          שם התורם/ת
-                          <input id="donor-filter" class="form-control" type="text" placeholder="חיפוש לפי שם תורם" />
-                        </label>
-                        <label class="form-label">
-                          סכום מינימלי
-                          <input id="amount-min-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 180" />
-                        </label>
-                        <label class="form-label">
-                          סכום מקסימלי
-                          <input id="amount-max-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 5000" />
-                        </label>
-                        <label class="form-label">
-                          יעד כולל
-                          <input id="goal-total" class="form-control" type="number" min="0" step="100" placeholder="למשל 1500000" />
-                        </label>
-                        <label class="form-label">
-                          יעד יומי
-                          <input id="goal-daily" class="form-control" type="number" min="0" step="100" placeholder="למשל 150000" />
-                        </label>
-                      </div>
-                      <div class="action-row">
-                        <button id="export-filtered" class="action-button" type="button">ייצוא הנתונים המסוננים</button>
-                        <button id="clear-compare" class="action-button secondary" type="button">ניקוי קובץ ההשוואה</button>
-                      </div>
-                      <div id="control-note" class="status-note text-small"></div>
-                    </aside>
-                  </section>
-
-                  <section id="metrics-grid" class="metric-grid" aria-label="מדדי סיכום"></section>
-
-                  <section class="dashboard-section">
-                    <div class="section-head">
-                      <h3>תצוגות גרפיות</h3>
-                      <div class="view-note text-small">מנהלים יכולים לשנות כאן את המדד שמוצג בכל גרף.</div>
+                      <div class="manager-only-note">המערכת שומרת על מבנה הגישה הקיים בדפדפן. זהו מסך התחברות מקומי לצורכי פיילוט, ולא אימות שרת מאובטח.</div>
                     </div>
-                    <div class="graph-control-row">
+                    <form id="login-form" class="login-card app-card">
+                      <div class="section-header">
+                        <div>
+                          <h2>כניסה למערכת הניהול</h2>
+                          <div class="text-small text-muted">כניסה באמצעות מייל מורשה מראש וסיסמה.</div>
+                        </div>
+                      </div>
                       <label class="form-label">
-                        גרף יומי
-                        <select id="daily-metric-select" class="form-select">
+                        מייל מנהל/ת
+                        <input id="login-email" class="form-control" type="email" autocomplete="username" placeholder="name@example.org" />
+                      </label>
+                      <label class="form-label">
+                        סיסמה
+                        <div class="password-field">
+                          <input id="login-password" class="form-control" type="password" autocomplete="current-password" placeholder="הקלד/י סיסמה" />
+                          <button id="login-password-toggle" class="button-ghost password-toggle" type="button" aria-label="הצג או הסתר סיסמה">הצג</button>
+                        </div>
+                      </label>
+                      <button id="login-button" class="button-primary action-button" type="submit">כניסה לפאנל הניהול</button>
+                      <div class="text-small text-muted">לשימוש פנימי בלבד. לפני חיבור ל־Notion/אוויר יש להעביר את האימות לשרת.</div>
+                      <div id="login-message" class="login-message text-small" aria-live="polite"></div>
+                    </form>
+                  </div>
+                </section>
+
+                <div id="admin-content" class="admin-content" hidden>
+                  <div class="dashboard-shell">
+                    <section class="admin-overview-grid">
+                      <article class="brand-command app-card app-card--dark">
+                        <div class="brand-command-head">
+                          <div class="brand-copy">
+                            <span class="brand-kicker">Executive campaign operations</span>
+                            <h1 class="hero-title">מרכז השליטה של עושים טוב בצהוב</h1>
+                            <p class="hero-subtitle">מסך ניהולי מרוכז לפילוח לפי תאריך, שעה, טווח שעות, יום פרויקט, שגריר/ה, תורם/ת וסכום, כולל השוואת קבצים, יעדים, גרפים, טבלאות וייצוא.</p>
+                          </div>
+                          <div class="brand-command-logos">
+                            <div class="logo-wrap logo-wrap--campaign">
+                              <img id="brand-logo" alt="לוגו עושים טוב בצהוב" />
+                            </div>
+                            <div class="logo-wrap logo-wrap--organization">
+                              <img id="brand-org-logo" alt="לוגו אחים לסמל" />
+                            </div>
+                          </div>
+                        </div>
+                        <div class="hero-meta-grid" aria-label="נתוני כותרת">
+                          <div class="hero-meta">
+                            <span>טווח נתונים פעיל</span>
+                            <strong id="admin-window-label">-</strong>
+                          </div>
+                          <div class="hero-meta">
+                            <span>עדכון אחרון</span>
+                            <strong id="admin-last-updated">-</strong>
+                          </div>
+                          <div class="hero-meta">
+                            <span>קובץ מקור</span>
+                            <strong id="admin-source-file">-</strong>
+                          </div>
+                          <div class="hero-meta">
+                            <span>רשומות פעילות</span>
+                            <strong id="admin-record-count">-</strong>
+                          </div>
+                        </div>
+                        <div id="hero-badges" class="hero-badges" aria-live="polite"></div>
+                      </article>
+
+                      <aside class="control-panel app-card app-card--elevated">
+                        <div class="section-header">
+                          <div>
+                            <h3>Control Center</h3>
+                            <div class="text-small text-muted">מרכז שליטה לקבצים, למסננים וליעדים. כל היכולות הקיימות נשמרות, רק מוצגות בצורה מדויקת ונוחה יותר.</div>
+                          </div>
+                        </div>
+                        <div class="control-groups">
+                          <section class="control-group">
+                            <div class="control-group-header">
+                              <h4>נתונים</h4>
+                              <p>קבצי הבסיס, ההשוואה והפרסים</p>
+                            </div>
+                            <div class="filters-grid filters-grid--three">
+                              <label class="form-label">
+                                קובץ עסקאות
+                                <input id="csv-upload" class="form-control" type="file" accept=".csv,text/csv" />
+                              </label>
+                              <label class="form-label">
+                                קובץ השוואה
+                                <input id="compare-upload" class="form-control" type="file" accept=".csv,text/csv" />
+                              </label>
+                              <label class="form-label">
+                                קובץ פרסים
+                                <input id="prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" />
+                              </label>
+                            </div>
+                          </section>
+
+                          <section class="control-group">
+                            <div class="control-group-header">
+                              <h4>זמן</h4>
+                              <p>יום פרויקט, תאריך מדויק, טווח תאריכים ושעות</p>
+                            </div>
+                            <div class="filters-grid filters-grid--three">
+                              <label class="form-label">
+                                יום פרויקט
+                                <select id="project-day-filter" class="form-select"></select>
+                              </label>
+                              <label class="form-label">
+                                תאריך מדויק
+                                <select id="date-exact" class="form-select"></select>
+                              </label>
+                              <label class="form-label">
+                                שעה
+                                <select id="hour-filter" class="form-select"></select>
+                              </label>
+                              <label class="form-label">
+                                תאריך התחלה
+                                <input id="date-from" class="form-control" type="date" />
+                              </label>
+                              <label class="form-label">
+                                תאריך סיום
+                                <input id="date-to" class="form-control" type="date" />
+                              </label>
+                              <label class="form-label">
+                                משעה
+                                <select id="hour-from-filter" class="form-select"></select>
+                              </label>
+                              <label class="form-label">
+                                עד שעה
+                                <select id="hour-to-filter" class="form-select"></select>
+                              </label>
+                            </div>
+                          </section>
+
+                          <section class="control-group">
+                            <div class="control-group-header">
+                              <h4>אנשים וסכומים</h4>
+                              <p>פילוח לפי שגריר, תורם וסכום</p>
+                            </div>
+                            <div class="filters-grid">
+                              <label class="form-label">
+                                שגריר/ה
+                                <select id="ambassador-filter" class="form-select"></select>
+                              </label>
+                              <label class="form-label">
+                                שם התורם/ת
+                                <input id="donor-filter" class="form-control" type="text" placeholder="חיפוש לפי שם תורם" />
+                              </label>
+                              <label class="form-label">
+                                סכום מינימלי
+                                <input id="amount-min-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 180" />
+                              </label>
+                              <label class="form-label">
+                                סכום מקסימלי
+                                <input id="amount-max-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 5000" />
+                              </label>
+                            </div>
+                          </section>
+
+                          <section class="control-group">
+                            <div class="control-group-header">
+                              <h4>יעדים</h4>
+                              <p>מדדי יעד כוללים ויומיים</p>
+                            </div>
+                            <div class="filters-grid">
+                              <label class="form-label">
+                                יעד כולל
+                                <input id="goal-total" class="form-control" type="number" min="0" step="100" placeholder="למשל 1500000" />
+                              </label>
+                              <label class="form-label">
+                                יעד יומי
+                                <input id="goal-daily" class="form-control" type="number" min="0" step="100" placeholder="למשל 150000" />
+                              </label>
+                            </div>
+                          </section>
+                        </div>
+                        <div class="control-actions">
+                          <button id="export-filtered" class="button-primary action-button" type="button">ייצוא הנתונים המסוננים</button>
+                          <button id="clear-compare" class="button-secondary action-button secondary" type="button">ניקוי קובץ ההשוואה</button>
+                          <button id="clear-filters" class="button-ghost" type="button">ניקוי מסננים</button>
+                        </div>
+                        <div id="active-filter-summary" class="status-chip active-filter-summary" aria-live="polite">אין מסננים פעילים</div>
+                        <div id="control-note" class="status-note text-small" aria-live="polite"></div>
+                      </aside>
+                    </section>
+
+                    <section id="metrics-grid" class="metric-grid" aria-label="מדדי סיכום"></section>
+
+                    <section class="dashboard-section">
+                      <div class="section-header">
+                        <h3>יעדים מול ביצוע</h3>
+                        <div id="goals-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="goals-board" class="analysis-shell"></div>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-header">
+                        <h3>מה דורש תשומת לב עכשיו</h3>
+                        <div id="executive-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="executive-board" class="analysis-shell"></div>
+                    </section>
+
+                    <section class="dashboard-section chart-frame">
+                      <div class="chart-panel chart-card app-card">
+                        <div class="section-header">
+                          <div>
+                            <h3>מגמה יומית</h3>
+                            <div id="daily-chart-summary" class="text-small text-muted"></div>
+                          </div>
+                          <div class="data-toolbar metric-toolbar" data-metric-group="daily" aria-label="בחירת מדד לגרף היומי">
+                            <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="amount">סכום גיוס</button>
+                            <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="count">מספר עסקאות</button>
+                            <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="average">ממוצע לעסקה</button>
+                          </div>
+                        </div>
+                        <select id="daily-metric-select" class="visually-hidden-select" aria-label="בחירת מדד לגרף יומי">
                           <option value="amount">סכום גיוס</option>
                           <option value="count">מספר עסקאות</option>
                           <option value="average">ממוצע לעסקה</option>
                         </select>
-                      </label>
-                      <label class="form-label">
-                        מפת חום
-                        <select id="heatmap-metric-select" class="form-select">
-                          <option value="amount">סכום גיוס</option>
-                          <option value="count">מספר עסקאות</option>
-                        </select>
-                      </label>
-                      <label class="form-label">
-                        תנועת שגרירים
-                        <select id="movement-metric-select" class="form-select">
-                          <option value="amount">סכום גיוס</option>
-                          <option value="count">מספר עסקאות</option>
-                        </select>
-                      </label>
-                    </div>
-                  </section>
-
-                  <section class="dashboard-section">
-                    <div class="section-head">
-                      <h3>יעדים מול ביצוע</h3>
-                      <div id="goals-summary" class="text-small text-muted"></div>
-                    </div>
-                    <div id="goals-board" class="analysis-shell"></div>
-                  </section>
-
-                  <section class="dashboard-section">
-                    <div class="section-head">
-                      <h3>ולידציה של קבצי הקלט</h3>
-                      <div id="validation-summary" class="text-small text-muted"></div>
-                    </div>
-                    <div id="validation-board" class="analysis-shell"></div>
-                  </section>
-
-                  <section class="dashboard-section">
-                    <div class="section-head">
-                      <h3>סיכום ניהולי</h3>
-                      <div id="executive-summary" class="text-small text-muted"></div>
-                    </div>
-                    <div id="executive-board" class="analysis-shell"></div>
-                  </section>
-
-                  <section class="dashboard-section">
-                    <div class="section-head">
-                      <h3>איכות נתונים וסיכונים</h3>
-                      <div id="quality-summary" class="text-small text-muted"></div>
-                    </div>
-                    <div id="quality-board" class="analysis-shell"></div>
-                  </section>
-
-                  <section class="dashboard-section">
-                    <div class="section-head">
-                      <h3>פילוח עסקאות ותורמים</h3>
-                      <div id="segment-summary" class="text-small text-muted"></div>
-                    </div>
-                    <div id="segment-board" class="analysis-shell"></div>
-                  </section>
-
-                  <section class="dashboard-section">
-                    <div class="section-head">
-                      <h3>השוואה בין שני קבצים</h3>
-                      <div id="comparison-summary" class="text-small text-muted"></div>
-                    </div>
-                    <div id="comparison-board" class="comparison-shell"></div>
-                  </section>
-
-                  <section class="dashboard-section chart-frame">
-                    <div class="chart-panel">
-                      <div class="section-head">
-                        <h3>מגמת גיוס יומית</h3>
-                        <div id="daily-chart-summary" class="text-small text-muted"></div>
+                        <div id="daily-chart"></div>
                       </div>
-                      <div id="daily-chart"></div>
-                    </div>
-                    <div id="daily-tooltip" class="tooltip" role="status" aria-live="polite"></div>
-                  </section>
+                      <div id="daily-tooltip" class="tooltip" role="status" aria-live="polite"></div>
+                    </section>
 
-                  <section class="dashboard-section chart-frame">
-                    <div class="chart-panel">
-                      <div class="section-head">
-                        <h3>מפת חום לפי ימים ושעות</h3>
-                        <div class="legend-row text-small text-muted">
-                          <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 217, 61, 0.2); border: 1px solid rgba(19, 23, 80, 0.14);"></span>נמוך</span>
-                          <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 217, 61, 0.95); border: 1px solid rgba(19, 23, 80, 0.14);"></span>גבוה</span>
+                    <section class="dashboard-section chart-frame">
+                      <div class="chart-panel chart-card app-card">
+                        <div class="section-header">
+                          <div>
+                            <h3>מפת חום לגיוס כספים</h3>
+                            <div class="legend-row text-small text-muted">
+                              <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 214, 41, 0.18); border: 1px solid rgba(17, 29, 74, 0.14);"></span>עוצמה נמוכה</span>
+                              <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 214, 41, 0.95); border: 1px solid rgba(17, 29, 74, 0.14);"></span>עוצמה גבוהה</span>
+                            </div>
+                          </div>
+                          <div class="data-toolbar metric-toolbar" data-metric-group="heatmap" aria-label="בחירת מדד למפת החום">
+                            <button class="metric-toggle" type="button" data-metric-select="heatmap-metric-select" data-value="amount">סכום גיוס</button>
+                            <button class="metric-toggle" type="button" data-metric-select="heatmap-metric-select" data-value="count">מספר עסקאות</button>
+                          </div>
                         </div>
+                        <select id="heatmap-metric-select" class="visually-hidden-select" aria-label="בחירת מדד למפת החום">
+                          <option value="amount">סכום גיוס</option>
+                          <option value="count">מספר עסקאות</option>
+                        </select>
+                        <div id="heatmap-chart"></div>
                       </div>
-                      <div id="heatmap-chart"></div>
-                    </div>
-                    <div id="heatmap-tooltip" class="tooltip" role="status" aria-live="polite"></div>
-                  </section>
+                      <div id="heatmap-tooltip" class="tooltip" role="status" aria-live="polite"></div>
+                    </section>
 
-                  <section class="dashboard-section chart-frame">
-                    <div class="chart-panel">
-                      <div class="section-head">
-                        <h3>תנועת שגרירים לאורך ימי הפרויקט</h3>
-                        <div id="movement-summary" class="text-small text-muted"></div>
+                    <section class="dashboard-section chart-frame">
+                      <div class="chart-panel chart-card app-card">
+                        <div class="section-header">
+                          <div>
+                            <h3>תנועת שגרירים</h3>
+                            <div id="movement-summary" class="text-small text-muted"></div>
+                          </div>
+                          <div class="data-toolbar metric-toolbar" data-metric-group="movement" aria-label="בחירת מדד לתנועת השגרירים">
+                            <button class="metric-toggle" type="button" data-metric-select="movement-metric-select" data-value="amount">סכום גיוס</button>
+                            <button class="metric-toggle" type="button" data-metric-select="movement-metric-select" data-value="count">מספר עסקאות</button>
+                          </div>
+                        </div>
+                        <select id="movement-metric-select" class="visually-hidden-select" aria-label="בחירת מדד לתנועת שגרירים">
+                          <option value="amount">סכום גיוס</option>
+                          <option value="count">מספר עסקאות</option>
+                        </select>
+                        <div id="movement-chart"></div>
                       </div>
-                      <div id="movement-chart"></div>
-                    </div>
-                    <div id="movement-tooltip" class="tooltip" role="status" aria-live="polite"></div>
-                  </section>
+                      <div id="movement-tooltip" class="tooltip" role="status" aria-live="polite"></div>
+                    </section>
 
-                  <section class="dashboard-section">
-                    <div class="section-head">
-                      <h3>רשומות מסוננות</h3>
-                      <div id="table-summary" class="text-small text-muted"></div>
-                    </div>
-                    <div id="table-root" class="table-wrap"></div>
-                  </section>
+                    <section class="dashboard-section">
+                      <div class="section-header">
+                        <h3>דירוגים ופילוחים</h3>
+                        <div id="segment-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="segment-board" class="analysis-shell"></div>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-header">
+                        <h3>איכות נתונים וסיכונים</h3>
+                        <div id="quality-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="quality-board" class="analysis-shell"></div>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-header">
+                        <h3>ולידציה של קבצי הקלט</h3>
+                        <div id="validation-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="validation-board" class="analysis-shell"></div>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-header">
+                        <h3>השוואת קבצים</h3>
+                        <div id="comparison-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="comparison-board" class="comparison-shell"></div>
+                    </section>
+
+                    <section class="dashboard-section">
+                      <div class="section-header">
+                        <h3>טבלת הרשומות</h3>
+                        <div id="table-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="table-root" class="table-wrap"></div>
+                    </section>
+                  </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            </main>
           </div>
           <script>
             (() => {
@@ -1527,12 +2211,20 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               const SESSION_STORAGE_KEY = "yellow-dashboard.manager-session";
               const XLSX_MODULE_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
               const root = document.getElementById("yellow-dashboard-root");
+              root.style.setProperty("--brand-pattern-campaign", `url("${INITIAL_CAMPAIGN_LOGO}")`);
+              root.style.setProperty("--brand-pattern-organization", `url("${INITIAL_ORG_LOGO}")`);
 
               const elements = {
+                topbarCampaignLogo: root.querySelector("#topbar-campaign-logo"),
                 topbarLogo: root.querySelector("#topbar-logo"),
                 logo: root.querySelector("#brand-logo"),
+                brandOrgLogo: root.querySelector("#brand-org-logo"),
                 publicLogo: root.querySelector("#public-logo"),
+                publicOrgLogo: root.querySelector("#public-org-logo"),
+                loginCampaignLogo: root.querySelector("#login-campaign-logo"),
+                loginOrgLogo: root.querySelector("#login-org-logo"),
                 navButtons: Array.from(root.querySelectorAll("[data-page-target]")),
+                metricButtons: Array.from(root.querySelectorAll("[data-metric-select]")),
                 pagePrizes: root.querySelector("#page-prizes"),
                 pageRules: root.querySelector("#page-rules"),
                 pagePrivacy: root.querySelector("#page-privacy"),
@@ -1546,9 +2238,15 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 loginForm: root.querySelector("#login-form"),
                 loginEmail: root.querySelector("#login-email"),
                 loginPassword: root.querySelector("#login-password"),
+                loginPasswordToggle: root.querySelector("#login-password-toggle"),
                 loginMessage: root.querySelector("#login-message"),
                 heroBadges: root.querySelector("#hero-badges"),
+                activeFilterSummary: root.querySelector("#active-filter-summary"),
                 controlNote: root.querySelector("#control-note"),
+                adminWindowLabel: root.querySelector("#admin-window-label"),
+                adminLastUpdated: root.querySelector("#admin-last-updated"),
+                adminSourceFile: root.querySelector("#admin-source-file"),
+                adminRecordCount: root.querySelector("#admin-record-count"),
                 upload: root.querySelector("#csv-upload"),
                 compareUpload: root.querySelector("#compare-upload"),
                 prizeUpload: root.querySelector("#prize-upload"),
@@ -1559,6 +2257,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 movementMetric: root.querySelector("#movement-metric-select"),
                 exportFiltered: root.querySelector("#export-filtered"),
                 clearCompare: root.querySelector("#clear-compare"),
+                clearFilters: root.querySelector("#clear-filters"),
                 ambassador: root.querySelector("#ambassador-filter"),
                 projectDay: root.querySelector("#project-day-filter"),
                 dateExact: root.querySelector("#date-exact"),
@@ -1613,19 +2312,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 goals: readStoredGoals(),
                 prizeModel: readStoredPrizeModel() || INITIAL_PRIZES,
                 session: readStoredSession(),
-                filters: {
-                  ambassador: "all",
-                  projectDay: "all",
-                  dateExact: "all",
-                  hour: "all",
-                  hourFrom: "all",
-                  hourTo: "all",
-                  dateFrom: INITIAL_META.defaultFrom || "",
-                  dateTo: INITIAL_META.defaultTo || "",
-                  donor: "",
-                  amountMin: "",
-                  amountMax: "",
-                },
+                filters: getDefaultFilters(INITIAL_META),
                 view: {
                   dailyMetric: "amount",
                   heatmapMetric: "amount",
@@ -1652,6 +2339,22 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 maximumFractionDigits: 0,
               });
               const numberFormatter = new Intl.NumberFormat("he-IL");
+
+              function getDefaultFilters(meta) {
+                return {
+                  ambassador: "all",
+                  projectDay: "all",
+                  dateExact: "all",
+                  hour: "all",
+                  hourFrom: "all",
+                  hourTo: "all",
+                  dateFrom: meta.defaultFrom || "",
+                  dateTo: meta.defaultTo || "",
+                  donor: "",
+                  amountMin: "",
+                  amountMax: "",
+                };
+              }
 
               function readStoredPrizeModel() {
                 try {
@@ -1734,6 +2437,33 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 elements.loginMessage.className = `login-message text-small${tone ? ` is-${tone}` : ""}`;
               }
 
+              function renderBrandAssets() {
+                if (elements.topbarCampaignLogo) {
+                  elements.topbarCampaignLogo.src = INITIAL_CAMPAIGN_LOGO;
+                }
+                if (elements.topbarLogo) {
+                  elements.topbarLogo.src = INITIAL_ORG_LOGO;
+                }
+                if (elements.publicLogo) {
+                  elements.publicLogo.src = INITIAL_CAMPAIGN_LOGO;
+                }
+                if (elements.publicOrgLogo) {
+                  elements.publicOrgLogo.src = INITIAL_ORG_LOGO;
+                }
+                if (elements.loginCampaignLogo) {
+                  elements.loginCampaignLogo.src = INITIAL_CAMPAIGN_LOGO;
+                }
+                if (elements.loginOrgLogo) {
+                  elements.loginOrgLogo.src = INITIAL_ORG_LOGO;
+                }
+                if (elements.logo) {
+                  elements.logo.src = INITIAL_CAMPAIGN_LOGO;
+                }
+                if (elements.brandOrgLogo) {
+                  elements.brandOrgLogo.src = INITIAL_ORG_LOGO;
+                }
+              }
+
               async function hashPassword(value) {
                 const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value || "")));
                 return Array.from(new Uint8Array(buffer))
@@ -1769,6 +2499,14 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 if (state.ui.page === "admin" && !isManager) {
                   setLoginMessage("יש להזין מייל מורשה וסיסמה כדי לצפות בדשבורד הניהולי.");
                 }
+              }
+
+              function getLatestCreatedIso(rows) {
+                return [...rows]
+                  .map((row) => row.createdIso)
+                  .filter(Boolean)
+                  .sort()
+                  .slice(-1)[0] || "";
               }
 
               function formatAmount(value) {
@@ -2490,7 +3228,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 };
               }
 
-              function getActiveFilterSummary() {
+              function getActiveFilters() {
                 const summary = [];
                 if (state.filters.ambassador !== "all") {
                   summary.push(`שגריר: ${state.filters.ambassador}`);
@@ -2520,7 +3258,25 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 if (state.filters.donor.trim()) {
                   summary.push(`תורם: ${state.filters.donor.trim()}`);
                 }
+                return summary;
+              }
+
+              function getActiveFilterSummary() {
+                const summary = getActiveFilters();
                 return summary.length ? ` | פילוחים פעילים: ${summary.join(" • ")}` : "";
+              }
+
+              function renderActiveFilterSummary() {
+                const summary = getActiveFilters();
+                elements.activeFilterSummary.textContent = summary.length ? `מסננים פעילים: ${summary.join(" • ")}` : "אין מסננים פעילים";
+              }
+
+              function updateMetricToolbarState() {
+                elements.metricButtons.forEach((button) => {
+                  const selectId = button.dataset.metricSelect;
+                  const targetSelect = root.querySelector(`#${selectId}`);
+                  button.classList.toggle("is-active", Boolean(targetSelect) && targetSelect.value === button.dataset.value);
+                });
               }
 
               function setControlNote(filteredRows, prizeRows) {
@@ -2531,14 +3287,19 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               function renderPublicHeroBadges(prizeRows) {
                 const leaderboard = buildLeaderboard(prizeRows);
                 const topLeader = leaderboard[0];
-                elements.publicLogo.src = INITIAL_CAMPAIGN_LOGO;
+                const latestCreated = getLatestCreatedIso(prizeRows);
+                const total = sumAmount(prizeRows);
                 const publicBadges = [
+                  `<span class="hero-badge">מצב קמפיין: ${escapeHtml(prizeRows.length ? "פעיל על בסיס הקובץ הנוכחי" : "ממתין לנתונים")}</span>`,
                   `<span class="hero-badge">חלון פרויקט: ${escapeHtml(state.meta.projectWindowLabel || "לא זוהה")}</span>`,
-                  `<span class="hero-badge">${escapeHtml(formatNumber(leaderboard.length))} שגרירים מדורגים כרגע</span>`,
-                  `<span class="hero-badge">בסיס פרסים: ${escapeHtml(formatAmount(sumAmount(prizeRows)))}</span>`,
+                  `<span class="hero-badge">סך גיוס נוכחי: ${escapeHtml(formatAmount(total))}</span>`,
+                  `<span class="hero-badge">${escapeHtml(formatNumber(leaderboard.length))} שגרירים פעילים</span>`,
                 ];
                 if (topLeader) {
                   publicBadges.push(`<span class="hero-badge">מוביל/ה כרגע: ${escapeHtml(topLeader.ambassador)} · ${escapeHtml(formatAmount(topLeader.total))}</span>`);
+                }
+                if (latestCreated) {
+                  publicBadges.push(`<span class="hero-badge">עודכן לאחרונה: ${escapeHtml(formatDateTime(latestCreated))}</span>`);
                 }
                 elements.publicHeroBadges.innerHTML = publicBadges.join("");
               }
@@ -2547,18 +3308,24 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 const filteredTotal = sumAmount(filteredRows);
                 const prizeTotal = sumAmount(prizeRows);
                 const ambassadorCount = new Set(prizeRows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך")).size;
-
-                elements.logo.src = INITIAL_ORG_LOGO;
-                elements.topbarLogo.src = INITIAL_ORG_LOGO;
+                const latestCreated = getLatestCreatedIso(filteredRows);
+                renderBrandAssets();
                 const badges = [
-                  `<span class="hero-badge">₪ ${escapeHtml(formatNumber(Math.round(filteredTotal)).replace("₪", "").trim())} בגזרת התצוגה</span>`,
+                  `<span class="hero-badge">${escapeHtml(formatAmount(filteredTotal))} בתצוגה הפעילה</span>`,
                   `<span class="hero-badge">${escapeHtml(formatNumber(ambassadorCount))} שגרירים פעילים בטווח</span>`,
-                  `<span class="hero-badge">${escapeHtml(state.meta.projectWindowLabel || "טווח לא זוהה")}</span>`,
+                  `<span class="hero-badge">טווח פרויקט: ${escapeHtml(state.meta.projectWindowLabel || "טווח לא זוהה")}</span>`,
                   `<span class="hero-badge">בסיס פרסים: ${escapeHtml(formatAmount(prizeTotal))}</span>`,
                 ];
                 if (state.compare.rows.length) {
                   badges.push(`<span class="hero-badge">השוואה: ${escapeHtml(state.compare.label)} · ${escapeHtml(formatAmount(sumAmount(compareRows)))}</span>`);
                 }
+                if (latestCreated) {
+                  badges.push(`<span class="hero-badge">עודכן לאחרונה: ${escapeHtml(formatDateTime(latestCreated))}</span>`);
+                }
+                elements.adminWindowLabel.textContent = state.meta.projectWindowLabel || "לא זוהה";
+                elements.adminLastUpdated.textContent = latestCreated ? formatDateTime(latestCreated) : "אין נתונים";
+                elements.adminSourceFile.textContent = state.sourceLabel || "קובץ בסיס";
+                elements.adminRecordCount.textContent = formatNumber(filteredRows.length);
                 elements.heroBadges.innerHTML = badges.join("");
               }
 
@@ -2566,25 +3333,34 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 const total = sumAmount(rows);
                 const ambassadors = new Set(rows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך"));
                 const average = rows.length ? total / rows.length : 0;
+                const successCount = rows.filter((row) => row.status === "success").length;
+                const successRate = rows.length ? successCount / rows.length : 0;
                 const peakHourEntry = Array.from(groupBy(rows, (row) => row.hour).entries())
                   .map(([hour, items]) => [hour, sumAmount(items)])
                   .sort((left, right) => right[1] - left[1])[0];
                 const peakHourLabel = peakHourEntry ? `${String(peakHourEntry[0]).padStart(2, "0")}:00` : "אין";
+                const topAmbassador = buildLeaderboard(rows)[0] || null;
+                const totalGoal = Number(state.goals.total || 0);
+                const totalGoalProgress = totalGoal > 0 ? total / totalGoal : 0;
 
                 const stats = [
-                  { label: "סך גיוס", value: formatAmount(total), detail: `${formatNumber(rows.length)} עסקאות` },
-                  { label: "ממוצע לעסקה", value: formatAmount(average), detail: "לפי הפילוח הנוכחי" },
+                  { label: "סך הגיוס", value: formatAmount(total), detail: `${formatNumber(rows.length)} עסקאות בפילוח` },
+                  { label: "מספר עסקאות", value: formatNumber(rows.length), detail: `שיעור הצלחה ${formatPercent(successRate)}` },
+                  { label: "ממוצע לעסקה", value: formatAmount(average), detail: "לפי התצוגה הפעילה" },
                   { label: "שגרירים פעילים", value: formatNumber(ambassadors.size), detail: "עם לפחות עסקה אחת" },
+                  { label: "ביצוע מול יעד", value: totalGoal ? formatPercent(totalGoalProgress) : "ללא יעד", detail: totalGoal ? `${formatAmount(Math.max(totalGoal - total, 0))} נותרו ליעד` : "הגדירו יעד כולל" },
+                  { label: "שגריר מוביל", value: topAmbassador ? topAmbassador.ambassador : "אין", detail: topAmbassador ? formatAmount(topAmbassador.total) : "אין נתונים" },
                   { label: "שעת שיא", value: peakHourLabel, detail: peakHourEntry ? formatAmount(peakHourEntry[1]) : "אין נתונים" },
+                  { label: "עסקאות מחויבות", value: formatNumber(successCount), detail: `${formatPercent(successRate)} מסך העסקאות` },
                 ];
 
                 elements.metrics.innerHTML = stats
                   .map(
                     (stat) => `
-                      <article class="metric-card">
+                      <article class="metric-card kpi-card app-card">
                         <div class="metric-label">${escapeHtml(stat.label)}</div>
                         <div class="metric-value">${escapeHtml(stat.value)}</div>
-                        <div class="text-small text-muted">${escapeHtml(stat.detail)}</div>
+                        <div class="metric-detail">${escapeHtml(stat.detail)}</div>
                       </article>
                     `
                   )
@@ -3132,6 +3908,156 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 elements.prizeBoard.innerHTML = `${podiumMarkup}${tiersMarkup}`;
               }
 
+              function renderPrizeBoard(prizeRows) {
+                const standings = computePrizeStandings(prizeRows);
+                const { placeWinners, tiers, prizeModel, selectedFocus } = standings;
+
+                elements.prizeSummary.textContent = selectedFocus
+                  ? `${selectedFocus.ambassador}: ${formatAmount(selectedFocus.total)} | פרס פעיל: ${selectedFocus.currentPrize}${selectedFocus.nextPrize ? ` | חסרים ${formatAmount(selectedFocus.gap)} ל-${selectedFocus.nextPrize}` : " | נמצא במדרגה העליונה"}`
+                  : `${formatNumber(standings.leaderboard.length)} שגרירים מדורגים בטווח הזמן הנבחר`;
+
+                const podiumMarkup = placeWinners.length
+                  ? `
+                      <div class="dashboard-section">
+                        <div class="section-head">
+                          <h3>פודיום מובילים</h3>
+                          <div class="text-small text-muted">שלושת המקומות הראשונים מחושבים לפי סכום הגיוס המצטבר בתצוגה הפעילה.</div>
+                        </div>
+                        <div class="podium-grid">
+                          ${placeWinners
+                            .map((item, index) => {
+                              const winner = item.winner;
+                              const nextWinner = placeWinners[index + 1]?.winner || null;
+                              const isFocus = winner && state.filters.ambassador !== "all" && winner.ambassador === state.filters.ambassador;
+                              const leadGap = winner && nextWinner ? Math.max(winner.total - nextWinner.total, 0) : 0;
+                              return `
+                                <article class="prize-card place-card place-card--${item.place}">
+                                  <div class="prize-visual">
+                                    <div class="podium-mark">
+                                      <svg viewBox="0 0 220 120" role="img" aria-label="${escapeAttribute(item.label)}">
+                                        <rect x="24" y="64" width="48" height="34" rx="8" fill="rgba(255,214,41,0.92)"></rect>
+                                        <rect x="86" y="38" width="48" height="60" rx="8" fill="rgba(255,255,255,0.96)"></rect>
+                                        <rect x="148" y="54" width="48" height="44" rx="8" fill="rgba(255,214,41,0.62)"></rect>
+                                        <text x="110" y="26" text-anchor="middle" fill="white" font-size="22" font-weight="700">${escapeHtml(String(item.place))}</text>
+                                      </svg>
+                                    </div>
+                                  </div>
+                                  <div class="prize-content">
+                                    <div class="prize-title-row">
+                                      <div class="prize-title">${escapeHtml(item.label)}</div>
+                                      <span class="prize-pill">${escapeHtml(item.prize)}</span>
+                                    </div>
+                                    ${
+                                      winner
+                                        ? `
+                                          <div class="winner-list">
+                                            <div class="winner-item${isFocus ? " is-focus" : ""}">
+                                              <span class="winner-rank">${escapeHtml(String(item.place))}</span>
+                                              <div>
+                                                <div class="winner-name">${escapeHtml(winner.ambassador)}</div>
+                                                <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} עסקאות</div>
+                                              </div>
+                                              <div class="winner-amount">${escapeHtml(formatAmount(winner.total))}</div>
+                                            </div>
+                                          </div>
+                                          <div class="prize-meta">
+                                            <span>פרס: ${escapeHtml(item.prize)}</span>
+                                            <span>${escapeHtml(nextWinner ? `פער מהמקום הבא: ${formatAmount(leadGap)}` : "מוביל את הטבלה כרגע")}</span>
+                                          </div>
+                                        `
+                                        : `<div class="empty-state">עדיין אין זוכה למקום הזה בטווח שנבחר.</div>`
+                                    }
+                                  </div>
+                                </article>
+                              `;
+                            })
+                            .join("")}
+                        </div>
+                      </div>
+                    `
+                  : "";
+
+                const tiersMarkup = tiers.length
+                  ? `
+                      <div class="dashboard-section">
+                        <div class="section-head">
+                          <h3>מדרגות פרס</h3>
+                          <div class="text-small text-muted">${escapeHtml(prizeModel.tierRuleNote || "שדרוג מדרגה מחליף את הפרס הפעיל, ובמדרגה הראשונה נשמרת זכאות למרצ' העמותה.")}</div>
+                        </div>
+                        <div class="tier-grid">
+                          ${tiers
+                            .map((tier, index) => {
+                              const winners = tier.active.slice(0, 5);
+                              const nearestCandidate =
+                                [...standings.leaderboard]
+                                  .filter((entry) => entry.total < tier.threshold)
+                                  .sort((left, right) => right.total - left.total)[0] || null;
+                              const progressBasis = nearestCandidate ? nearestCandidate.total : winners[0]?.total || 0;
+                              const progressPct = tier.threshold ? Math.min(progressBasis / tier.threshold, 1) * 100 : 0;
+                              const carryoverNote =
+                                index === 0 && tier.carryover.length
+                                  ? `<div class="status-note text-small">נשארים זכאים גם אחרי שדרוג: ${escapeHtml(formatNumber(tier.carryover.length))} שגרירים</div>`
+                                  : "";
+                              return `
+                                <article class="prize-card">
+                                  <div class="prize-visual">
+                                    <div class="tier-mark">
+                                      <svg viewBox="0 0 240 132" role="img" aria-label="${escapeAttribute(tier.prize)}">
+                                        <rect x="24" y="${82 - index * 6}" width="48" height="${30 + index * 6}" rx="10" fill="rgba(255,255,255,0.92)"></rect>
+                                        <rect x="86" y="${56 - index * 6}" width="48" height="${56 + index * 6}" rx="10" fill="rgba(17,29,74,0.96)"></rect>
+                                        <rect x="148" y="${34 - index * 6}" width="48" height="${78 + index * 6}" rx="10" fill="rgba(255,255,255,0.92)"></rect>
+                                        <circle cx="120" cy="24" r="14" fill="rgba(255,214,41,0.96)"></circle>
+                                      </svg>
+                                    </div>
+                                  </div>
+                                  <div class="prize-content">
+                                    <div class="prize-title-row">
+                                      <div class="prize-title">${escapeHtml(formatAmount(tier.threshold))}</div>
+                                      <span class="prize-pill">${escapeHtml(tier.prize)}</span>
+                                    </div>
+                                    <div class="text-small text-muted">זוכים פעילים כרגע: ${escapeHtml(formatNumber(tier.active.length))}</div>
+                                    <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width:${progressPct}%"></div></div>
+                                    <div class="prize-meta">
+                                      <span>${escapeHtml(tier.active.length ? "המדרגה הושגה" : "עדיין לא הושגה")}</span>
+                                      <span>${escapeHtml(nearestCandidate ? `${nearestCandidate.ambassador} קרוב/ה עם פער של ${formatAmount(tier.threshold - nearestCandidate.total)}` : "אין כרגע מועמד/ת קרוב/ה")}</span>
+                                    </div>
+                                    ${carryoverNote}
+                                    ${
+                                      winners.length
+                                        ? `
+                                          <div class="winner-list">
+                                            ${winners
+                                              .map((winner, winnerIndex) => {
+                                                const isFocus = state.filters.ambassador !== "all" && winner.ambassador === state.filters.ambassador;
+                                                return `
+                                                  <div class="winner-item${isFocus ? " is-focus" : ""}">
+                                                    <span class="winner-rank">${escapeHtml(String(winnerIndex + 1))}</span>
+                                                    <div>
+                                                      <div class="winner-name">${escapeHtml(winner.ambassador)}</div>
+                                                      <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} עסקאות</div>
+                                                    </div>
+                                                    <div class="winner-amount">${escapeHtml(formatAmount(winner.total))}</div>
+                                                  </div>
+                                                `;
+                                              })
+                                              .join("")}
+                                          </div>
+                                        `
+                                        : `<div class="empty-state">עדיין אין זכאים פעילים במדרגה הזאת.</div>`
+                                    }
+                                  </div>
+                                </article>
+                              `;
+                            })
+                            .join("")}
+                        </div>
+                      </div>
+                    `
+                  : `<div class="empty-state">לא נטענה טבלת פרסים תקפה. אפשר להעלות קובץ פרסים חדש ב-CSV או Excel.</div>`;
+
+                elements.prizeBoard.innerHTML = `${podiumMarkup}${tiersMarkup}`;
+              }
+
               function createSvg(width, height, ariaLabel) {
                 return `
                   <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeAttribute(ariaLabel)}">
@@ -3527,7 +4453,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 const filteredRows = getFilteredRows();
                 const compareRows = getComparisonRows();
                 const prizeRows = getPrizeScopeRows();
+                renderBrandAssets();
                 refreshAccessUi();
+                renderActiveFilterSummary();
+                updateMetricToolbarState();
                 setControlNote(filteredRows, prizeRows);
                 renderPublicHeroBadges(prizeRows);
                 renderHeroBadges(filteredRows, prizeRows, compareRows);
@@ -3594,6 +4523,12 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   renderAll();
                 });
 
+                elements.loginPasswordToggle.addEventListener("click", () => {
+                  const isPassword = elements.loginPassword.type === "password";
+                  elements.loginPassword.type = isPassword ? "text" : "password";
+                  elements.loginPasswordToggle.textContent = isPassword ? "הסתר" : "הצג";
+                });
+
                 [
                   elements.ambassador,
                   elements.projectDay,
@@ -3614,6 +4549,18 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   if (element.tagName === "INPUT") {
                     element.addEventListener("input", renderAll);
                   }
+                });
+
+                elements.metricButtons.forEach((button) => {
+                  button.addEventListener("click", () => {
+                    const selectId = button.dataset.metricSelect;
+                    const targetSelect = root.querySelector(`#${selectId}`);
+                    if (!targetSelect) {
+                      return;
+                    }
+                    targetSelect.value = button.dataset.value || targetSelect.value;
+                    renderAll();
+                  });
                 });
 
                 [elements.goalTotal, elements.goalDaily].forEach((element) => {
@@ -3644,6 +4591,12 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   renderAll();
                 });
 
+                elements.clearFilters.addEventListener("click", () => {
+                  state.filters = getDefaultFilters(state.meta);
+                  resetFilterOptions();
+                  renderAll();
+                });
+
                 elements.upload.addEventListener("change", async (event) => {
                   const [file] = event.target.files || [];
                   if (!file) {
@@ -3655,19 +4608,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   state.rows = enrichRows(ingested.normalized, ingested.meta);
                   state.sourceLabel = file.name;
                   state.validation.base = ingested.validation;
-                  state.filters = {
-                    ambassador: "all",
-                    projectDay: "all",
-                    dateExact: "all",
-                    hour: "all",
-                    hourFrom: "all",
-                    hourTo: "all",
-                    dateFrom: ingested.meta.defaultFrom || "",
-                    dateTo: ingested.meta.defaultTo || "",
-                    donor: "",
-                    amountMin: "",
-                    amountMax: "",
-                  };
+                  state.filters = getDefaultFilters(ingested.meta);
                   resetFilterOptions();
                   renderAll();
                 });

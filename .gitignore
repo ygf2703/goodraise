@@ -3,4 +3,5 @@ work/source.csv
 work/prizes.xlsx
 outputs/yellow-project-dashboard.html
 outputs/yellow-project-dashboard-browser.html
+outputs/ui-review/
 *.pyc
