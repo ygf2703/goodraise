@@ -16,10 +16,17 @@ The app receives campaign export files and turns them into an active dashboard t
 ## Current Capabilities
 
 - Blue/yellow branded dashboard with the Achim LaSemel logo
+- Multi-page experience:
+  - Public prizes and competition page
+  - Public participation rules page
+  - Public privacy page
+  - Manager-only admin dashboard
 - File upload for base campaign CSV
 - File upload for comparison CSV
 - File upload for prize model from Excel or CSV
 - Filters for ambassador, project day, exact date, date range, exact hour, hour range, donor name, and amount range
+- Admin login gate with predefined manager emails and password-based access for local pilot use
+- Manager-only graph mode controls for daily chart, heatmap, and ambassador movement views
 - Executive summary cards and KPI blocks
 - Data quality and validation board
 - Donor and transaction segmentation
@@ -44,6 +51,11 @@ The app receives campaign export files and turns them into an active dashboard t
 ## Data Safety
 
 This repository intentionally does not track live campaign data or generated dashboard outputs that may contain donor information.
+
+Important:
+
+- The current admin access layer is a local pilot gate implemented in the client.
+- Before any public deployment, authentication must move to a secure server-side flow.
 
 Ignored from git:
 

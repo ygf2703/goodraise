@@ -174,6 +174,14 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
     meta_json = json.dumps(meta, ensure_ascii=False, separators=(",", ":"))
     logo_json = json.dumps(logo_data_uri, ensure_ascii=False)
     prize_json = json.dumps(prize_model, ensure_ascii=False, separators=(",", ":"))
+    access_json = json.dumps(
+        {
+            "managerEmails": ["noamfrostig@gmail.com"],
+            "adminPasswordHash": "aaf587976eeb78f291c13743195dd667cbd1a175bbee14f7a8712b37ef6c1b47",
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
     template = textwrap.dedent(
         """
@@ -200,6 +208,247 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
             #yellow-dashboard-root .dashboard-shell {
               display: grid;
               gap: 1rem;
+            }
+
+            #yellow-dashboard-root .app-shell {
+              display: grid;
+              gap: 1rem;
+            }
+
+            #yellow-dashboard-root .app-topbar,
+            #yellow-dashboard-root .page-panel,
+            #yellow-dashboard-root .legal-card,
+            #yellow-dashboard-root .admin-lock,
+            #yellow-dashboard-root .public-hero {
+              background: rgba(255, 255, 255, 0.94);
+              border: 2px solid rgba(19, 23, 80, 0.12);
+              border-radius: 1.25rem;
+              box-shadow: 0 12px 34px rgba(19, 23, 80, 0.08);
+            }
+
+            #yellow-dashboard-root .app-topbar {
+              padding: 0.9rem 1rem;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 1rem;
+              flex-wrap: wrap;
+              position: sticky;
+              top: 0.5rem;
+              z-index: 20;
+              backdrop-filter: blur(12px);
+            }
+
+            #yellow-dashboard-root .topbar-brand {
+              display: flex;
+              align-items: center;
+              gap: 0.75rem;
+              color: var(--brand-blue-950);
+              font-weight: 600;
+            }
+
+            #yellow-dashboard-root .topbar-logo {
+              width: 3rem;
+              height: 3rem;
+              border-radius: 0.9rem;
+              background: rgba(255, 217, 61, 0.18);
+              padding: 0.3rem;
+              object-fit: contain;
+            }
+
+            #yellow-dashboard-root .topbar-meta {
+              display: grid;
+              gap: 0.15rem;
+            }
+
+            #yellow-dashboard-root .topbar-title {
+              font-size: 1.05rem;
+            }
+
+            #yellow-dashboard-root .topbar-subtitle {
+              color: rgba(16, 16, 16, 0.64);
+              font-size: 0.9em;
+            }
+
+            #yellow-dashboard-root .topbar-actions {
+              display: flex;
+              align-items: center;
+              gap: 0.75rem;
+              flex-wrap: wrap;
+              justify-content: flex-end;
+            }
+
+            #yellow-dashboard-root .top-nav {
+              display: flex;
+              gap: 0.55rem;
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .nav-button {
+              border: 1px solid rgba(19, 23, 80, 0.12);
+              border-radius: 999px;
+              padding: 0.55rem 0.9rem;
+              font: inherit;
+              font-weight: 500;
+              cursor: pointer;
+              background: rgba(28, 35, 104, 0.05);
+              color: var(--brand-blue-950);
+            }
+
+            #yellow-dashboard-root .nav-button.is-active {
+              background: var(--brand-blue-950);
+              color: var(--brand-yellow-500);
+              border-color: var(--brand-blue-950);
+            }
+
+            #yellow-dashboard-root .session-box {
+              display: flex;
+              align-items: center;
+              gap: 0.55rem;
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .session-chip {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.4rem;
+              padding: 0.45rem 0.8rem;
+              border-radius: 999px;
+              background: rgba(255, 217, 61, 0.18);
+              color: var(--brand-blue-950);
+              font-size: 0.92em;
+            }
+
+            #yellow-dashboard-root .page-shell {
+              display: none;
+              gap: 1rem;
+            }
+
+            #yellow-dashboard-root .page-shell.is-active {
+              display: grid;
+            }
+
+            #yellow-dashboard-root .page-panel,
+            #yellow-dashboard-root .public-hero,
+            #yellow-dashboard-root .legal-card {
+              padding: 1rem;
+            }
+
+            #yellow-dashboard-root .public-hero {
+              background:
+                linear-gradient(140deg, rgba(28, 35, 104, 0.98) 0%, rgba(28, 35, 104, 0.98) 60%, rgba(255, 217, 61, 0.98) 60%, rgba(255, 217, 61, 0.98) 100%);
+              color: var(--brand-white);
+              display: grid;
+              gap: 0.85rem;
+            }
+
+            #yellow-dashboard-root .public-hero h2,
+            #yellow-dashboard-root .legal-card h2,
+            #yellow-dashboard-root .legal-card h3,
+            #yellow-dashboard-root .admin-lock h3 {
+              margin: 0;
+            }
+
+            #yellow-dashboard-root .public-hero p {
+              margin: 0;
+              max-width: 42rem;
+              color: rgba(255, 255, 255, 0.9);
+            }
+
+            #yellow-dashboard-root .public-badges {
+              display: flex;
+              gap: 0.6rem;
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .admin-lock {
+              padding: 1rem;
+              display: grid;
+              gap: 1rem;
+            }
+
+            #yellow-dashboard-root .admin-lock-grid {
+              display: grid;
+              gap: 1rem;
+              grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
+            }
+
+            #yellow-dashboard-root .login-card {
+              display: grid;
+              gap: 0.8rem;
+              padding: 1rem;
+              border-radius: 1rem;
+              background: rgba(28, 35, 104, 0.04);
+              border: 1px solid rgba(19, 23, 80, 0.08);
+            }
+
+            #yellow-dashboard-root .login-help {
+              display: grid;
+              gap: 0.5rem;
+            }
+
+            #yellow-dashboard-root .login-message {
+              min-height: 1.3rem;
+            }
+
+            #yellow-dashboard-root .login-message.is-error {
+              color: #8b1e1e;
+            }
+
+            #yellow-dashboard-root .login-message.is-success {
+              color: #1b5e20;
+            }
+
+            #yellow-dashboard-root .manager-only-note {
+              padding: 0.75rem 0.85rem;
+              border-radius: 0.9rem;
+              background: rgba(255, 217, 61, 0.16);
+              color: var(--brand-blue-950);
+            }
+
+            #yellow-dashboard-root .admin-content[hidden] {
+              display: none !important;
+            }
+
+            #yellow-dashboard-root .page-hero-row {
+              display: flex;
+              justify-content: space-between;
+              gap: 1rem;
+              flex-wrap: wrap;
+              align-items: flex-start;
+            }
+
+            #yellow-dashboard-root .legal-grid {
+              display: grid;
+              gap: 1rem;
+            }
+
+            #yellow-dashboard-root .legal-card {
+              display: grid;
+              gap: 0.8rem;
+            }
+
+            #yellow-dashboard-root .legal-card p,
+            #yellow-dashboard-root .legal-card li {
+              margin: 0;
+              color: rgba(16, 16, 16, 0.82);
+            }
+
+            #yellow-dashboard-root .legal-card ul {
+              margin: 0;
+              padding-inline-start: 1.25rem;
+              display: grid;
+              gap: 0.45rem;
+            }
+
+            #yellow-dashboard-root .graph-control-row {
+              display: grid;
+              gap: 0.75rem;
+              grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+            }
+
+            #yellow-dashboard-root .view-note {
+              color: rgba(16, 16, 16, 0.64);
             }
 
             #yellow-dashboard-root .hero {
@@ -851,12 +1100,22 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
             }
 
             @media (max-width: 840px) {
+              #yellow-dashboard-root .admin-lock-grid {
+                grid-template-columns: 1fr;
+              }
+
               #yellow-dashboard-root .hero {
                 grid-template-columns: 1fr;
               }
             }
 
             @media (max-width: 560px) {
+              #yellow-dashboard-root .app-topbar,
+              #yellow-dashboard-root .topbar-actions,
+              #yellow-dashboard-root .session-box {
+                align-items: stretch;
+              }
+
               #yellow-dashboard-root .hero-panel {
                 padding: 1rem;
               }
@@ -874,219 +1133,411 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
             }
           </style>
 
-          <div class="dashboard-shell">
-            <section class="hero">
-              <article class="hero-panel">
-                <div class="brand-layout">
-                  <div class="brand-row">
-                    <div class="brand-copy">
-                      <span class="brand-kicker">ממשק כחול־צהוב חי</span>
-                      <h1 class="hero-title">דשבורד הגיוס של אחים לסמל</h1>
-                      <p class="hero-subtitle">פילוח לפי תאריך, שעה, יום פרויקט ושגריר/ה, עם זיהוי זוכים בזמן אמת לפי טבלת המקומות ומדרגות הפרס.</p>
-                    </div>
-                    <div class="logo-wrap">
-                      <img id="brand-logo" alt="לוגו אחים לסמל" />
-                    </div>
-                  </div>
-                  <div id="hero-badges" class="hero-badges"></div>
+          <div class="app-shell">
+            <header class="app-topbar">
+              <div class="topbar-brand">
+                <img id="topbar-logo" class="topbar-logo" alt="לוגו אחים לסמל" />
+                <div class="topbar-meta">
+                  <div class="topbar-title">אחים לסמל · מערכת ניהול קמפיין</div>
+                  <div class="topbar-subtitle">דשבורד רב־עמודי למנהלים, משתתפים ותצוגת תחרות</div>
                 </div>
+              </div>
+              <div class="topbar-actions">
+                <nav class="top-nav" aria-label="ניווט עמודים">
+                  <button class="nav-button" type="button" data-page-target="prizes">פרסים ותחרות</button>
+                  <button class="nav-button" type="button" data-page-target="rules">תקנון השתתפות</button>
+                  <button class="nav-button" type="button" data-page-target="privacy">פרטיות</button>
+                  <button class="nav-button" type="button" data-page-target="admin">דשבורד ניהולי</button>
+                </nav>
+                <div class="session-box">
+                  <div id="session-status" class="session-chip">מצב ניהול: אורח/ת</div>
+                  <button id="go-admin-login" class="action-button secondary" type="button">כניסת מנהלים</button>
+                  <button id="logout-button" class="action-button secondary" type="button" hidden>התנתקות</button>
+                </div>
+              </div>
+            </header>
+
+            <section id="page-prizes" class="page-shell is-active">
+              <article class="public-hero">
+                <div class="page-hero-row">
+                  <div class="brand-copy">
+                    <span class="brand-kicker">ציבורי למשתתפים ולמנהלים</span>
+                    <h2 class="hero-title">דשבורד פרסים ותחרות</h2>
+                    <p>תצוגת תחרות ייעודית לזוכים הנוכחיים, למדרגות הפעילות ולמצב הפרסים נכון לרגע זה על בסיס הנתונים שהועלו למערכת.</p>
+                  </div>
+                </div>
+                <div id="public-hero-badges" class="public-badges"></div>
               </article>
 
-              <aside class="control-panel">
+              <section class="page-panel">
                 <div class="section-head">
-                  <h3>קלטים ושליטה</h3>
-                  <div class="control-note text-muted">אפשר להחליף גם את קובץ העסקאות וגם את קובץ הפרסים.</div>
+                  <h3>פרסים, מדרגות וזוכים חיים</h3>
+                  <div id="prize-summary" class="text-small text-muted"></div>
                 </div>
-                <div class="filters-grid">
-                  <label class="form-label">
-                    קובץ עסקאות
-                    <input id="csv-upload" class="form-control" type="file" accept=".csv,text/csv" />
-                  </label>
-                  <label class="form-label">
-                    קובץ השוואה
-                    <input id="compare-upload" class="form-control" type="file" accept=".csv,text/csv" />
-                  </label>
-                  <label class="form-label">
-                    קובץ פרסים
-                    <input id="prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" />
-                  </label>
-                  <label class="form-label">
-                    שגריר/ה
-                    <select id="ambassador-filter" class="form-select"></select>
-                  </label>
-                  <label class="form-label">
-                    יום פרויקט
-                    <select id="project-day-filter" class="form-select"></select>
-                  </label>
-                  <label class="form-label">
-                    תאריך מדויק
-                    <select id="date-exact" class="form-select"></select>
-                  </label>
-                  <label class="form-label">
-                    תאריך התחלה
-                    <input id="date-from" class="form-control" type="date" />
-                  </label>
-                  <label class="form-label">
-                    תאריך סיום
-                    <input id="date-to" class="form-control" type="date" />
-                  </label>
-                  <label class="form-label">
-                    שעה
-                    <select id="hour-filter" class="form-select"></select>
-                  </label>
-                  <label class="form-label">
-                    משעה
-                    <select id="hour-from-filter" class="form-select"></select>
-                  </label>
-                  <label class="form-label">
-                    עד שעה
-                    <select id="hour-to-filter" class="form-select"></select>
-                  </label>
-                  <label class="form-label">
-                    שם התורם/ת
-                    <input id="donor-filter" class="form-control" type="text" placeholder="חיפוש לפי שם תורם" />
-                  </label>
-                  <label class="form-label">
-                    סכום מינימלי
-                    <input id="amount-min-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 180" />
-                  </label>
-                  <label class="form-label">
-                    סכום מקסימלי
-                    <input id="amount-max-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 5000" />
-                  </label>
-                  <label class="form-label">
-                    יעד כולל
-                    <input id="goal-total" class="form-control" type="number" min="0" step="100" placeholder="למשל 1500000" />
-                  </label>
-                  <label class="form-label">
-                    יעד יומי
-                    <input id="goal-daily" class="form-control" type="number" min="0" step="100" placeholder="למשל 150000" />
-                  </label>
-                </div>
-                <div class="action-row">
-                  <button id="export-filtered" class="action-button" type="button">ייצוא הנתונים המסוננים</button>
-                  <button id="clear-compare" class="action-button secondary" type="button">ניקוי קובץ השוואה</button>
-                </div>
-                <div id="control-note" class="status-note text-small"></div>
-              </aside>
+                <div id="prize-board" class="prize-shell"></div>
+              </section>
             </section>
 
-            <section id="metrics-grid" class="metric-grid" aria-label="מדדי סיכום"></section>
-
-            <section class="dashboard-section">
-              <div class="section-head">
-                <h3>יעדים מול ביצוע</h3>
-                <div id="goals-summary" class="text-small text-muted"></div>
+            <section id="page-rules" class="page-shell">
+              <div class="legal-grid">
+                <article class="legal-card">
+                  <h2>תקנון השתתפות</h2>
+                  <p>זהו נוסח עבודה ראשוני לשימוש פנימי ולהצגה במוצר. לפני עלייה לאוויר מומלץ לבצע אישור משפטי וניסוח סופי מטעם הארגון.</p>
+                </article>
+                <article class="legal-card">
+                  <h3>זכאות להשתתפות</h3>
+                  <ul>
+                    <li>השתתפות בתחרות ובמסלולי הפרסים כפופה לרישום כשגריר/ה במערכת ולפעילות במהלך ימי הקמפיין.</li>
+                    <li>הארגון רשאי להגדיר תנאי סף, שיוך לקבוצות, או החרגת משתמשים שאינם עומדים בכללי הפעילות.</li>
+                    <li>רק עסקאות שנקלטו במערכת באופן תקין ושויכו בהתאם לכללי הקמפיין ייחשבו לצורך התחרות.</li>
+                  </ul>
+                </article>
+                <article class="legal-card">
+                  <h3>חישוב תוצאות וזכייה</h3>
+                  <ul>
+                    <li>הדירוג נקבע לפי טבלת הפרסים ומדרגות הפרס המעודכנות במערכת.</li>
+                    <li>הנהלת הקמפיין רשאית לקבוע האם הזכאות מבוססת על סכום גיוס, מספר עסקאות, או שילוב של שניהם.</li>
+                    <li>במקרה של פערי מידע, כפילויות, כשלי סליקה, ביטולים או עסקאות חוזרות, הכרעת הנהלת הקמפיין היא הקובעת.</li>
+                  </ul>
+                </article>
+                <article class="legal-card">
+                  <h3>עדכונים, שוויון ותיקונים</h3>
+                  <ul>
+                    <li>הדשבורד מתעדכן לפי נתוני המקור שהועלו, ולכן ייתכנו שינויים במהלך הקמפיין.</li>
+                    <li>במקרה של שוויון בין משתתפים, הארגון רשאי להפעיל כללי הכרעה משלימים.</li>
+                    <li>הארגון שומר לעצמו את הזכות לעדכן את התקנון, את מדרגות הפרסים או את מנגנון החישוב, בכפוף לדין ולהודעה מתאימה.</li>
+                  </ul>
+                </article>
               </div>
-              <div id="goals-board" class="analysis-shell"></div>
             </section>
 
-            <section class="dashboard-section">
-              <div class="section-head">
-                <h3>ולידציה של קבצי הקלט</h3>
-                <div id="validation-summary" class="text-small text-muted"></div>
+            <section id="page-privacy" class="page-shell">
+              <div class="legal-grid">
+                <article class="legal-card">
+                  <h2>מדיניות פרטיות</h2>
+                  <p>זהו נוסח עבודה ראשוני. לפני פרסום חיצוני מומלץ לאמת את הנוסח עם ייעוץ משפטי, אבטחת מידע ונהלי הארגון.</p>
+                </article>
+                <article class="legal-card">
+                  <h3>אילו נתונים עשויים להיקלט</h3>
+                  <ul>
+                    <li>שם תורם/ת, כתובת דוא"ל, סכום תרומה, זמן ביצוע, שיוך לשגריר/ה, סטטוס עסקה ושדות תפעוליים נוספים.</li>
+                    <li>במסכי הניהול ניתן לנתח את הנתונים לצורך תפעול, בקרה, תחרות, פרסים וקבלת החלטות.</li>
+                  </ul>
+                </article>
+                <article class="legal-card">
+                  <h3>מטרות השימוש</h3>
+                  <ul>
+                    <li>הצגת נתונים ניהוליים בזמן אמת.</li>
+                    <li>זיהוי מגמות גיוס, זוכים, שגרירים מובילים, תקלות וחריגות.</li>
+                    <li>השוואות בין קבצים, בין תקופות ובין מחזורי קמפיין שונים.</li>
+                  </ul>
+                </article>
+                <article class="legal-card">
+                  <h3>גישה והרשאות</h3>
+                  <ul>
+                    <li>העמודים הציבוריים נגישים למשתתפים ולמנהלים.</li>
+                    <li>הדשבורד הניהולי זמין רק למשתמשים מורשים לפי מייל שהוגדר מראש ובאמצעות סיסמה.</li>
+                    <li>לפני עלייה לאוויר יש להעביר את מנגנון הזיהוי לאימות שרת אמיתי ולא להסתמך על קוד צד־לקוח בלבד.</li>
+                  </ul>
+                </article>
+                <article class="legal-card">
+                  <h3>שמירת מידע ואבטחה</h3>
+                  <ul>
+                    <li>בגרסת הפיילוט המערכת עובדת מקומית ומקטינה את חשיפת המידע, אך עדיין יש לנהוג בזהירות בקבצי המקור.</li>
+                    <li>מומלץ להגדיר מדיניות שמירה, מחיקה, גיבוי והרשאות צפייה לפי תפקיד.</li>
+                    <li>בעתיד יש להוסיף שכבת Backend, ניהול משתמשים, ורישום פעולות לצורכי בקרה.</li>
+                  </ul>
+                </article>
               </div>
-              <div id="validation-board" class="analysis-shell"></div>
             </section>
 
-            <section class="dashboard-section">
-              <div class="section-head">
-                <h3>סיכום ניהולי</h3>
-                <div id="executive-summary" class="text-small text-muted"></div>
-              </div>
-              <div id="executive-board" class="analysis-shell"></div>
-            </section>
-
-            <section class="dashboard-section">
-              <div class="section-head">
-                <h3>איכות נתונים וסיכונים</h3>
-                <div id="quality-summary" class="text-small text-muted"></div>
-              </div>
-              <div id="quality-board" class="analysis-shell"></div>
-            </section>
-
-            <section class="dashboard-section">
-              <div class="section-head">
-                <h3>פילוח עסקאות ותורמים</h3>
-                <div id="segment-summary" class="text-small text-muted"></div>
-              </div>
-              <div id="segment-board" class="analysis-shell"></div>
-            </section>
-
-            <section class="dashboard-section">
-              <div class="section-head">
-                <h3>השוואה בין שני קבצים</h3>
-                <div id="comparison-summary" class="text-small text-muted"></div>
-              </div>
-              <div id="comparison-board" class="comparison-shell"></div>
-            </section>
-
-            <section class="dashboard-section">
-              <div class="section-head">
-                <h3>איור פרסים וזוכים חיים</h3>
-                <div id="prize-summary" class="text-small text-muted"></div>
-              </div>
-              <div id="prize-board" class="prize-shell"></div>
-            </section>
-
-            <section class="dashboard-section chart-frame">
-              <div class="chart-panel">
+            <section id="page-admin" class="page-shell">
+              <section id="admin-lock" class="admin-lock">
                 <div class="section-head">
-                  <h3>מגמת גיוס יומית</h3>
-                  <div id="daily-chart-summary" class="text-small text-muted"></div>
+                  <h3>כניסה לפאנל הניהול</h3>
+                  <div class="text-small text-muted">גישה מוגבלת למנהלים מורשים מראש לפי מייל וסיסמה.</div>
                 </div>
-                <div id="daily-chart"></div>
-              </div>
-              <div id="daily-tooltip" class="tooltip" role="status" aria-live="polite"></div>
-            </section>
-
-            <section class="dashboard-section chart-frame">
-              <div class="chart-panel">
-                <div class="section-head">
-                  <h3>מפת חום לגיוס לפי תאריך ושעה</h3>
-                  <div class="legend-row text-small text-muted">
-                    <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 217, 61, 0.2); border: 1px solid rgba(19, 23, 80, 0.14);"></span>נמוך</span>
-                    <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 217, 61, 0.95); border: 1px solid rgba(19, 23, 80, 0.14);"></span>גבוה</span>
+                <div class="admin-lock-grid">
+                  <div class="login-help">
+                    <div class="manager-only-note">
+                      הדשבורד הניהולי כולל פילוח מתקדם, שינוי תצוגות גרפיות, השוואה בין קבצים, ייצוא נתונים ותמונת מצב תפעולית.
+                    </div>
+                    <div class="manager-only-note">
+                      הערת אבטחה: בגרסה זו מדובר בשער גישה מקומי המבוסס צד־לקוח. לפני פרסום חיצוני חובה להעביר את האימות לשרת מאובטח.
+                    </div>
                   </div>
+                  <form id="login-form" class="login-card">
+                    <label class="form-label">
+                      מייל מנהל/ת
+                      <input id="login-email" class="form-control" type="email" placeholder="name@example.org" />
+                    </label>
+                    <label class="form-label">
+                      סיסמה
+                      <input id="login-password" class="form-control" type="password" placeholder="הקלד/י סיסמה" />
+                    </label>
+                    <button id="login-button" class="action-button" type="submit">כניסה לפאנל הניהול</button>
+                    <div id="login-message" class="login-message text-small"></div>
+                  </form>
                 </div>
-                <div id="heatmap-chart"></div>
-              </div>
-              <div id="heatmap-tooltip" class="tooltip" role="status" aria-live="polite"></div>
-            </section>
+              </section>
 
-            <section class="dashboard-section chart-frame">
-              <div class="chart-panel">
-                <div class="section-head">
-                  <h3>תנועת שגרירים לאורך ימי הפרויקט</h3>
-                  <div id="movement-summary" class="text-small text-muted"></div>
+              <div id="admin-content" class="admin-content" hidden>
+                <div class="dashboard-shell">
+                  <section class="hero">
+                    <article class="hero-panel">
+                      <div class="brand-layout">
+                        <div class="brand-row">
+                          <div class="brand-copy">
+                            <span class="brand-kicker">ממשק כחול־צהוב חי</span>
+                            <h1 class="hero-title">דשבורד הגיוס של אחים לסמל</h1>
+                            <p class="hero-subtitle">פילוח לפי תאריך, שעה, טווח שעות, יום פרויקט, שגריר/ה ותורם/ת, עם יכולת שינוי גרפים, השוואת קבצים ותמונת מצב ניהולית.</p>
+                          </div>
+                          <div class="logo-wrap">
+                            <img id="brand-logo" alt="לוגו אחים לסמל" />
+                          </div>
+                        </div>
+                        <div id="hero-badges" class="hero-badges"></div>
+                      </div>
+                    </article>
+
+                    <aside class="control-panel">
+                      <div class="section-head">
+                        <h3>קלטים ושליטה</h3>
+                        <div class="control-note text-muted">אפשר להחליף את קובץ העסקאות, קובץ ההשוואה וקובץ הפרסים.</div>
+                      </div>
+                      <div class="filters-grid">
+                        <label class="form-label">
+                          קובץ עסקאות
+                          <input id="csv-upload" class="form-control" type="file" accept=".csv,text/csv" />
+                        </label>
+                        <label class="form-label">
+                          קובץ השוואה
+                          <input id="compare-upload" class="form-control" type="file" accept=".csv,text/csv" />
+                        </label>
+                        <label class="form-label">
+                          קובץ פרסים
+                          <input id="prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" />
+                        </label>
+                        <label class="form-label">
+                          שגריר/ה
+                          <select id="ambassador-filter" class="form-select"></select>
+                        </label>
+                        <label class="form-label">
+                          יום פרויקט
+                          <select id="project-day-filter" class="form-select"></select>
+                        </label>
+                        <label class="form-label">
+                          תאריך מדויק
+                          <select id="date-exact" class="form-select"></select>
+                        </label>
+                        <label class="form-label">
+                          תאריך התחלה
+                          <input id="date-from" class="form-control" type="date" />
+                        </label>
+                        <label class="form-label">
+                          תאריך סיום
+                          <input id="date-to" class="form-control" type="date" />
+                        </label>
+                        <label class="form-label">
+                          שעה
+                          <select id="hour-filter" class="form-select"></select>
+                        </label>
+                        <label class="form-label">
+                          משעה
+                          <select id="hour-from-filter" class="form-select"></select>
+                        </label>
+                        <label class="form-label">
+                          עד שעה
+                          <select id="hour-to-filter" class="form-select"></select>
+                        </label>
+                        <label class="form-label">
+                          שם התורם/ת
+                          <input id="donor-filter" class="form-control" type="text" placeholder="חיפוש לפי שם תורם" />
+                        </label>
+                        <label class="form-label">
+                          סכום מינימלי
+                          <input id="amount-min-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 180" />
+                        </label>
+                        <label class="form-label">
+                          סכום מקסימלי
+                          <input id="amount-max-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 5000" />
+                        </label>
+                        <label class="form-label">
+                          יעד כולל
+                          <input id="goal-total" class="form-control" type="number" min="0" step="100" placeholder="למשל 1500000" />
+                        </label>
+                        <label class="form-label">
+                          יעד יומי
+                          <input id="goal-daily" class="form-control" type="number" min="0" step="100" placeholder="למשל 150000" />
+                        </label>
+                      </div>
+                      <div class="action-row">
+                        <button id="export-filtered" class="action-button" type="button">ייצוא הנתונים המסוננים</button>
+                        <button id="clear-compare" class="action-button secondary" type="button">ניקוי קובץ ההשוואה</button>
+                      </div>
+                      <div id="control-note" class="status-note text-small"></div>
+                    </aside>
+                  </section>
+
+                  <section id="metrics-grid" class="metric-grid" aria-label="מדדי סיכום"></section>
+
+                  <section class="dashboard-section">
+                    <div class="section-head">
+                      <h3>תצוגות גרפיות</h3>
+                      <div class="view-note text-small">מנהלים יכולים לשנות כאן את המדד שמוצג בכל גרף.</div>
+                    </div>
+                    <div class="graph-control-row">
+                      <label class="form-label">
+                        גרף יומי
+                        <select id="daily-metric-select" class="form-select">
+                          <option value="amount">סכום גיוס</option>
+                          <option value="count">מספר עסקאות</option>
+                          <option value="average">ממוצע לעסקה</option>
+                        </select>
+                      </label>
+                      <label class="form-label">
+                        מפת חום
+                        <select id="heatmap-metric-select" class="form-select">
+                          <option value="amount">סכום גיוס</option>
+                          <option value="count">מספר עסקאות</option>
+                        </select>
+                      </label>
+                      <label class="form-label">
+                        תנועת שגרירים
+                        <select id="movement-metric-select" class="form-select">
+                          <option value="amount">סכום גיוס</option>
+                          <option value="count">מספר עסקאות</option>
+                        </select>
+                      </label>
+                    </div>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-head">
+                      <h3>יעדים מול ביצוע</h3>
+                      <div id="goals-summary" class="text-small text-muted"></div>
+                    </div>
+                    <div id="goals-board" class="analysis-shell"></div>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-head">
+                      <h3>ולידציה של קבצי הקלט</h3>
+                      <div id="validation-summary" class="text-small text-muted"></div>
+                    </div>
+                    <div id="validation-board" class="analysis-shell"></div>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-head">
+                      <h3>סיכום ניהולי</h3>
+                      <div id="executive-summary" class="text-small text-muted"></div>
+                    </div>
+                    <div id="executive-board" class="analysis-shell"></div>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-head">
+                      <h3>איכות נתונים וסיכונים</h3>
+                      <div id="quality-summary" class="text-small text-muted"></div>
+                    </div>
+                    <div id="quality-board" class="analysis-shell"></div>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-head">
+                      <h3>פילוח עסקאות ותורמים</h3>
+                      <div id="segment-summary" class="text-small text-muted"></div>
+                    </div>
+                    <div id="segment-board" class="analysis-shell"></div>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-head">
+                      <h3>השוואה בין שני קבצים</h3>
+                      <div id="comparison-summary" class="text-small text-muted"></div>
+                    </div>
+                    <div id="comparison-board" class="comparison-shell"></div>
+                  </section>
+
+                  <section class="dashboard-section chart-frame">
+                    <div class="chart-panel">
+                      <div class="section-head">
+                        <h3>מגמת גיוס יומית</h3>
+                        <div id="daily-chart-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="daily-chart"></div>
+                    </div>
+                    <div id="daily-tooltip" class="tooltip" role="status" aria-live="polite"></div>
+                  </section>
+
+                  <section class="dashboard-section chart-frame">
+                    <div class="chart-panel">
+                      <div class="section-head">
+                        <h3>מפת חום לפי ימים ושעות</h3>
+                        <div class="legend-row text-small text-muted">
+                          <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 217, 61, 0.2); border: 1px solid rgba(19, 23, 80, 0.14);"></span>נמוך</span>
+                          <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 217, 61, 0.95); border: 1px solid rgba(19, 23, 80, 0.14);"></span>גבוה</span>
+                        </div>
+                      </div>
+                      <div id="heatmap-chart"></div>
+                    </div>
+                    <div id="heatmap-tooltip" class="tooltip" role="status" aria-live="polite"></div>
+                  </section>
+
+                  <section class="dashboard-section chart-frame">
+                    <div class="chart-panel">
+                      <div class="section-head">
+                        <h3>תנועת שגרירים לאורך ימי הפרויקט</h3>
+                        <div id="movement-summary" class="text-small text-muted"></div>
+                      </div>
+                      <div id="movement-chart"></div>
+                    </div>
+                    <div id="movement-tooltip" class="tooltip" role="status" aria-live="polite"></div>
+                  </section>
+
+                  <section class="dashboard-section">
+                    <div class="section-head">
+                      <h3>רשומות מסוננות</h3>
+                      <div id="table-summary" class="text-small text-muted"></div>
+                    </div>
+                    <div id="table-root" class="table-wrap"></div>
+                  </section>
                 </div>
-                <div id="movement-chart"></div>
               </div>
-              <div id="movement-tooltip" class="tooltip" role="status" aria-live="polite"></div>
-            </section>
-
-            <section class="dashboard-section">
-              <div class="section-head">
-                <h3>רשומות מסוננות</h3>
-                <div id="table-summary" class="text-small text-muted"></div>
-              </div>
-              <div id="table-root" class="table-wrap"></div>
             </section>
           </div>
-
           <script>
             (() => {
               const INITIAL_ROWS = __INITIAL_ROWS__;
               const INITIAL_META = __INITIAL_META__;
               const INITIAL_LOGO = __INITIAL_LOGO__;
               const INITIAL_PRIZES = __INITIAL_PRIZES__;
+              const ACCESS_CONTROL = __ACCESS_CONTROL__;
               const PRIZE_STORAGE_KEY = "yellow-dashboard.prize-model";
               const GOAL_STORAGE_KEY = "yellow-dashboard.goals";
+              const SESSION_STORAGE_KEY = "yellow-dashboard.manager-session";
               const XLSX_MODULE_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
               const root = document.getElementById("yellow-dashboard-root");
 
               const elements = {
+                topbarLogo: root.querySelector("#topbar-logo"),
                 logo: root.querySelector("#brand-logo"),
+                navButtons: Array.from(root.querySelectorAll("[data-page-target]")),
+                pagePrizes: root.querySelector("#page-prizes"),
+                pageRules: root.querySelector("#page-rules"),
+                pagePrivacy: root.querySelector("#page-privacy"),
+                pageAdmin: root.querySelector("#page-admin"),
+                sessionStatus: root.querySelector("#session-status"),
+                goAdminLogin: root.querySelector("#go-admin-login"),
+                logoutButton: root.querySelector("#logout-button"),
+                publicHeroBadges: root.querySelector("#public-hero-badges"),
+                adminLock: root.querySelector("#admin-lock"),
+                adminContent: root.querySelector("#admin-content"),
+                loginForm: root.querySelector("#login-form"),
+                loginEmail: root.querySelector("#login-email"),
+                loginPassword: root.querySelector("#login-password"),
+                loginMessage: root.querySelector("#login-message"),
                 heroBadges: root.querySelector("#hero-badges"),
                 controlNote: root.querySelector("#control-note"),
                 upload: root.querySelector("#csv-upload"),
@@ -1094,6 +1545,9 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                 prizeUpload: root.querySelector("#prize-upload"),
                 goalTotal: root.querySelector("#goal-total"),
                 goalDaily: root.querySelector("#goal-daily"),
+                dailyMetric: root.querySelector("#daily-metric-select"),
+                heatmapMetric: root.querySelector("#heatmap-metric-select"),
+                movementMetric: root.querySelector("#movement-metric-select"),
                 exportFiltered: root.querySelector("#export-filtered"),
                 clearCompare: root.querySelector("#clear-compare"),
                 ambassador: root.querySelector("#ambassador-filter"),
@@ -1149,6 +1603,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                 },
                 goals: readStoredGoals(),
                 prizeModel: readStoredPrizeModel() || INITIAL_PRIZES,
+                session: readStoredSession(),
                 filters: {
                   ambassador: "all",
                   projectDay: "all",
@@ -1161,6 +1616,14 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                   donor: "",
                   amountMin: "",
                   amountMax: "",
+                },
+                view: {
+                  dailyMetric: "amount",
+                  heatmapMetric: "amount",
+                  movementMetric: "amount",
+                },
+                ui: {
+                  page: "prizes",
                 },
               };
 
@@ -1216,6 +1679,86 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                   window.localStorage.setItem(GOAL_STORAGE_KEY, JSON.stringify(goals));
                 } catch (_error) {
                   return;
+                }
+              }
+
+              function readStoredSession() {
+                try {
+                  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+                  const parsed = raw ? JSON.parse(raw) : null;
+                  if (!parsed?.email) {
+                    return null;
+                  }
+                  const email = normalizeSearchToken(parsed.email);
+                  return ACCESS_CONTROL.managerEmails.map((value) => normalizeSearchToken(value)).includes(email)
+                    ? { email }
+                    : null;
+                } catch (_error) {
+                  return null;
+                }
+              }
+
+              function storeSession(email) {
+                state.session = { email };
+                try {
+                  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state.session));
+                } catch (_error) {
+                  return;
+                }
+              }
+
+              function clearSession() {
+                state.session = null;
+                try {
+                  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+                } catch (_error) {
+                  return;
+                }
+              }
+
+              function isManagerAuthenticated() {
+                return Boolean(state.session?.email);
+              }
+
+              function setLoginMessage(message, tone = "") {
+                elements.loginMessage.textContent = message;
+                elements.loginMessage.className = `login-message text-small${tone ? ` is-${tone}` : ""}`;
+              }
+
+              async function hashPassword(value) {
+                const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value || "")));
+                return Array.from(new Uint8Array(buffer))
+                  .map((item) => item.toString(16).padStart(2, "0"))
+                  .join("");
+              }
+
+              function setPage(page) {
+                const nextPage = page === "admin" || page === "rules" || page === "privacy" ? page : "prizes";
+                state.ui.page = nextPage;
+                const pageMap = {
+                  prizes: elements.pagePrizes,
+                  rules: elements.pageRules,
+                  privacy: elements.pagePrivacy,
+                  admin: elements.pageAdmin,
+                };
+                Object.entries(pageMap).forEach(([key, element]) => {
+                  element.classList.toggle("is-active", key === nextPage);
+                });
+                elements.navButtons.forEach((button) => {
+                  button.classList.toggle("is-active", button.dataset.pageTarget === nextPage);
+                });
+                refreshAccessUi();
+              }
+
+              function refreshAccessUi() {
+                const isManager = isManagerAuthenticated();
+                elements.sessionStatus.textContent = isManager ? `מחובר/ת כמנהל/ת: ${state.session.email}` : "מצב ניהול: אורח/ת";
+                elements.logoutButton.hidden = !isManager;
+                elements.goAdminLogin.hidden = isManager;
+                elements.adminLock.hidden = isManager;
+                elements.adminContent.hidden = !isManager;
+                if (state.ui.page === "admin" && !isManager) {
+                  setLoginMessage("יש להזין מייל מורשה וסיסמה כדי לצפות בדשבורד הניהולי.");
                 }
               }
 
@@ -1648,6 +2191,9 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                 elements.donor.value = state.filters.donor;
                 elements.amountMin.value = state.filters.amountMin;
                 elements.amountMax.value = state.filters.amountMax;
+                elements.dailyMetric.value = state.view.dailyMetric;
+                elements.heatmapMetric.value = state.view.heatmapMetric;
+                elements.movementMetric.value = state.view.movementMetric;
               }
 
               function syncFiltersFromInputs() {
@@ -1973,12 +2519,27 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                 elements.controlNote.textContent = `בסיס: ${state.sourceLabel} | חלון ברירת מחדל: ${state.meta.projectWindowLabel || "לא זוהה"} | מוצגות ${formatNumber(filteredRows.length)} עסקאות במסנן | פרסים מחושבים על ${formatNumber(prizeRows.length)} עסקאות בטווח הזמן הנבחר${compareText}${getActiveFilterSummary()}`;
               }
 
+              function renderPublicHeroBadges(prizeRows) {
+                const leaderboard = buildLeaderboard(prizeRows);
+                const topLeader = leaderboard[0];
+                const publicBadges = [
+                  `<span class="hero-badge">חלון פרויקט: ${escapeHtml(state.meta.projectWindowLabel || "לא זוהה")}</span>`,
+                  `<span class="hero-badge">${escapeHtml(formatNumber(leaderboard.length))} שגרירים מדורגים כרגע</span>`,
+                  `<span class="hero-badge">בסיס פרסים: ${escapeHtml(formatAmount(sumAmount(prizeRows)))}</span>`,
+                ];
+                if (topLeader) {
+                  publicBadges.push(`<span class="hero-badge">מוביל/ה כרגע: ${escapeHtml(topLeader.ambassador)} · ${escapeHtml(formatAmount(topLeader.total))}</span>`);
+                }
+                elements.publicHeroBadges.innerHTML = publicBadges.join("");
+              }
+
               function renderHeroBadges(filteredRows, prizeRows, compareRows) {
                 const filteredTotal = sumAmount(filteredRows);
                 const prizeTotal = sumAmount(prizeRows);
                 const ambassadorCount = new Set(prizeRows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך")).size;
 
                 elements.logo.src = INITIAL_LOGO;
+                elements.topbarLogo.src = INITIAL_LOGO;
                 const badges = [
                   `<span class="hero-badge">₪ ${escapeHtml(formatNumber(Math.round(filteredTotal)).replace("₪", "").trim())} בגזרת התצוגה</span>`,
                   `<span class="hero-badge">${escapeHtml(formatNumber(ambassadorCount))} שגרירים פעילים בטווח</span>`,
@@ -2591,6 +3152,9 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                   return;
                 }
 
+                const metricMode = state.view.dailyMetric;
+                const metricLabel = metricMode === "count" ? "מספר עסקאות" : metricMode === "average" ? "ממוצע לעסקה" : "סכום גיוס";
+                const formatMetricValue = (value) => (metricMode === "count" ? formatNumber(Math.round(value)) : formatAmount(value));
                 const aggregates = state.meta.uniqueDates
                   .filter((date) => !state.filters.dateFrom || date >= state.filters.dateFrom)
                   .filter((date) => !state.filters.dateTo || date <= state.filters.dateTo)
@@ -2600,16 +3164,19 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                       date,
                       total: sumAmount(dayRows),
                       count: dayRows.length,
+                      average: dayRows.length ? sumAmount(dayRows) / dayRows.length : 0,
                     };
                   })
                   .filter((entry) => entry.count > 0);
+
+                const getValue = (entry) => (metricMode === "count" ? entry.count : metricMode === "average" ? entry.average : entry.total);
 
                 const width = 920;
                 const height = 280;
                 const margin = { top: 24, right: 16, bottom: 60, left: 76 };
                 const plotWidth = width - margin.left - margin.right;
                 const plotHeight = height - margin.top - margin.bottom;
-                const maxValue = Math.max(...aggregates.map((entry) => entry.total), 1);
+                const maxValue = Math.max(...aggregates.map((entry) => getValue(entry)), 1);
                 const barWidth = plotWidth / Math.max(aggregates.length, 1) - 10;
                 const baseline = margin.top + plotHeight;
 
@@ -2629,7 +3196,8 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
 
                 aggregates.forEach((entry, index) => {
                   const x = margin.left + index * (barWidth + 10) + 5;
-                  const heightValue = (entry.total / maxValue) * plotHeight;
+                  const metricValue = getValue(entry);
+                  const heightValue = (metricValue / maxValue) * plotHeight;
                   const y = baseline - heightValue;
                   const bar = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
                   bar.setAttribute("x", String(x));
@@ -2639,7 +3207,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                   bar.setAttribute("rx", "8");
                   bar.setAttribute("fill", "rgba(28,35,104,0.94)");
                   bar.classList.add("clickable-cell");
-                  const tooltipHtml = `<strong>${escapeHtml(formatDate(entry.date))}</strong><br>${escapeHtml(formatAmount(entry.total))}<br>${escapeHtml(formatNumber(entry.count))} עסקאות`;
+                  const tooltipHtml = `<strong>${escapeHtml(formatDate(entry.date))}</strong><br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(metricValue))}<br>${escapeHtml(formatNumber(entry.count))} עסקאות`;
                   bar.addEventListener("mouseenter", (event) => showTooltip(elements.dailyChart, elements.dailyTooltip, tooltipHtml, event.clientX, event.clientY));
                   bar.addEventListener("mousemove", (event) => showTooltip(elements.dailyChart, elements.dailyTooltip, tooltipHtml, event.clientX, event.clientY));
                   bar.addEventListener("mouseleave", () => hideTooltip(elements.dailyTooltip));
@@ -2660,8 +3228,8 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
 
                 elements.dailyChart.innerHTML = "";
                 elements.dailyChart.appendChild(svgNode);
-                const bestDay = [...aggregates].sort((left, right) => right.total - left.total)[0];
-                elements.dailySummary.textContent = bestDay ? `שיא יומי: ${formatDate(bestDay.date)} עם ${formatAmount(bestDay.total)}` : "";
+                const bestDay = [...aggregates].sort((left, right) => getValue(right) - getValue(left))[0];
+                elements.dailySummary.textContent = bestDay ? `${metricLabel}: ${formatDate(bestDay.date)} · ${formatMetricValue(getValue(bestDay))}` : "";
               }
 
               function renderHeatmap(rows) {
@@ -2673,11 +3241,14 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                   return;
                 }
 
+                const metricMode = state.view.heatmapMetric;
+                const metricLabel = metricMode === "count" ? "מספר עסקאות" : "סכום גיוס";
+                const formatMetricValue = (value) => (metricMode === "count" ? formatNumber(Math.round(value)) : formatAmount(value));
                 const hours = Array.from({ length: 24 }, (_, hour) => hour);
                 const aggregates = new Map();
                 rows.forEach((row) => {
                   const key = `${row.date}|${row.hour}`;
-                  aggregates.set(key, (aggregates.get(key) || 0) + row.amount);
+                  aggregates.set(key, (aggregates.get(key) || 0) + (metricMode === "count" ? 1 : row.amount));
                 });
 
                 const maxValue = Math.max(...aggregates.values(), 1);
@@ -2722,7 +3293,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                     cell.setAttribute("fill-opacity", value ? String(0.14 + intensity * 0.86) : "0.08");
                     cell.setAttribute("stroke", "rgba(19,23,80,0.08)");
                     cell.classList.add("clickable-cell");
-                    const tooltipHtml = `<strong>${escapeHtml(formatDate(date))}</strong><br>${String(hour).padStart(2, "0")}:00<br>${escapeHtml(formatAmount(value))}`;
+                    const tooltipHtml = `<strong>${escapeHtml(formatDate(date))}</strong><br>${String(hour).padStart(2, "0")}:00<br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(value))}`;
                     cell.addEventListener("mouseenter", (event) => showTooltip(elements.heatmapChart, elements.heatmapTooltip, tooltipHtml, event.clientX, event.clientY));
                     cell.addEventListener("mousemove", (event) => showTooltip(elements.heatmapChart, elements.heatmapTooltip, tooltipHtml, event.clientX, event.clientY));
                     cell.addEventListener("mouseleave", () => hideTooltip(elements.heatmapTooltip));
@@ -2746,6 +3317,9 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                 const projectDates = state.meta.projectDates.filter(
                   (date) => (!state.filters.dateFrom || date >= state.filters.dateFrom) && (!state.filters.dateTo || date <= state.filters.dateTo)
                 );
+                const metricMode = state.view.movementMetric;
+                const metricLabel = metricMode === "count" ? "מספר עסקאות" : "סכום גיוס";
+                const formatMetricValue = (value) => (metricMode === "count" ? formatNumber(Math.round(value)) : formatAmount(value));
 
                 if (!focusRows.length || !projectDates.length) {
                   elements.movementChart.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור המסנן הנוכחי.</div>`;
@@ -2758,7 +3332,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                   if (!row.projectDay || row.ambassador === "ללא שיוך") {
                     return;
                   }
-                  totalsByAmbassador.set(row.ambassador, (totalsByAmbassador.get(row.ambassador) || 0) + row.amount);
+                  totalsByAmbassador.set(row.ambassador, (totalsByAmbassador.get(row.ambassador) || 0) + (metricMode === "count" ? 1 : row.amount));
                 });
 
                 const selectedAmbassadors =
@@ -2781,7 +3355,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                     return;
                   }
                   const key = `${row.ambassador}|${row.date}`;
-                  matrixValues.set(key, (matrixValues.get(key) || 0) + row.amount);
+                  matrixValues.set(key, (matrixValues.get(key) || 0) + (metricMode === "count" ? 1 : row.amount));
                 });
 
                 const maxValue = Math.max(...matrixValues.values(), 1);
@@ -2823,7 +3397,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                     rect.setAttribute("fill", "rgba(28,35,104,1)");
                     rect.setAttribute("fill-opacity", value ? String(0.14 + intensity * 0.86) : "0.08");
                     rect.classList.add("clickable-cell");
-                    const tooltipHtml = `<strong>${escapeHtml(ambassador)}</strong><br>${escapeHtml(formatDate(date))}<br>${escapeHtml(formatAmount(value))}`;
+                    const tooltipHtml = `<strong>${escapeHtml(ambassador)}</strong><br>${escapeHtml(formatDate(date))}<br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(value))}`;
                     rect.addEventListener("mouseenter", (event) => showTooltip(elements.movementChart, elements.movementTooltip, tooltipHtml, event.clientX, event.clientY));
                     rect.addEventListener("mousemove", (event) => showTooltip(elements.movementChart, elements.movementTooltip, tooltipHtml, event.clientX, event.clientY));
                     rect.addEventListener("mouseleave", () => hideTooltip(elements.movementTooltip));
@@ -2842,8 +3416,8 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                 elements.movementChart.appendChild(svgNode);
                 elements.movementSummary.textContent =
                   state.filters.ambassador === "all"
-                    ? "מוצגים 12 השגרירים המובילים לפי הגיוס במסנן הנוכחי"
-                    : `מוצגת תנועת ${state.filters.ambassador}`;
+                    ? `מוצגים 12 השגרירים המובילים לפי ${metricLabel} במסנן הנוכחי`
+                    : `מוצגת תנועת ${state.filters.ambassador} לפי ${metricLabel}`;
               }
 
               function renderTable(rows) {
@@ -2937,10 +3511,15 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
 
               function renderAll() {
                 syncFiltersFromInputs();
+                state.view.dailyMetric = elements.dailyMetric.value;
+                state.view.heatmapMetric = elements.heatmapMetric.value;
+                state.view.movementMetric = elements.movementMetric.value;
                 const filteredRows = getFilteredRows();
                 const compareRows = getComparisonRows();
                 const prizeRows = getPrizeScopeRows();
+                refreshAccessUi();
                 setControlNote(filteredRows, prizeRows);
+                renderPublicHeroBadges(prizeRows);
                 renderHeroBadges(filteredRows, prizeRows, compareRows);
                 renderMetrics(filteredRows);
                 renderGoalsBoard(filteredRows);
@@ -2957,6 +3536,54 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
               }
 
               function bindEvents() {
+                elements.navButtons.forEach((button) => {
+                  button.addEventListener("click", () => {
+                    const targetPage = button.dataset.pageTarget || "prizes";
+                    setPage(targetPage);
+                    if (targetPage === "admin" && !isManagerAuthenticated()) {
+                      elements.loginEmail.focus();
+                    }
+                  });
+                });
+
+                elements.goAdminLogin.addEventListener("click", () => {
+                  setPage("admin");
+                  elements.loginEmail.focus();
+                });
+
+                elements.logoutButton.addEventListener("click", () => {
+                  clearSession();
+                  elements.loginPassword.value = "";
+                  setLoginMessage("");
+                  setPage("prizes");
+                  renderAll();
+                });
+
+                elements.loginForm.addEventListener("submit", async (event) => {
+                  event.preventDefault();
+                  const email = normalizeSearchToken(elements.loginEmail.value);
+                  const password = elements.loginPassword.value;
+                  const allowedEmails = ACCESS_CONTROL.managerEmails.map((value) => normalizeSearchToken(value));
+                  if (!email || !password) {
+                    setLoginMessage("יש למלא גם מייל וגם סיסמה.", "error");
+                    return;
+                  }
+                  if (!allowedEmails.includes(email)) {
+                    setLoginMessage("המייל שהוזן אינו מורשה לגישה לפאנל הניהול.", "error");
+                    return;
+                  }
+                  const passwordHash = await hashPassword(password);
+                  if (passwordHash !== ACCESS_CONTROL.adminPasswordHash) {
+                    setLoginMessage("הסיסמה שגויה. נסו שוב.", "error");
+                    return;
+                  }
+                  storeSession(email);
+                  elements.loginPassword.value = "";
+                  setLoginMessage("הכניסה הצליחה. הדשבורד הניהולי נפתח.", "success");
+                  setPage("admin");
+                  renderAll();
+                });
+
                 [
                   elements.ambassador,
                   elements.projectDay,
@@ -2969,6 +3596,9 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
                   elements.donor,
                   elements.amountMin,
                   elements.amountMax,
+                  elements.dailyMetric,
+                  elements.heatmapMetric,
+                  elements.movementMetric,
                 ].forEach((element) => {
                   element.addEventListener("change", renderAll);
                   if (element.tagName === "INPUT") {
@@ -3077,6 +3707,8 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
               };
               state.prizeModel = normalizePrizeModel(state.prizeModel);
               resetFilterOptions();
+              setPage(state.session ? "admin" : "prizes");
+              setLoginMessage("");
               bindEvents();
               renderAll();
             })();
@@ -3090,6 +3722,7 @@ def build_fragment(rows: list[dict], meta: dict, logo_data_uri: str, prize_model
         .replace("__INITIAL_META__", meta_json)
         .replace("__INITIAL_LOGO__", logo_json)
         .replace("__INITIAL_PRIZES__", prize_json)
+        .replace("__ACCESS_CONTROL__", access_json)
     )
 
 
