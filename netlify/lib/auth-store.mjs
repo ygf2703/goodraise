@@ -202,8 +202,18 @@ function createBlobStore() {
   };
 }
 
+function isNetlifyRuntime() {
+  return Boolean(
+    process.env.NETLIFY_LOCAL ||
+      process.env.NETLIFY ||
+      process.env.SITE_ID ||
+      process.env.URL ||
+      process.env.SITE_NAME,
+  );
+}
+
 function getPersistence() {
-  if (process.env.NETLIFY || process.env.NETLIFY_LOCAL) {
+  if (isNetlifyRuntime()) {
     return createBlobStore();
   }
 
