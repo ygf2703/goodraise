@@ -180,7 +180,17 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
     prize_json = json.dumps(prize_model, ensure_ascii=False, separators=(",", ":"))
     access_json = json.dumps(
         {
-            "managerEmails": ["noamfrostig@gmail.com"],
+            "managerEmails": [
+                "noamfrostig@gmail.com",
+                "themoti@gmail.com",
+                "Moranmta@gmail.com",
+                "4337579@gmail.com",
+                "rasherov@gmail.com",
+                "Yafit.neveshalev@gmail.com",
+                "Yovelk11@gmail.com",
+                "Lalobenny@gmail.com",
+                "aharonayal@gmail.com",
+            ],
             "adminPasswordHash": "aaf587976eeb78f291c13743195dd667cbd1a175bbee14f7a8712b37ef6c1b47",
         },
         ensure_ascii=False,
