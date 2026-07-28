@@ -18,17 +18,14 @@ import pandas as pd
 ROOT_DIR = Path(__file__).resolve().parent.parent
 WORK_DIR = Path(os.getenv("YELLOW_DASHBOARD_WORK_DIR", str(ROOT_DIR / "work"))).resolve()
 ASSETS_DIR = WORK_DIR / "assets"
-CONFIG_DIR = WORK_DIR / "config"
 SAMPLES_DIR = WORK_DIR / "samples"
 SOURCE_CSV = Path(os.getenv("YELLOW_DASHBOARD_SOURCE_CSV", str(WORK_DIR / "source.csv"))).resolve()
 SAMPLE_SOURCE_CSV = Path(os.getenv("YELLOW_DASHBOARD_SAMPLE_SOURCE_CSV", str(SAMPLES_DIR / "sample-source.csv"))).resolve()
 PRIZES_XLSX = Path(os.getenv("YELLOW_DASHBOARD_PRIZES_XLSX", str(WORK_DIR / "prizes.xlsx"))).resolve()
 PRIZES_CSV = Path(os.getenv("YELLOW_DASHBOARD_PRIZES_CSV", str(WORK_DIR / "prizes.csv"))).resolve()
-ACCESS_CONTROL_PATH = Path(
-    os.getenv("YELLOW_DASHBOARD_ACCESS_CONTROL_JSON", str(CONFIG_DIR / "dashboard-access.local.json"))
-).resolve()
 ORG_LOGO_PATH = ASSETS_DIR / "achim-lasemel-logo.png"
 CAMPAIGN_LOGO_PATH = ASSETS_DIR / "osim-tov-betzahov-logo.png"
+BACKDROP_PATH = ASSETS_DIR / "dashboard-backdrop.png"
 LEGACY_LOGO_PATH = WORK_DIR / "brand-logo.png"
 OUTPUTS_DIR = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_DIR", str(ROOT_DIR / "outputs"))).resolve()
 VIS_DIR = Path(os.getenv("YELLOW_DASHBOARD_VIS_DIR", str(OUTPUTS_DIR / ".render-cache"))).resolve()
@@ -56,21 +53,6 @@ DEFAULT_RENDER_SCRIPT = (
 RENDER_SCRIPT = Path(os.getenv("YELLOW_DASHBOARD_RENDER_SCRIPT", str(DEFAULT_RENDER_SCRIPT))).resolve()
 PYTHON_EXE = Path(os.getenv("YELLOW_DASHBOARD_PYTHON_EXE", sys.executable)).resolve()
 DATE_TIME_FORMAT = "%d/%m/%y %H:%M"
-DEFAULT_ACCESS_CONTROL = {
-    "managerEmails": [
-        "noamfrostig@gmail.com",
-        "themoti@gmail.com",
-        "Moranmta@gmail.com",
-        "4337579@gmail.com",
-        "rasherov@gmail.com",
-        "shaywolf251996@gmail.com",
-        "Yafit.neveshalev@gmail.com",
-        "Yovelk11@gmail.com",
-        "Lalobenny@gmail.com",
-        "aharonayal@gmail.com",
-    ],
-    "adminPasswordHash": "aaf587976eeb78f291c13743195dd667cbd1a175bbee14f7a8712b37ef6c1b47",
-}
 
 
 def parse_amount(value: str) -> float:
@@ -224,37 +206,6 @@ def normalize_text(value: object) -> str:
     return str(value).strip()
 
 
-def load_access_control() -> dict:
-    access_control = dict(DEFAULT_ACCESS_CONTROL)
-
-    if ACCESS_CONTROL_PATH.exists():
-        try:
-            config_payload = json.loads(ACCESS_CONTROL_PATH.read_text(encoding="utf-8"))
-            file_emails = config_payload.get("managerEmails")
-            file_password_hash = config_payload.get("adminPasswordHash")
-            if isinstance(file_emails, list) and file_emails:
-                access_control["managerEmails"] = [str(email).strip() for email in file_emails if str(email).strip()]
-            if isinstance(file_password_hash, str) and file_password_hash.strip():
-                access_control["adminPasswordHash"] = file_password_hash.strip()
-        except json.JSONDecodeError:
-            pass
-
-    env_emails = os.getenv("YELLOW_DASHBOARD_MANAGER_EMAILS", "").strip()
-    if env_emails:
-        try:
-            parsed_emails = json.loads(env_emails)
-            if isinstance(parsed_emails, list) and parsed_emails:
-                access_control["managerEmails"] = [str(email).strip() for email in parsed_emails if str(email).strip()]
-        except json.JSONDecodeError:
-            access_control["managerEmails"] = [email.strip() for email in env_emails.split(",") if email.strip()]
-
-    env_password_hash = os.getenv("YELLOW_DASHBOARD_ADMIN_PASSWORD_HASH", "").strip()
-    if env_password_hash:
-        access_control["adminPasswordHash"] = env_password_hash
-
-    return access_control
-
-
 def load_prize_model() -> dict:
     if PRIZES_XLSX.exists():
         df = pd.read_excel(PRIZES_XLSX)
@@ -319,13 +270,31 @@ def load_prize_model() -> dict:
     }
 
 
-def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaign_logo_data_uri: str, prize_model: dict) -> str:
+def build_fragment(
+    rows: list[dict],
+    meta: dict,
+    org_logo_data_uri: str,
+    campaign_logo_data_uri: str,
+    backdrop_data_uri: str,
+    prize_model: dict,
+) -> str:
     rows_json = json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
     meta_json = json.dumps(meta, ensure_ascii=False, separators=(",", ":"))
     org_logo_json = json.dumps(org_logo_data_uri, ensure_ascii=False)
     campaign_logo_json = json.dumps(campaign_logo_data_uri, ensure_ascii=False)
+    backdrop_json = json.dumps(backdrop_data_uri, ensure_ascii=False)
     prize_json = json.dumps(prize_model, ensure_ascii=False, separators=(",", ":"))
-    access_json = json.dumps(load_access_control(), ensure_ascii=False, separators=(",", ":"))
+    auth_config_json = json.dumps(
+        {
+            "mode": "backend",
+            "statusEndpoint": "/api/auth/status",
+            "loginEndpoint": "/api/auth/login",
+            "setupEndpoint": "/api/auth/setup",
+            "logoutEndpoint": "/api/auth/logout",
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
 
     template = textwrap.dedent(
         """
@@ -365,15 +334,21 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               --shadow-card: 0 12px 30px rgba(11, 20, 53, 0.08);
               --brand-pattern-campaign: none;
               --brand-pattern-organization: none;
+              --dashboard-backdrop: none;
               position: relative;
               isolation: isolate;
               color: var(--graphite);
               font-family: "Assistant", Arial, sans-serif;
               font-size: var(--font-size-base);
               background:
-                radial-gradient(circle at top left, rgba(255, 214, 41, 0.18), transparent 24rem),
-                radial-gradient(circle at top right, rgba(17, 29, 74, 0.08), transparent 28rem),
+                linear-gradient(180deg, rgba(246, 247, 250, 0.84), rgba(246, 247, 250, 0.96)),
+                radial-gradient(circle at top left, rgba(255, 214, 41, 0.16), transparent 24rem),
+                radial-gradient(circle at top right, rgba(17, 29, 74, 0.07), transparent 28rem),
+                var(--dashboard-backdrop),
                 linear-gradient(180deg, rgba(17, 29, 74, 0.05), var(--off-white) 18%);
+              background-size: auto, auto, auto, cover, auto;
+              background-position: center, top left, top right, center top, center;
+              background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
               padding: var(--space-4);
               min-height: 100%;
             }
@@ -530,6 +505,11 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               flex-wrap: wrap;
             }
 
+            #yellow-dashboard-root .topbar-brand {
+              justify-content: flex-end;
+              text-align: right;
+            }
+
             #yellow-dashboard-root .brand-logo-cluster,
             #yellow-dashboard-root .public-brand-cluster,
             #yellow-dashboard-root .brand-command-logos,
@@ -553,9 +533,11 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
             }
 
             #yellow-dashboard-root .topbar-logo {
-              height: 48px;
+              height: 62px;
               width: auto;
-              max-width: 110px;
+              max-width: 144px;
+              transform: scale(1.55);
+              transform-origin: center;
             }
 
             #yellow-dashboard-root .brand-divider {
@@ -781,8 +763,8 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
             }
 
             #yellow-dashboard-root .public-hero-grid {
-              grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
-              align-items: center;
+              grid-template-columns: minmax(0, 1fr);
+              align-items: start;
             }
 
             #yellow-dashboard-root .public-hero-copy,
@@ -790,6 +772,12 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
             #yellow-dashboard-root .login-copy {
               display: grid;
               gap: var(--space-4);
+            }
+
+            #yellow-dashboard-root .public-hero-copy {
+              min-width: 0;
+              position: relative;
+              z-index: 1;
             }
 
             #yellow-dashboard-root .brand-kicker {
@@ -814,6 +802,8 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
             #yellow-dashboard-root .public-hero-title {
               color: var(--white);
+              max-width: 11ch;
+              font-size: clamp(2.2rem, 4vw, 4.25rem);
             }
 
             #yellow-dashboard-root .hero-subtitle,
@@ -825,10 +815,92 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               line-height: 1.75;
             }
 
-            #yellow-dashboard-root .public-hero-brand {
+            #yellow-dashboard-root .public-hero-watermark {
+              position: absolute;
+              inset-inline-start: var(--space-6);
+              inset-block-start: 50%;
+              transform: translateY(-50%);
+              width: clamp(180px, 18vw, 280px);
+              opacity: 0.4;
+              pointer-events: none;
+              z-index: 0;
+            }
+
+            #yellow-dashboard-root .public-hero-watermark img {
+              width: 100%;
+              height: auto;
+              display: block;
+              object-fit: contain;
+            }
+
+            #yellow-dashboard-root .public-badges,
+            #yellow-dashboard-root .public-snapshot-grid {
               display: grid;
-              justify-items: end;
-              gap: var(--space-4);
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+              align-items: stretch;
+              gap: var(--space-3);
+            }
+
+            #yellow-dashboard-root .public-snapshot-grid {
+              margin-top: var(--space-2);
+            }
+
+            #yellow-dashboard-root .public-snapshot-card {
+              display: grid;
+              gap: var(--space-2);
+              min-height: 134px;
+              padding: 1rem 1.1rem;
+              border-radius: var(--radius-xl);
+              background: rgba(255, 255, 255, 0.09);
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            }
+
+            #yellow-dashboard-root .public-snapshot-card--primary {
+              background: linear-gradient(180deg, rgba(255, 214, 41, 0.16), rgba(255, 214, 41, 0.08));
+              border-color: rgba(255, 214, 41, 0.22);
+            }
+
+            #yellow-dashboard-root .public-snapshot-card--wide {
+              grid-column: span 2;
+            }
+
+            #yellow-dashboard-root .public-snapshot-label {
+              color: rgba(255, 255, 255, 0.7);
+              font-size: 0.88rem;
+              font-weight: 600;
+            }
+
+            #yellow-dashboard-root .public-snapshot-value {
+              color: var(--white);
+              font-size: clamp(1.3rem, 2vw, 2rem);
+              font-weight: 800;
+              line-height: 1.15;
+              font-variant-numeric: tabular-nums;
+            }
+
+            #yellow-dashboard-root .public-snapshot-card--primary .public-snapshot-value {
+              color: var(--yolk-200);
+              font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+            }
+
+            #yellow-dashboard-root .public-snapshot-meta {
+              color: rgba(255, 255, 255, 0.82);
+              font-size: 0.92rem;
+              line-height: 1.5;
+            }
+
+            #yellow-dashboard-root .public-snapshot-status {
+              display: inline-flex;
+              width: fit-content;
+              align-items: center;
+              gap: 0.45rem;
+              padding: 0.42rem 0.78rem;
+              border-radius: 999px;
+              background: rgba(255, 255, 255, 0.08);
+              color: var(--white);
+              font-size: 0.86rem;
+              font-weight: 700;
             }
 
             #yellow-dashboard-root .public-logo-frame,
@@ -836,20 +908,11 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
             #yellow-dashboard-root .login-logo-frame {
               display: grid;
               place-items: center;
-              padding: var(--space-4);
-              background: rgba(255, 255, 255, 0.96);
+              padding: var(--space-2);
+              background: transparent;
               border-radius: var(--radius-lg);
-              box-shadow: 0 16px 30px rgba(7, 13, 36, 0.18);
-            }
-
-            #yellow-dashboard-root .public-logo-frame--campaign,
-            #yellow-dashboard-root .logo-wrap--campaign {
-              min-height: 122px;
-            }
-
-            #yellow-dashboard-root .public-logo-frame--organization,
-            #yellow-dashboard-root .logo-wrap--organization {
-              min-height: 96px;
+              box-shadow: none;
+              border: 1px solid rgba(255, 255, 255, 0.08);
             }
 
             #yellow-dashboard-root .public-logo-frame img,
@@ -1188,6 +1251,13 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
             #yellow-dashboard-root .chart-card {
               display: grid;
               gap: var(--space-4);
+              background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 247, 250, 0.94)),
+                var(--white);
+              border: 1px solid rgba(17, 29, 74, 0.08);
+              box-shadow:
+                0 20px 42px rgba(11, 20, 53, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.74);
             }
 
             #yellow-dashboard-root .chart-surface {
@@ -1195,6 +1265,13 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               min-height: 320px;
               overflow-x: auto;
               overflow-y: hidden;
+              border-radius: var(--radius-lg);
+              border: 1px solid rgba(17, 29, 74, 0.08);
+              background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(238, 240, 245, 0.92)),
+                var(--white);
+              padding: var(--space-4);
+              box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
             }
 
             #yellow-dashboard-root .chart-surface--wide {
@@ -1207,6 +1284,77 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
             #yellow-dashboard-root .metric-toolbar {
               justify-content: flex-end;
+            }
+
+            #yellow-dashboard-root .chart-header-copy {
+              display: grid;
+              gap: 0.45rem;
+            }
+
+            #yellow-dashboard-root .chart-overline {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.45rem;
+              color: var(--navy-700);
+              font-size: 0.8rem;
+              font-weight: 700;
+              letter-spacing: 0.03em;
+            }
+
+            #yellow-dashboard-root .chart-overline::before {
+              content: "";
+              inline-size: 0.7rem;
+              block-size: 0.7rem;
+              border-radius: 999px;
+              background: var(--yolk-500);
+              box-shadow: 0 0 0 4px rgba(255, 214, 41, 0.2);
+            }
+
+            #yellow-dashboard-root .chart-insights {
+              display: flex;
+              align-items: center;
+              gap: var(--space-3);
+              flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root .insight-chip {
+              display: inline-flex;
+              align-items: center;
+              gap: 0.45rem;
+              min-height: 2rem;
+              padding: 0.45rem 0.8rem;
+              border-radius: 999px;
+              border: 1px solid rgba(17, 29, 74, 0.1);
+              background: rgba(17, 29, 74, 0.04);
+              color: var(--navy-900);
+              font-size: 0.84rem;
+              font-weight: 600;
+              line-height: 1.2;
+            }
+
+            #yellow-dashboard-root .insight-chip strong {
+              color: var(--navy-950);
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .insight-chip--accent {
+              background: rgba(255, 214, 41, 0.22);
+              border-color: rgba(244, 201, 0, 0.42);
+            }
+
+            #yellow-dashboard-root .insight-chip--dark {
+              background: rgba(17, 29, 74, 0.94);
+              border-color: rgba(17, 29, 74, 0.94);
+              color: rgba(255, 255, 255, 0.92);
+            }
+
+            #yellow-dashboard-root .insight-chip--dark strong {
+              color: var(--yolk-500);
+            }
+
+            #yellow-dashboard-root .chart-footnote {
+              color: var(--text-muted);
+              font-size: 0.82rem;
             }
 
             #yellow-dashboard-root .metric-toggle {
@@ -1637,13 +1785,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               border-inline-start-color: var(--yolk-500);
             }
 
-            #yellow-dashboard-root .manager-only-note {
-              padding: var(--space-4);
-              border-radius: var(--radius-lg);
-              background: rgba(255, 255, 255, 0.08);
-              border: 1px solid rgba(255, 255, 255, 0.08);
-              color: rgba(255, 255, 255, 0.86);
-              line-height: 1.75;
+            #yellow-dashboard-root .login-message.is-warning {
+              color: var(--navy-950);
+              background: rgba(255, 214, 41, 0.12);
+              border-inline-start-color: var(--yolk-500);
             }
 
             #yellow-dashboard-root .public-panel-header {
@@ -1666,6 +1811,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               grid-template-columns: minmax(0, 1.4fr) auto;
               gap: var(--space-4);
               align-items: center;
+            }
+
+            #yellow-dashboard-root .manager-entry-card {
+              display: none !important;
             }
 
             #yellow-dashboard-root .manager-entry-copy h3 {
@@ -1750,6 +1899,14 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 grid-template-columns: repeat(2, minmax(0, 1fr));
               }
 
+              #yellow-dashboard-root .public-snapshot-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+
+              #yellow-dashboard-root .public-snapshot-card--wide {
+                grid-column: span 2;
+              }
+
               #yellow-dashboard-root .public-hero-brand,
               #yellow-dashboard-root .brand-command-logos {
                 justify-items: start;
@@ -1764,6 +1921,12 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
             @media (max-width: 1024px) {
               #yellow-dashboard-root {
                 padding: var(--space-3);
+              }
+
+              #yellow-dashboard-root .public-hero-watermark {
+                width: 180px;
+                inset-inline-start: var(--space-4);
+                opacity: 0.28;
               }
 
               #yellow-dashboard-root .filters-grid,
@@ -1818,7 +1981,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               }
 
               #yellow-dashboard-root .brand-logo-cluster {
-                justify-content: flex-start;
+                justify-content: flex-end;
                 gap: var(--space-3);
               }
 
@@ -1843,9 +2006,14 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
               #yellow-dashboard-root .hero-meta-grid,
               #yellow-dashboard-root .metric-grid,
+              #yellow-dashboard-root .public-snapshot-grid,
               #yellow-dashboard-root .filters-grid,
               #yellow-dashboard-root .filters-grid.filters-grid--three {
                 grid-template-columns: 1fr;
+              }
+
+              #yellow-dashboard-root .public-snapshot-card--wide {
+                grid-column: span 1;
               }
 
               #yellow-dashboard-root .public-hero,
@@ -1859,6 +2027,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               #yellow-dashboard-root .legal-document {
                 padding: var(--space-5);
               }
+
+              #yellow-dashboard-root .public-hero-watermark {
+                display: none;
+              }
             }
 
             @media (max-width: 390px) {
@@ -1868,8 +2040,9 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               }
 
               #yellow-dashboard-root .topbar-logo {
-                max-width: 88px;
-                height: 38px;
+                max-width: 102px;
+                height: 46px;
+                transform: scale(1.38);
               }
 
               #yellow-dashboard-root .brand-divider {
@@ -1898,6 +2071,19 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
           <div class="app-shell">
             <header class="app-topbar brand-header">
+              <div class="topbar-actions">
+                <nav class="top-nav" aria-label="ניווט עמודים">
+                  <button class="nav-button" type="button" data-page-target="prizes">פרסים ותחרות</button>
+                  <button class="nav-button" type="button" data-page-target="rules">תקנון השתתפות</button>
+                  <button class="nav-button" type="button" data-page-target="privacy">פרטיות</button>
+                  <button class="nav-button" type="button" data-page-target="admin">דשבורד ניהולי</button>
+                </nav>
+                <div class="session-box">
+                  <div id="session-status" class="session-chip" aria-live="polite">מצב ניהול: אורח/ת</div>
+                  <button id="go-admin-login" class="button-secondary action-button secondary" type="button" data-admin-login data-legacy-id="public-admin-login">כניסת מנהלים</button>
+                  <button id="logout-button" class="button-ghost" type="button" hidden>התנתקות</button>
+                </div>
+              </div>
               <div class="topbar-brand">
                 <div class="brand-logo-cluster">
                   <img id="topbar-campaign-logo" class="topbar-campaign-logo" alt="לוגו עושים טוב בצהוב" />
@@ -1909,52 +2095,23 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   <div class="topbar-subtitle">עושים טוב בצהוב · אחים לסמל · בקרה, תחרות ותובנות מנהלים</div>
                 </div>
               </div>
-              <div class="topbar-actions">
-                <nav class="top-nav" aria-label="ניווט עמודים">
-                  <button class="nav-button" type="button" data-page-target="prizes">פרסים ותחרות</button>
-                  <button class="nav-button" type="button" data-page-target="rules">תקנון השתתפות</button>
-                  <button class="nav-button" type="button" data-page-target="privacy">פרטיות</button>
-                  <button class="nav-button" type="button" data-page-target="admin">דשבורד ניהולי</button>
-                </nav>
-                <div class="session-box">
-                  <div id="session-status" class="session-chip" aria-live="polite">מצב ניהול: אורח/ת</div>
-                  <button id="go-admin-login" class="button-secondary action-button secondary" type="button" data-admin-login>כניסת מנהלים</button>
-                  <button id="logout-button" class="button-ghost" type="button" hidden>התנתקות</button>
-                </div>
-              </div>
             </header>
 
             <main class="app-content">
               <section id="page-prizes" class="page-shell is-active">
                 <article class="public-hero app-card--dark">
+                  <div class="public-hero-watermark" aria-hidden="true">
+                    <img id="public-org-logo" alt="לוגו אחים לסמל" />
+                  </div>
                   <div class="public-hero-grid">
                     <div class="public-hero-copy">
-                      <span class="brand-kicker">עמוד ציבורי למשתתפים ולמנהלים</span>
-                      <h1 class="public-hero-title">הזוכים והמובילים של עושים טוב בצהוב</h1>
-                      <p>תצוגת תחרות חיה, ברורה ומכובדת המציגה את מצב הקמפיין, דירוג השגרירים, הזוכים בפרסים ומדרגות הפרס הנוכחיות על בסיס הקובץ הפעיל.</p>
+                      <span class="brand-kicker">תמונת מצב מיידית של הפרויקט</span>
+                      <h1 class="public-hero-title">מצב הקמפיין ברגע זה</h1>
+                      <p>כל מה שחשוב להבין בשנייה הראשונה: כמה גויס, מי מוביל, כמה שגרירים פעילים ומהו חלון הנתונים הפעיל כרגע.</p>
                       <div id="public-hero-badges" class="public-badges" aria-live="polite"></div>
-                    </div>
-                    <div class="public-hero-brand">
-                      <div class="public-logo-frame public-logo-frame--campaign">
-                        <img id="public-logo" alt="לוגו עושים טוב בצהוב" />
-                      </div>
-                      <div class="public-logo-frame public-logo-frame--organization">
-                        <img id="public-org-logo" alt="לוגו אחים לסמל" />
-                      </div>
                     </div>
                   </div>
                 </article>
-
-                <section class="app-card manager-entry-card" aria-label="כניסת מנהלים">
-                  <div class="manager-entry-copy">
-                    <h3>כניסת מנהלים מתוך העמוד הציבורי</h3>
-                    <p>תצוגת המשתתפים פתוחה לצפייה שוטפת וללא רישום. רק מנהלים מורשים נכנסים עם מייל מאושר וסיסמה כדי לעבור לדשבורד הניהולי המלא.</p>
-                  </div>
-                  <div class="manager-entry-actions">
-                    <span class="manager-entry-note">למשתתפים אין צורך בהתחברות</span>
-                    <button id="public-admin-login" class="button-secondary action-button secondary" type="button" data-admin-login>כניסת מנהלים</button>
-                  </div>
-                </section>
 
                 <section class="page-panel app-card app-card--elevated">
                   <div class="public-panel-header">
@@ -2121,13 +2278,12 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                           </div>
                         </div>
                       </div>
-                      <div class="manager-only-note">המערכת שומרת על מבנה הגישה הקיים בדפדפן. זהו מסך התחברות מקומי לצורכי פיילוט, ולא אימות שרת מאובטח.</div>
                     </div>
                     <form id="login-form" class="login-card app-card">
                       <div class="section-header">
                         <div>
                           <h2>כניסה למערכת הניהול</h2>
-                          <div class="text-small text-muted">כניסה באמצעות מייל מורשה מראש וסיסמה.</div>
+                          <div class="text-small text-muted">כניסה באמצעות מייל מורשה מראש. בכניסה הראשונה תתבקשו להגדיר סיסמה אישית.</div>
                         </div>
                       </div>
                       <label class="form-label">
@@ -2141,8 +2297,12 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                           <button id="login-password-toggle" class="button-ghost password-toggle" type="button" aria-label="הצג או הסתר סיסמה">הצג</button>
                         </div>
                       </label>
+                      <label id="login-password-confirm-label" class="form-label" hidden>
+                        אימות סיסמה
+                        <input id="login-password-confirm" class="form-control" type="password" autocomplete="new-password" placeholder="הקלד/י שוב את הסיסמה" />
+                      </label>
                       <button id="login-button" class="button-primary action-button" type="submit">כניסה לפאנל הניהול</button>
-                      <div class="text-small text-muted">לשימוש פנימי בלבד. לפני חיבור ל־Notion/אוויר יש להעביר את האימות לשרת.</div>
+                      <div id="login-mode-hint" class="text-small text-muted">הכניסה נשמרת ב-session מקומי מאובטח בשרת. בפריסה ציבורית יש להפעיל HTTPS וניהול secrets מסודר.</div>
                       <div id="login-message" class="login-message text-small" aria-live="polite"></div>
                     </form>
                   </div>
@@ -2328,9 +2488,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                     <section class="dashboard-section chart-frame">
                       <div class="chart-panel chart-card app-card">
                         <div class="section-header">
-                          <div>
+                          <div class="chart-header-copy">
+                            <span class="chart-overline">מבט מגמה</span>
                             <h3>מגמה יומית</h3>
-                            <div id="daily-chart-summary" class="text-small text-muted"></div>
+                            <div id="daily-chart-summary" class="chart-insights" aria-live="polite"></div>
                           </div>
                           <div class="data-toolbar metric-toolbar" data-metric-group="daily" aria-label="בחירת מדד לגרף היומי">
                             <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="amount">סכום גיוס</button>
@@ -2344,6 +2505,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                           <option value="average">ממוצע לעסקה</option>
                         </select>
                         <div id="daily-chart" class="chart-surface"></div>
+                        <div class="chart-footnote">לחיצה על עמוד או נקודה בגרף תסנן את הדשבורד לאותו יום.</div>
                       </div>
                       <div id="daily-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                     </section>
@@ -2351,8 +2513,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                     <section class="dashboard-section chart-frame">
                       <div class="chart-panel chart-card app-card">
                         <div class="section-header">
-                          <div>
+                          <div class="chart-header-copy">
+                            <span class="chart-overline">עומסים לפי זמן</span>
                             <h3>מפת חום לגיוס כספים</h3>
+                            <div id="heatmap-summary" class="chart-insights" aria-live="polite"></div>
                             <div class="legend-row text-small text-muted">
                               <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 214, 41, 0.18); border: 1px solid rgba(17, 29, 74, 0.14);"></span>עוצמה נמוכה</span>
                               <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 214, 41, 0.95); border: 1px solid rgba(17, 29, 74, 0.14);"></span>עוצמה גבוהה</span>
@@ -2368,6 +2532,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                           <option value="count">מספר עסקאות</option>
                         </select>
                         <div id="heatmap-chart" class="chart-surface chart-surface--wide"></div>
+                        <div class="chart-footnote">לחיצה על תא במפה תפעיל פילוח משולב של יום ושעה.</div>
                       </div>
                       <div id="heatmap-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                     </section>
@@ -2375,9 +2540,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                     <section class="dashboard-section chart-frame">
                       <div class="chart-panel chart-card app-card">
                         <div class="section-header">
-                          <div>
+                          <div class="chart-header-copy">
+                            <span class="chart-overline">פעילות שגרירים</span>
                             <h3>תנועת שגרירים</h3>
-                            <div id="movement-summary" class="text-small text-muted"></div>
+                            <div id="movement-summary" class="chart-insights" aria-live="polite"></div>
                           </div>
                           <div class="data-toolbar metric-toolbar" data-metric-group="movement" aria-label="בחירת מדד לתנועת השגרירים">
                             <button class="metric-toggle" type="button" data-metric-select="movement-metric-select" data-value="amount">סכום גיוס</button>
@@ -2389,6 +2555,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                           <option value="count">מספר עסקאות</option>
                         </select>
                         <div id="movement-chart" class="chart-surface chart-surface--wide"></div>
+                        <div class="chart-footnote">לחיצה על שגריר או על תא במטריצה תעדכן את כל המסכים לפי אותו חיתוך.</div>
                       </div>
                       <div id="movement-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                     </section>
@@ -2443,20 +2610,21 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
             </main>
           </div>
           <script>
-            (() => {
+            (async () => {
               const INITIAL_ROWS = __INITIAL_ROWS__;
               const INITIAL_META = __INITIAL_META__;
               const INITIAL_ORG_LOGO = __INITIAL_ORG_LOGO__;
               const INITIAL_CAMPAIGN_LOGO = __INITIAL_CAMPAIGN_LOGO__;
+              const INITIAL_BACKDROP = __INITIAL_BACKDROP__;
               const INITIAL_PRIZES = __INITIAL_PRIZES__;
-              const ACCESS_CONTROL = __ACCESS_CONTROL__;
+              const AUTH_CONFIG = __AUTH_CONFIG__;
               const PRIZE_STORAGE_KEY = "yellow-dashboard.prize-model";
               const GOAL_STORAGE_KEY = "yellow-dashboard.goals";
-              const SESSION_STORAGE_KEY = "yellow-dashboard.manager-session";
               const XLSX_MODULE_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
               const root = document.getElementById("yellow-dashboard-root");
               root.style.setProperty("--brand-pattern-campaign", `url("${INITIAL_CAMPAIGN_LOGO}")`);
               root.style.setProperty("--brand-pattern-organization", `url("${INITIAL_ORG_LOGO}")`);
+              root.style.setProperty("--dashboard-backdrop", INITIAL_BACKDROP ? `url("${INITIAL_BACKDROP}")` : "none");
 
               const elements = {
                 topbarCampaignLogo: root.querySelector("#topbar-campaign-logo"),
@@ -2476,7 +2644,6 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 pageAdmin: root.querySelector("#page-admin"),
                 sessionStatus: root.querySelector("#session-status"),
                 goAdminLogin: root.querySelector("#go-admin-login"),
-                publicAdminLogin: root.querySelector("#public-admin-login"),
                 logoutButton: root.querySelector("#logout-button"),
                 publicHeroBadges: root.querySelector("#public-hero-badges"),
                 adminLock: root.querySelector("#admin-lock"),
@@ -2484,7 +2651,11 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 loginForm: root.querySelector("#login-form"),
                 loginEmail: root.querySelector("#login-email"),
                 loginPassword: root.querySelector("#login-password"),
+                loginPasswordConfirmLabel: root.querySelector("#login-password-confirm-label"),
+                loginPasswordConfirm: root.querySelector("#login-password-confirm"),
                 loginPasswordToggle: root.querySelector("#login-password-toggle"),
+                loginButton: root.querySelector("#login-button"),
+                loginModeHint: root.querySelector("#login-mode-hint"),
                 loginMessage: root.querySelector("#login-message"),
                 heroBadges: root.querySelector("#hero-badges"),
                 activeFilterSummary: root.querySelector("#active-filter-summary"),
@@ -2534,6 +2705,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 dailyChart: root.querySelector("#daily-chart"),
                 dailyTooltip: root.querySelector("#daily-tooltip"),
                 dailySummary: root.querySelector("#daily-chart-summary"),
+                heatmapSummary: root.querySelector("#heatmap-summary"),
                 heatmapChart: root.querySelector("#heatmap-chart"),
                 heatmapTooltip: root.querySelector("#heatmap-tooltip"),
                 movementChart: root.querySelector("#movement-chart"),
@@ -2560,7 +2732,11 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 },
                 goals: readStoredGoals(),
                 prizeModel: readStoredPrizeModel() || INITIAL_PRIZES,
-                session: readStoredSession(),
+                session: null,
+                auth: {
+                  backendAvailable: false,
+                  setupMode: false,
+                },
                 filters: getDefaultFilters(INITIAL_META),
                 view: {
                   dailyMetric: "amount",
@@ -2644,42 +2820,81 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 }
               }
 
-              function readStoredSession() {
-                try {
-                  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
-                  const parsed = raw ? JSON.parse(raw) : null;
-                  if (!parsed?.email) {
-                    return null;
+              function canUseBackendAuth() {
+                return AUTH_CONFIG?.mode === "backend" && ["http:", "https:"].includes(window.location.protocol);
+              }
+
+              function setSetupMode(enabled) {
+                state.auth.setupMode = Boolean(enabled);
+                if (elements.loginPasswordConfirmLabel) {
+                  elements.loginPasswordConfirmLabel.hidden = !state.auth.setupMode;
+                }
+                if (elements.loginPasswordConfirm) {
+                  elements.loginPasswordConfirm.required = state.auth.setupMode;
+                  if (!state.auth.setupMode) {
+                    elements.loginPasswordConfirm.value = "";
                   }
-                  const email = normalizeSearchToken(parsed.email);
-                  return ACCESS_CONTROL.managerEmails.map((value) => normalizeSearchToken(value)).includes(email)
-                    ? { email }
-                    : null;
-                } catch (_error) {
-                  return null;
+                }
+                if (elements.loginButton) {
+                  elements.loginButton.textContent = state.auth.setupMode ? "שמירת סיסמה וכניסה" : "כניסה לפאנל הניהול";
+                }
+                if (elements.loginModeHint) {
+                  elements.loginModeHint.textContent = state.auth.setupMode
+                    ? "זו כניסה ראשונה למייל הזה. בחרו סיסמה אישית, אשרו אותה והמערכת תשמור אותה בשרת המקומי."
+                    : "הכניסה נשמרת ב-session מקומי מאובטח בשרת. בפריסה ציבורית יש להפעיל HTTPS וניהול secrets מסודר.";
+                }
+                if (elements.loginPassword) {
+                  elements.loginPassword.autocomplete = state.auth.setupMode ? "new-password" : "current-password";
                 }
               }
 
-              function storeSession(email) {
-                state.session = { email };
-                try {
-                  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state.session));
-                } catch (_error) {
-                  return;
-                }
+              function setAuthenticatedSession(email) {
+                state.session = email ? { email: normalizeSearchToken(email) } : null;
               }
 
-              function clearSession() {
+              function clearSessionState() {
                 state.session = null;
-                try {
-                  window.localStorage.removeItem(SESSION_STORAGE_KEY);
-                } catch (_error) {
-                  return;
-                }
+                setSetupMode(false);
               }
 
               function isManagerAuthenticated() {
                 return Boolean(state.session?.email);
+              }
+
+              async function authRequest(endpoint, options = {}) {
+                const response = await fetch(endpoint, {
+                  method: options.method || "GET",
+                  credentials: "same-origin",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(options.headers || {}),
+                  },
+                  body: options.body ? JSON.stringify(options.body) : undefined,
+                });
+                let payload = {};
+                try {
+                  payload = await response.json();
+                } catch (_error) {
+                  payload = {};
+                }
+                return { response, payload };
+              }
+
+              async function hydrateAuthSession() {
+                clearSessionState();
+                if (!canUseBackendAuth()) {
+                  state.auth.backendAvailable = false;
+                  return;
+                }
+                try {
+                  const { response, payload } = await authRequest(AUTH_CONFIG.statusEndpoint);
+                  state.auth.backendAvailable = response.ok;
+                  if (response.ok && payload?.authenticated && payload?.email) {
+                    setAuthenticatedSession(payload.email);
+                  }
+                } catch (_error) {
+                  state.auth.backendAvailable = false;
+                }
               }
 
               function setLoginMessage(message, tone = "") {
@@ -2735,11 +2950,94 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 }
               }
 
-              async function hashPassword(value) {
-                const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value || "")));
-                return Array.from(new Uint8Array(buffer))
-                  .map((item) => item.toString(16).padStart(2, "0"))
-                  .join("");
+              function hydrateRulesPage() {
+                if (!elements.pageRules) {
+                  return;
+                }
+                elements.pageRules.innerHTML = `
+                  <article class="legal-hero app-card app-card--elevated">
+                    <h2>תקנון השתתפות</h2>
+                    <p>עמוד זה מציג נוסח תקנון שמבוסס על הקובץ "תקנון ראש השנה 2025", אך הותאם כבסיס עבודה לחלון הפרויקט הנוכחי: 23.08.2026 עד 01.09.2026. לפני שימוש חיצוני או פרסום יש להשלים התאמה משפטית סופית.</p>
+                  </article>
+                  <div class="legal-layout">
+                    <aside class="legal-sidebar app-card">
+                      <div class="section-header">
+                        <h3>תוכן עניינים</h3>
+                      </div>
+                      <nav aria-label="תוכן עניינים - תקנון">
+                        <a href="#rules-section-1">1. כללי התחרות ומטרותיה</a>
+                        <a href="#rules-section-2">2. מבנה התחרות והתנהלותה</a>
+                        <a href="#rules-section-3">3. ההשתתפות בתחרות</a>
+                        <a href="#rules-section-4">4. תנאים ומגבלות</a>
+                        <a href="#rules-section-5">5. תנאים ומגבלות - המארגנים</a>
+                      </nav>
+                    </aside>
+                    <article class="legal-document app-card legal-layout__content">
+                      <div class="status-note text-small">הערה חשובה: מסמך המקור נכתב עבור קמפיין קודם, ואילו בתצוגת המערכת עודכן חלון הפרויקט הנוכחי ליום 23.08.2026 עד יום 01.09.2026. הנוסח עדיין דורש אישור משפטי לפני שימוש חי.</div>
+                      <section id="rules-section-1">
+                        <h3>1. כללי התחרות ומטרותיה</h3>
+                        <p>מטרת הפרויקט היא איסוף סכום כסף גדול ככל הניתן עבור רכישת מוצרי מזון שייארזו ויחולקו לנזקקים, בהתאם ליעדי הקמפיין הפעיל.</p>
+                        <ol>
+                          <li>התרומות ייאספו באמצעות פלטפורמת גיוס הכספים <strong>giveback</strong>, באמצעות מתנדבים, להלן: שגרירים, אשר יתרימו כספים דרך לינק, קישור, פרטי לכל שגריר.</li>
+                          <li>עם סיום התחרות יוכרז כמנצח השגריר שבאמצעות הקישור הפרטי שלו נתרם סכום הכסף הגבוה ביותר. הבא בתור יוכרז כזוכה במקום השני וכך הלאה.</li>
+                          <li>התקנון מנוסח בלשון זכר אך מיועד לשני המינים.</li>
+                        </ol>
+                      </section>
+                      <section id="rules-section-2">
+                        <h3>2. מבנה התחרות והתנהלותה</h3>
+                        <p>מסמך המקור מגדיר חלון תחרות מפורש, את תקופת הזמינות של הקישורים ואת ההבחנה בין קישורים אישיים לבין הקישור הכללי.</p>
+                        <ol>
+                          <li>התחרות תתקיים החל מיום א', 23.08.2026, ועד יום ג', 01.09.2026, להלן: זמני התחרות.</li>
+                          <li>הקישורים להתרמה יישארו זמינים בהתאם להנחיית הנהלת הקמפיין, אך לצורך דירוג השגרירים בתחרות יילקחו בחשבון רק תרומות שהתקבלו במהלך זמני התחרות המעודכנים.</li>
+                          <li>לצד הקישורים האישיים שיוקצו לכל שגריר, ניתן יהיה להעביר תרומות לפרויקט גם דרך קישור שאינו שייך לאף שגריר, להלן: הקישור הכללי.</li>
+                          <li>סכום התרומות הכולל בפרויקט יורכב מסך הסכומים שנאספו בקישורים האישיים, בתוספת הסכום שנאסף בקישור הכללי.</li>
+                        </ol>
+                      </section>
+                      <section id="rules-section-3">
+                        <h3>3. ההשתתפות בתחרות</h3>
+                        <p>רשאים להשתתף בתחרות מי שעומדים בכל התנאים הבאים, וההשתתפות עצמה אינה כרוכה בתשלום.</p>
+                        <ol>
+                          <li>אוהדי מכבי תל אביב.</li>
+                          <li>נרשמו לתחרות כדין ובמועד, על פי תנאי התקנון.</li>
+                          <li>גילם 18 ומעלה.</li>
+                          <li>קטינים מעל גיל 16, מותנה באישור בכתב מהורה או אפוטרופוס.</li>
+                          <li>אינם שופטים בתחרות.</li>
+                          <li>קיבלו אישור לכך ממארגני התחרות.</li>
+                          <li>כתובת דוא"ל פעילה שבה אפשר ליצור איתם קשר.</li>
+                          <li>ההשתתפות בתחרות אינה כרוכה בתשלום.</li>
+                        </ol>
+                      </section>
+                      <section id="rules-section-4">
+                        <h3>4. תנאים ומגבלות</h3>
+                        <p>סעיף זה מסדיר את אופן שיוך התרומות, את מגבלות ההעברה בין קישורים ואת כללי ההתנהלות של השגרירים מול תורמים, תקשורת וקהלים חיצוניים.</p>
+                        <ol>
+                          <li>איסוף התרומות הוא אישי לכל שגריר בנפרד, והסכום הקובע לצורך דירוג השגרירים הוא הסכום שנאסף על ידי השגריר כפי שנתרם בקישור האישי.</li>
+                          <li>לא ניתן להעביר תרומות בין שגרירים כך ששגריר יסכים שהסכום שנאסף בקישור האישי שלו יופחת לצד הוספת הסכום לקישור האישי של חברו.</li>
+                          <li>במקרה של הכפלת סכום התרומה המוצע לפרק זמן מסוים, יתווסף הסכום שנתרם על ידי התורמים לקישור האישי אליו נתרם, וסכום זהה מכל תרומה במהלך תקופת ההכפלה יתווסף לקישור הכללי. לא ייצבר סכום כפול בקישור האישי במהלך תקופת ההכפלה.</li>
+                          <li>בפרויקט ייקחו חלק נציגים של קבוצות המועדון השונות וכן ידוענים המזוהים כאוהדי קבוצת מכבי תל אביב בענפי הספורט השונים. פנייה לשחקני מחלקות המועדון השונות או לידוענים בבקשה לתרומה או לפרסום קישור לתרומה לפרויקט תיעשה אך ורק על ידי מארגני התחרות או באישור מי מהם, ואך ורק לתרומה לקישור הכללי.</li>
+                          <li>פנייה לאמצעי התקשורת, אתרי ספורט, אתרי חדשות וגופים טלוויזיוניים שונים, או שימוש באמצעי תקשורת מסחריים, ייעשו אך ורק על ידי נציגי העמותה ובפרסומים בשם העמותה יוצג הקישור הכללי בלבד.</li>
+                          <li>שגרירים רשאים לבצע פניות לתורמים פוטנציאליים בכל אמצעי תקשורת אישי, ובכלל זה רשתות חברתיות, יישומונים המאפשרים משלוח מסרים מיידיים, שיחות טלפון וכמובן שיחות פנים אל פנים.</li>
+                          <li>משתתף שיפריע להתנהלות התקינה של הפרויקט או ינהג בחוסר כבוד כלפי חבריו, השתתפותו בתחרות תיפסל.</li>
+                          <li>השגרירים המשתתפים בתחרות מתחייבים לנהוג באופן מכובד ומכבד המייצג את ערכי העמותה ורוח ההתנדבות, ולהימנע מביטויים גזעניים, מבזים או משפילים כלפי כל אדם.</li>
+                        </ol>
+                      </section>
+                      <section id="rules-section-5">
+                        <h3>5. תנאים ומגבלות - המארגנים</h3>
+                        <p>סעיף זה עוסק בשיקול הדעת של המארגנים, אי האפשרות לערער, שימוש בחומרי תוכן שיפורסמו והגבלת האחריות של הארגון ומנהלי התחרות.</p>
+                        <ol>
+                          <li>הנהלת הארגון רשאית להפסיק את התחרות או לשנות את תנאיה בכל עת. מארגני התחרות רשאים ליצור קשר עם משתתפי התחרות בהקשר רלוונטי בכל עת.</li>
+                          <li>בחירת הפרסים שיחולקו לזוכי התחרות תהיה כפופה לשיקול דעתם של מארגני התחרות בלבד. הפרסים המפורסמים למשתתפי התחרות עשויים להשתנות בהתאם לשיקול דעת מנהלי הארגון והנהלת מועדון הכדורגל מכבי תל אביב, ולא תקום בכך כל זכות או תביעה לשגרירים המשתתפים בתחרות.</li>
+                          <li>לא יתאפשר לערער על החלטת השופטים או על כל החלטה מנהלתית של מארגני התחרות או מנהלי הארגון.</li>
+                          <li>מארגני התחרות רשאים להשתמש לצרכי הפרויקט בכל תמונה או רשומה ברשתות החברתיות שיפיצו השגרירים המשתתפים בתחרות. אין בכך כדי לפגוע בזכויות הצלם על תמונות שתפורסמנה על ידי השגרירים המשתתפים בתחרות בכל הקשר אחר.</li>
+                          <li>מנהלי הארגון ומארגני התחרות אינם נושאים באחריות כלשהי לכל נזקי גוף או רכוש או לכל פגיעה אחרת שתיגרם למשתתפי התחרות. אין בקיום התחרות כדי להרחיב כל אחריות שחלה על מארגני הפרויקט.</li>
+                          <li>בהרשמה לתחרות נותנים השגרירים המשתתפים בתחרות הסכמתם המלאה לכל תנאי התחרות המפורטים לעיל, וכן מצהירים כי הם עומדים בכל התנאים הדרושים לצורך השתתפות בתחרות.</li>
+                          <li>אין באמור לעיל כדי לפגוע בכל זכות הקנויה למארגני התחרות או באפשרות פנייה לערכאות משפטיות בגין הפרה של כללי התחרות על ידי מי מהמועמדים להשתתף בתחרות, מהמשתתפים בה או מי מטעמם.</li>
+                        </ol>
+                        <p><strong>כתובת הקשר שמופיעה במסמך המקור:</strong> <a href="mailto:achimlasemel@gmail.com">achimlasemel@gmail.com</a></p>
+                      </section>
+                    </article>
+                  </div>
+                `;
               }
 
               function setPage(page) {
@@ -2765,7 +3063,6 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 elements.sessionStatus.textContent = isManager ? `מחובר/ת כמנהל/ת: ${state.session.email}` : "מצב ניהול: אורח/ת";
                 elements.logoutButton.hidden = !isManager;
                 elements.goAdminLogin.hidden = isManager;
-                elements.publicAdminLogin.textContent = isManager ? "מעבר לדשבורד הניהולי" : "כניסת מנהלים";
                 elements.adminLock.hidden = isManager;
                 elements.adminContent.hidden = !isManager;
                 if (state.ui.page === "admin" && !isManager) {
@@ -3583,19 +3880,58 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 const topLeader = leaderboard[0];
                 const latestCreated = getLatestCreatedIso(prizeRows);
                 const total = sumAmount(prizeRows);
+                const campaignStatus = prizeRows.length ? "פעיל על בסיס הקובץ הנוכחי" : "ממתין לנתונים";
+                const sourceWindow = state.meta.projectWindowLabel || "לא זוהה";
+                const leaderValue = topLeader ? escapeHtml(topLeader.ambassador) : "טרם נקבע";
+                const leaderMeta = topLeader
+                  ? `הוביל/ה עד כה עם ${escapeHtml(formatAmount(topLeader.total))}`
+                  : "ברגע שייקלטו נתונים יופיע כאן מוביל/ה נוכחי/ת";
+                const updatedText = latestCreated ? escapeHtml(formatDateTime(latestCreated)) : "אין עדכון";
                 const publicBadges = [
-                  `<span class="hero-badge">מצב קמפיין: ${escapeHtml(prizeRows.length ? "פעיל על בסיס הקובץ הנוכחי" : "ממתין לנתונים")}</span>`,
-                  `<span class="hero-badge">חלון פרויקט: ${escapeHtml(state.meta.projectWindowLabel || "לא זוהה")}</span>`,
-                  `<span class="hero-badge">סך גיוס נוכחי: ${escapeHtml(formatAmount(total))}</span>`,
-                  `<span class="hero-badge">${escapeHtml(formatNumber(leaderboard.length))} שגרירים פעילים</span>`,
+                  `
+                    <article class="public-snapshot-card public-snapshot-card--primary">
+                      <div class="public-snapshot-label">סך גיוס נוכחי</div>
+                      <div class="public-snapshot-value">${escapeHtml(formatAmount(total))}</div>
+                      <div class="public-snapshot-meta">זהו הסכום המחושב כרגע מתוך טווח הנתונים הפעיל.</div>
+                    </article>
+                  `,
+                  `
+                    <article class="public-snapshot-card public-snapshot-card--wide">
+                      <div class="public-snapshot-label">מוביל/ה כרגע</div>
+                      <div class="public-snapshot-value">${leaderValue}</div>
+                      <div class="public-snapshot-meta">${leaderMeta}</div>
+                    </article>
+                  `,
+                  `
+                    <article class="public-snapshot-card">
+                      <div class="public-snapshot-label">שגרירים פעילים</div>
+                      <div class="public-snapshot-value">${escapeHtml(formatNumber(leaderboard.length))}</div>
+                      <div class="public-snapshot-meta">מספר השגרירים עם גיוס בפועל בטווח המוצג.</div>
+                    </article>
+                  `,
+                  `
+                    <article class="public-snapshot-card">
+                      <div class="public-snapshot-label">חלון פרויקט פעיל</div>
+                      <div class="public-snapshot-value">${escapeHtml(sourceWindow)}</div>
+                      <div class="public-snapshot-meta">הנתונים מוצגים עבור הטווח הפעיל בקובץ הנוכחי.</div>
+                    </article>
+                  `,
+                  `
+                    <article class="public-snapshot-card">
+                      <div class="public-snapshot-label">סטטוס הפרויקט</div>
+                      <div class="public-snapshot-status">${escapeHtml(campaignStatus)}</div>
+                      <div class="public-snapshot-meta">התצוגה הציבורית משקפת את מצב הנתונים הזמין כרגע.</div>
+                    </article>
+                  `,
+                  `
+                    <article class="public-snapshot-card">
+                      <div class="public-snapshot-label">עדכון אחרון</div>
+                      <div class="public-snapshot-value">${updatedText}</div>
+                      <div class="public-snapshot-meta">זמן הרשומה האחרונה שנקלטה למסך התקציר.</div>
+                    </article>
+                  `,
                 ];
-                if (topLeader) {
-                  publicBadges.push(`<span class="hero-badge">מוביל/ה כרגע: ${escapeHtml(topLeader.ambassador)} · ${escapeHtml(formatAmount(topLeader.total))}</span>`);
-                }
-                if (latestCreated) {
-                  publicBadges.push(`<span class="hero-badge">עודכן לאחרונה: ${escapeHtml(formatDateTime(latestCreated))}</span>`);
-                }
-                elements.publicHeroBadges.innerHTML = publicBadges.join("");
+                elements.publicHeroBadges.innerHTML = `<div class="public-snapshot-grid">${publicBadges.join("")}</div>`;
               }
 
               function renderHeroBadges(filteredRows, prizeRows, compareRows) {
@@ -4375,10 +4711,44 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 tooltip.style.transform = "translate(-9999px, -9999px)";
               }
 
+              function setInsightSummary(element, items) {
+                if (!element) {
+                  return;
+                }
+                const normalized = (items || []).filter((item) => item && item.label && item.value);
+                element.innerHTML = normalized
+                  .map(
+                    (item) => `
+                      <span class="insight-chip${item.tone ? ` insight-chip--${escapeAttribute(item.tone)}` : ""}">
+                        <span>${escapeHtml(item.label)}</span>
+                        <strong>${escapeHtml(item.value)}</strong>
+                      </span>
+                    `
+                  )
+                  .join("");
+              }
+
+              function interpolateRgb(from, to, factor) {
+                const clamped = Math.max(0, Math.min(1, factor));
+                const channels = from.map((channel, index) => Math.round(channel + (to[index] - channel) * clamped));
+                return `rgb(${channels[0]}, ${channels[1]}, ${channels[2]})`;
+              }
+
+              function buildHeatColor(factor) {
+                const clamped = Math.max(0, Math.min(1, factor));
+                if (clamped <= 0.01) {
+                  return "rgba(17, 29, 74, 0.05)";
+                }
+                if (clamped <= 0.5) {
+                  return interpolateRgb([255, 242, 173], [255, 214, 41], clamped / 0.5);
+                }
+                return interpolateRgb([255, 214, 41], [17, 29, 74], (clamped - 0.5) / 0.5);
+              }
+
               function renderDailyChart(rows) {
                 if (!rows.length) {
                   elements.dailyChart.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור המסנן הנוכחי.</div>`;
-                  elements.dailySummary.textContent = "";
+                  setInsightSummary(elements.dailySummary, []);
                   return;
                 }
 
@@ -4401,49 +4771,105 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
                 const getValue = (entry) => (metricMode === "count" ? entry.count : metricMode === "average" ? entry.average : entry.total);
 
-                const width = 920;
-                const height = 280;
-                const margin = { top: 24, right: 16, bottom: 60, left: 76 };
+                const width = Math.max(920, 200 + aggregates.length * 88);
+                const height = 360;
+                const margin = { top: 34, right: 34, bottom: 84, left: 82 };
                 const plotWidth = width - margin.left - margin.right;
                 const plotHeight = height - margin.top - margin.bottom;
                 const maxValue = Math.max(...aggregates.map((entry) => getValue(entry)), 1);
-                const barWidth = plotWidth / Math.max(aggregates.length, 1) - 10;
+                const averageValue = aggregates.reduce((sum, entry) => sum + getValue(entry), 0) / Math.max(aggregates.length, 1);
+                const slotWidth = plotWidth / Math.max(aggregates.length, 1);
+                const barWidth = Math.min(42, Math.max(slotWidth * 0.42, 18));
                 const baseline = margin.top + plotHeight;
+                const bestDay = [...aggregates].sort((left, right) => getValue(right) - getValue(left))[0];
+                const latestDay = aggregates[aggregates.length - 1];
+                const points = aggregates.map((entry, index) => {
+                  const value = getValue(entry);
+                  const centerX = margin.left + slotWidth * index + slotWidth / 2;
+                  const y = baseline - (value / maxValue) * plotHeight;
+                  return { entry, value, centerX, y };
+                });
+                const areaPath = points
+                  .map((point, index) => `${index === 0 ? "M" : "L"} ${point.centerX} ${point.y}`)
+                  .join(" ");
+                const areaClosedPath = `${areaPath} L ${points[points.length - 1].centerX} ${baseline} L ${points[0].centerX} ${baseline} Z`;
+                const linePath = areaPath;
 
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(createSvg(width, height, "תרשים עמודות של גיוס יומי"), "image/svg+xml");
+                const doc = parser.parseFromString(createSvg(width, height, "תרשים מגמה יומי של גיוס"), "image/svg+xml");
                 const svgNode = doc.documentElement;
+                svgNode.insertAdjacentHTML(
+                  "afterbegin",
+                  `
+                    <defs>
+                      <linearGradient id="dailyAreaGradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stop-color="rgba(36, 55, 124, 0.34)"></stop>
+                        <stop offset="100%" stop-color="rgba(36, 55, 124, 0.04)"></stop>
+                      </linearGradient>
+                      <linearGradient id="dailyBarGradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stop-color="#24377C"></stop>
+                        <stop offset="100%" stop-color="#111D4A"></stop>
+                      </linearGradient>
+                      <linearGradient id="dailyBarHighlight" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stop-color="#FFE266"></stop>
+                        <stop offset="100%" stop-color="#F4C900"></stop>
+                      </linearGradient>
+                    </defs>
+                  `
+                );
+
+                svgNode.insertAdjacentHTML(
+                  "beforeend",
+                  `<rect x="${margin.left}" y="${margin.top}" width="${plotWidth}" height="${plotHeight}" rx="22" fill="rgba(17, 29, 74, 0.03)" stroke="rgba(17, 29, 74, 0.08)"></rect>`
+                );
 
                 for (let tick = 0; tick <= 4; tick += 1) {
                   const value = (maxValue / 4) * tick;
                   const y = margin.top + plotHeight - (value / maxValue) * plotHeight;
                   svgNode.insertAdjacentHTML(
                     "beforeend",
-                    `<line x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}" stroke="rgba(19,23,80,0.14)" stroke-width="1"></line>
-                     <text x="${margin.left - 10}" y="${y + 4}" text-anchor="end" fill="rgba(16,16,16,0.6)" font-size="11">${escapeHtml(formatNumber(Math.round(value)))}</text>`
+                    `<line x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}" stroke="rgba(19,23,80,0.12)" stroke-width="1" stroke-dasharray="4 6"></line>
+                     <text x="${margin.left - 10}" y="${y + 4}" text-anchor="end" fill="rgba(16,16,16,0.6)" font-size="11" font-weight="${tick === 4 ? "700" : "500"}">${escapeHtml(formatNumber(Math.round(value)))}</text>`
                   );
                 }
 
-                aggregates.forEach((entry, index) => {
-                  const x = margin.left + index * (barWidth + 10) + 5;
-                  const metricValue = getValue(entry);
-                  const heightValue = (metricValue / maxValue) * plotHeight;
+                points.forEach((point, index) => {
+                  const isBest = bestDay && point.entry.date === bestDay.date;
+                  const bandX = margin.left + slotWidth * index;
+                  svgNode.insertAdjacentHTML(
+                    "beforeend",
+                    `<rect x="${bandX + 2}" y="${margin.top + 2}" width="${slotWidth - 4}" height="${plotHeight - 4}" rx="18" fill="${isBest ? "rgba(255, 214, 41, 0.12)" : index % 2 === 0 ? "rgba(17, 29, 74, 0.025)" : "rgba(255,255,255,0)"}"></rect>`
+                  );
+                });
+
+                svgNode.insertAdjacentHTML(
+                  "beforeend",
+                  `<path d="${areaClosedPath}" fill="url(#dailyAreaGradient)"></path>
+                   <path d="${linePath}" fill="none" stroke="rgba(36, 55, 124, 0.88)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></path>`
+                );
+
+                points.forEach((point) => {
+                  const x = point.centerX - barWidth / 2;
+                  const heightValue = (point.value / maxValue) * plotHeight;
                   const y = baseline - heightValue;
+                  const isBest = bestDay && point.entry.date === bestDay.date;
+                  const isLatest = latestDay && point.entry.date === latestDay.date;
                   const bar = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
                   bar.setAttribute("x", String(x));
                   bar.setAttribute("y", String(y));
                   bar.setAttribute("width", String(Math.max(barWidth, 12)));
                   bar.setAttribute("height", String(Math.max(heightValue, 2)));
-                  bar.setAttribute("rx", "8");
-                  bar.setAttribute("fill", "rgba(28,35,104,0.94)");
+                  bar.setAttribute("rx", "14");
+                  bar.setAttribute("fill", isBest ? "url(#dailyBarHighlight)" : "url(#dailyBarGradient)");
+                  bar.setAttribute("stroke", isBest ? "rgba(244, 201, 0, 0.8)" : "rgba(17, 29, 74, 0.12)");
                   bar.classList.add("clickable-cell");
-                  const tooltipHtml = `<strong>${escapeHtml(formatDate(entry.date))}</strong><br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(metricValue))}<br>${escapeHtml(formatNumber(entry.count))} עסקאות`;
+                  const tooltipHtml = `<strong>${escapeHtml(formatDate(point.entry.date))}</strong><br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(point.value))}<br>${escapeHtml(formatNumber(point.entry.count))} עסקאות`;
                   bar.addEventListener("mouseenter", (event) => showTooltip(elements.dailyChart, elements.dailyTooltip, tooltipHtml, event.clientX, event.clientY));
                   bar.addEventListener("mousemove", (event) => showTooltip(elements.dailyChart, elements.dailyTooltip, tooltipHtml, event.clientX, event.clientY));
                   bar.addEventListener("mouseleave", () => hideTooltip(elements.dailyTooltip));
                   bar.addEventListener("click", () => {
-                    state.filters.dateFrom = entry.date;
-                    state.filters.dateTo = entry.date;
+                    state.filters.dateFrom = point.entry.date;
+                    state.filters.dateTo = point.entry.date;
                     resetFilterOptions();
                     renderAll();
                   });
@@ -4451,15 +4877,44 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
                   svgNode.insertAdjacentHTML(
                     "beforeend",
-                    `<text x="${x + Math.max(barWidth, 12) / 2}" y="${baseline + 20}" text-anchor="middle" fill="rgba(16,16,16,0.78)" font-size="11">${escapeHtml(formatShortDate(entry.date))}</text>
-                     <text x="${x + Math.max(barWidth, 12) / 2}" y="${baseline + 36}" text-anchor="middle" fill="rgba(16,16,16,0.55)" font-size="10">${escapeHtml(getWeekdayLabel(entry.date))}</text>`
+                    `<circle cx="${point.centerX}" cy="${point.y}" r="${isBest ? 7.5 : 5.5}" fill="${isBest ? "#FFD629" : "#111D4A"}" stroke="${isBest ? "#111D4A" : "#FFFFFF"}" stroke-width="${isBest ? "2.5" : "2"}"></circle>`
+                  );
+
+                  if (isBest || isLatest) {
+                    const pillWidth = isBest ? 120 : 104;
+                    const pillX = Math.min(Math.max(point.centerX - pillWidth / 2, margin.left + 8), width - margin.right - pillWidth);
+                    const pillY = Math.max(point.y - 38, margin.top + 8);
+                    svgNode.insertAdjacentHTML(
+                      "beforeend",
+                      `<g>
+                        <rect x="${pillX}" y="${pillY}" width="${pillWidth}" height="26" rx="13" fill="${isBest ? "rgba(17, 29, 74, 0.96)" : "rgba(255, 255, 255, 0.94)"}" stroke="${isBest ? "rgba(17, 29, 74, 0.96)" : "rgba(17, 29, 74, 0.14)"}"></rect>
+                        <text x="${pillX + pillWidth / 2}" y="${pillY + 17}" text-anchor="middle" fill="${isBest ? "#FFD629" : "#111D4A"}" font-size="11" font-weight="800">${escapeHtml(formatMetricValue(point.value))}</text>
+                      </g>`
+                    );
+                  }
+
+                  svgNode.insertAdjacentHTML(
+                    "beforeend",
+                    `<text x="${point.centerX}" y="${baseline + 26}" text-anchor="middle" fill="rgba(16,16,16,0.78)" font-size="11" font-weight="${isBest ? "800" : "600"}">${escapeHtml(formatShortDate(point.entry.date))}</text>
+                     <text x="${point.centerX}" y="${baseline + 44}" text-anchor="middle" fill="rgba(16,16,16,0.55)" font-size="10">${escapeHtml(getWeekdayLabel(point.entry.date))}</text>`
                   );
                 });
 
+                svgNode.insertAdjacentHTML(
+                  "beforeend",
+                  `<text x="${margin.left}" y="18" fill="rgba(17, 29, 74, 0.74)" font-size="12" font-weight="700">${escapeHtml(metricLabel)}</text>
+                   <text x="${width - margin.right}" y="18" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">קו המגמה משקף את קצב השינוי בין הימים הפעילים</text>`
+                );
+
                 elements.dailyChart.innerHTML = "";
                 elements.dailyChart.appendChild(svgNode);
-                const bestDay = [...aggregates].sort((left, right) => getValue(right) - getValue(left))[0];
-                elements.dailySummary.textContent = bestDay ? `${metricLabel}: ${formatDate(bestDay.date)} · ${formatMetricValue(getValue(bestDay))}` : "";
+                setInsightSummary(elements.dailySummary, [
+                  bestDay
+                    ? { label: "יום שיא", value: `${formatShortDate(bestDay.date)} · ${formatMetricValue(getValue(bestDay))}`, tone: "accent" }
+                    : null,
+                  { label: "ממוצע יומי", value: formatMetricValue(averageValue) },
+                  latestDay ? { label: "יום אחרון בטווח", value: `${formatShortDate(latestDay.date)} · ${formatMetricValue(getValue(latestDay))}`, tone: "dark" } : null,
+                ]);
               }
 
               function renderHeatmap(rows) {
@@ -4468,6 +4923,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   .filter((date) => !state.filters.dateTo || date <= state.filters.dateTo);
                 if (!rows.length || !dates.length) {
                   elements.heatmapChart.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור המסנן הנוכחי.</div>`;
+                  setInsightSummary(elements.heatmapSummary, []);
                   return;
                 }
 
@@ -4476,36 +4932,64 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 const formatMetricValue = (value) => (metricMode === "count" ? formatNumber(Math.round(value)) : formatAmount(value));
                 const hours = Array.from({ length: 24 }, (_, hour) => hour);
                 const aggregates = new Map();
+                const totalsByDate = new Map();
+                const totalsByHour = new Map();
                 rows.forEach((row) => {
                   const key = `${row.date}|${row.hour}`;
-                  aggregates.set(key, (aggregates.get(key) || 0) + (metricMode === "count" ? 1 : row.amount));
+                  const metricValue = metricMode === "count" ? 1 : row.amount;
+                  aggregates.set(key, (aggregates.get(key) || 0) + metricValue);
+                  totalsByDate.set(row.date, (totalsByDate.get(row.date) || 0) + metricValue);
+                  totalsByHour.set(row.hour, (totalsByHour.get(row.hour) || 0) + metricValue);
                 });
 
                 const maxValue = Math.max(...aggregates.values(), 1);
-                const cellWidth = 52;
-                const cellHeight = 18;
-                const width = Math.max(700, 110 + dates.length * cellWidth);
-                const height = 82 + hours.length * cellHeight;
-                const margin = { top: 48, right: 12, bottom: 12, left: 84 };
+                const maxDateTotal = Math.max(...dates.map((date) => totalsByDate.get(date) || 0), 1);
+                const bestCell = [...aggregates.entries()].sort((left, right) => right[1] - left[1])[0];
+                const bestDay = [...totalsByDate.entries()].sort((left, right) => right[1] - left[1])[0];
+                const bestHour = [...totalsByHour.entries()].sort((left, right) => right[1] - left[1])[0];
+                const cellWidth = 56;
+                const cellHeight = 20;
+                const width = Math.max(860, 150 + dates.length * cellWidth);
+                const height = 168 + hours.length * cellHeight;
+                const margin = { top: 110, right: 18, bottom: 24, left: 96 };
 
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(createSvg(width, height, "מפת חום של גיוס לפי תאריך ושעה"), "image/svg+xml");
                 const svgNode = doc.documentElement;
+                svgNode.insertAdjacentHTML(
+                  "beforeend",
+                  `<rect x="${margin.left}" y="${margin.top}" width="${dates.length * cellWidth}" height="${hours.length * cellHeight}" rx="22" fill="rgba(17, 29, 74, 0.03)" stroke="rgba(17, 29, 74, 0.08)"></rect>`
+                );
+
+                svgNode.insertAdjacentHTML(
+                  "beforeend",
+                  `<text x="${margin.left}" y="22" fill="rgba(17, 29, 74, 0.74)" font-size="12" font-weight="700">${escapeHtml(metricLabel)} לפי חלונות זמן</text>
+                   <text x="${width - margin.right}" y="22" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">עמודות עליונות מציגות את הסך היומי, וכל תא מייצג שעה מסוימת ביום</text>`
+                );
 
                 dates.forEach((date, index) => {
                   const x = margin.left + index * cellWidth;
+                  const total = totalsByDate.get(date) || 0;
+                  const barHeight = (total / maxDateTotal) * 34;
                   svgNode.insertAdjacentHTML(
                     "beforeend",
-                    `<text x="${x + cellWidth / 2}" y="18" text-anchor="middle" fill="rgba(16,16,16,0.78)" font-size="11">${escapeHtml(formatShortDate(date))}</text>
-                     <text x="${x + cellWidth / 2}" y="34" text-anchor="middle" fill="rgba(16,16,16,0.55)" font-size="10">${escapeHtml(getWeekdayLabel(date))}</text>`
+                    `<rect x="${x + 11}" y="${64 - barHeight}" width="${cellWidth - 22}" height="${Math.max(barHeight, 4)}" rx="8" fill="${date === bestDay?.[0] ? "rgba(244, 201, 0, 0.82)" : "rgba(36, 55, 124, 0.48)"}"></rect>
+                     <text x="${x + cellWidth / 2}" y="78" text-anchor="middle" fill="rgba(17,29,74,0.82)" font-size="11" font-weight="${date === bestDay?.[0] ? "800" : "700"}">${escapeHtml(formatShortDate(date))}</text>
+                     <text x="${x + cellWidth / 2}" y="94" text-anchor="middle" fill="rgba(16,16,16,0.55)" font-size="10">${escapeHtml(getWeekdayLabel(date))}</text>`
                   );
                 });
 
                 hours.forEach((hour, rowIndex) => {
                   const y = margin.top + rowIndex * cellHeight;
+                  if (hour % 6 === 0) {
+                    svgNode.insertAdjacentHTML(
+                      "beforeend",
+                      `<rect x="${margin.left + 1}" y="${y + 1}" width="${dates.length * cellWidth - 2}" height="${cellHeight * Math.min(6, 24 - hour) - 2}" rx="14" fill="rgba(17, 29, 74, 0.025)"></rect>`
+                    );
+                  }
                   svgNode.insertAdjacentHTML(
                     "beforeend",
-                    `<text x="${margin.left - 10}" y="${y + 12}" text-anchor="end" fill="rgba(16,16,16,0.55)" font-size="10">${String(hour).padStart(2, "0")}:00</text>`
+                    `<text x="${margin.left - 10}" y="${y + 13}" text-anchor="end" fill="rgba(16,16,16,0.6)" font-size="10" font-weight="${hour === Number(bestHour?.[0]) ? "800" : "600"}">${String(hour).padStart(2, "0")}:00</text>`
                   );
                 });
 
@@ -4513,15 +4997,17 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   hours.forEach((hour, hourIndex) => {
                     const value = aggregates.get(`${date}|${hour}`) || 0;
                     const intensity = value / maxValue;
+                    const isPeak = bestCell && bestCell[0] === `${date}|${hour}`;
                     const cell = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
                     cell.setAttribute("x", String(margin.left + dateIndex * cellWidth + 1));
                     cell.setAttribute("y", String(margin.top + hourIndex * cellHeight + 1));
                     cell.setAttribute("width", String(cellWidth - 3));
                     cell.setAttribute("height", String(cellHeight - 3));
-                    cell.setAttribute("rx", "4");
-                    cell.setAttribute("fill", "rgba(255,217,61,1)");
-                    cell.setAttribute("fill-opacity", value ? String(0.14 + intensity * 0.86) : "0.08");
-                    cell.setAttribute("stroke", "rgba(19,23,80,0.08)");
+                    cell.setAttribute("rx", "7");
+                    cell.setAttribute("fill", buildHeatColor(intensity));
+                    cell.setAttribute("fill-opacity", value ? "1" : "0.9");
+                    cell.setAttribute("stroke", isPeak ? "rgba(17, 29, 74, 0.96)" : "rgba(19,23,80,0.08)");
+                    cell.setAttribute("stroke-width", isPeak ? "2.2" : "1");
                     cell.classList.add("clickable-cell");
                     const tooltipHtml = `<strong>${escapeHtml(formatDate(date))}</strong><br>${String(hour).padStart(2, "0")}:00<br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(value))}`;
                     cell.addEventListener("mouseenter", (event) => showTooltip(elements.heatmapChart, elements.heatmapTooltip, tooltipHtml, event.clientX, event.clientY));
@@ -4535,11 +5021,30 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                       renderAll();
                     });
                     svgNode.appendChild(cell);
+
+                    if (isPeak) {
+                      svgNode.insertAdjacentHTML(
+                        "beforeend",
+                        `<circle cx="${margin.left + dateIndex * cellWidth + cellWidth / 2}" cy="${margin.top + hourIndex * cellHeight + cellHeight / 2}" r="4" fill="#FFFFFF" stroke="#111D4A" stroke-width="2"></circle>`
+                      );
+                    }
                   });
                 });
 
                 elements.heatmapChart.innerHTML = "";
                 elements.heatmapChart.appendChild(svgNode);
+                const peakParts = bestCell ? bestCell[0].split("|") : [];
+                setInsightSummary(elements.heatmapSummary, [
+                  bestCell
+                    ? {
+                        label: "חלון שיא",
+                        value: `${formatShortDate(peakParts[0])} ${formatHourLabel(Number(peakParts[1]))} · ${formatMetricValue(bestCell[1])}`,
+                        tone: "accent",
+                      }
+                    : null,
+                  bestDay ? { label: "יום מוביל", value: `${formatShortDate(bestDay[0])} · ${formatMetricValue(bestDay[1])}` } : null,
+                  bestHour ? { label: "שעה חזקה", value: `${formatHourLabel(Number(bestHour[0]))} · ${formatMetricValue(bestHour[1])}`, tone: "dark" } : null,
+                ]);
               }
 
               function renderMovement(rows) {
@@ -4553,7 +5058,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
                 if (!focusRows.length || !projectDates.length) {
                   elements.movementChart.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור המסנן הנוכחי.</div>`;
-                  elements.movementSummary.textContent = "";
+                  setInsightSummary(elements.movementSummary, []);
                   return;
                 }
 
@@ -4570,11 +5075,11 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                     ? [...totalsByAmbassador.entries()].sort((left, right) => right[1] - left[1]).slice(0, 12).map(([name]) => name)
                     : [state.filters.ambassador];
 
-                const cellWidth = 58;
-                const rowHeight = 24;
-                const width = Math.max(720, 180 + projectDates.length * cellWidth);
-                const height = 78 + selectedAmbassadors.length * rowHeight;
-                const margin = { top: 46, right: 16, bottom: 12, left: 190 };
+                const cellWidth = 64;
+                const rowHeight = 32;
+                const width = Math.max(900, 260 + projectDates.length * cellWidth);
+                const height = 122 + selectedAmbassadors.length * rowHeight;
+                const margin = { top: 66, right: 26, bottom: 24, left: 238 };
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(createSvg(width, height, "מטריצת פעילות שגרירים לאורך ימי הפרויקט"), "image/svg+xml");
                 const svgNode = doc.documentElement;
@@ -4589,21 +5094,41 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 });
 
                 const maxValue = Math.max(...matrixValues.values(), 1);
+                const bestCell = [...matrixValues.entries()].sort((left, right) => right[1] - left[1])[0];
+                const leader = selectedAmbassadors[0] ? [selectedAmbassadors[0], totalsByAmbassador.get(selectedAmbassadors[0]) || 0] : null;
+
+                svgNode.insertAdjacentHTML(
+                  "beforeend",
+                  `<rect x="${margin.left}" y="${margin.top}" width="${projectDates.length * cellWidth}" height="${selectedAmbassadors.length * rowHeight}" rx="22" fill="rgba(17, 29, 74, 0.03)" stroke="rgba(17, 29, 74, 0.08)"></rect>
+                   <text x="${margin.left}" y="24" fill="rgba(17, 29, 74, 0.74)" font-size="12" font-weight="700">${escapeHtml(metricLabel)} לאורך ימי הפרויקט</text>
+                   <text x="${width - margin.right}" y="24" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">הצגת השגרירים המובילים בטווח שנבחר עם דירוג, היקף ומוקדי פעילות</text>`
+                );
 
                 projectDates.forEach((date, index) => {
                   const x = margin.left + index * cellWidth;
                   svgNode.insertAdjacentHTML(
                     "beforeend",
-                    `<text x="${x + cellWidth / 2}" y="18" text-anchor="middle" fill="rgba(16,16,16,0.78)" font-size="11">${escapeHtml(formatShortDate(date))}</text>
-                     <text x="${x + cellWidth / 2}" y="34" text-anchor="middle" fill="rgba(16,16,16,0.55)" font-size="10">${escapeHtml(getWeekdayLabel(date))}</text>`
+                    `<text x="${x + cellWidth / 2}" y="30" text-anchor="middle" fill="rgba(16,16,16,0.82)" font-size="11" font-weight="700">${escapeHtml(formatShortDate(date))}</text>
+                     <text x="${x + cellWidth / 2}" y="46" text-anchor="middle" fill="rgba(16,16,16,0.55)" font-size="10">${escapeHtml(getWeekdayLabel(date))}</text>`
                   );
                 });
 
                 selectedAmbassadors.forEach((ambassador, rowIndex) => {
                   const y = margin.top + rowIndex * rowHeight;
+                  const total = totalsByAmbassador.get(ambassador) || 0;
+                  const intensity = total / Math.max(...selectedAmbassadors.map((name) => totalsByAmbassador.get(name) || 0), 1);
+                  const labelY = y + rowHeight / 2 + 4;
+                  svgNode.insertAdjacentHTML(
+                    "beforeend",
+                    `<rect x="${margin.left + 1}" y="${y + 1}" width="${projectDates.length * cellWidth - 2}" height="${rowHeight - 2}" rx="16" fill="${rowIndex % 2 === 0 ? "rgba(17, 29, 74, 0.025)" : "rgba(255,255,255,0)"}"></rect>
+                     <circle cx="${margin.left - 210}" cy="${y + rowHeight / 2}" r="12" fill="${rowIndex === 0 ? "#FFD629" : "rgba(17,29,74,0.12)"}" stroke="rgba(17,29,74,0.18)"></circle>
+                     <text x="${margin.left - 210}" y="${labelY - 1}" text-anchor="middle" fill="${rowIndex === 0 ? "#111D4A" : "#111D4A"}" font-size="11" font-weight="800">${rowIndex + 1}</text>
+                     <rect x="${margin.left - 188}" y="${y + 6}" width="10" height="${rowHeight - 12}" rx="5" fill="${interpolateRgb([255, 226, 102], [17, 29, 74], intensity)}"></rect>
+                     <text x="${margin.left - 162}" y="${labelY}" text-anchor="end" fill="rgba(17,29,74,0.92)" font-size="11" font-weight="700">${escapeHtml(formatMetricValue(total))}</text>`
+                  );
                   const label = doc.createElementNS("http://www.w3.org/2000/svg", "text");
-                  label.setAttribute("x", String(margin.left - 10));
-                  label.setAttribute("y", String(y + 14));
+                  label.setAttribute("x", String(margin.left - 30));
+                  label.setAttribute("y", String(labelY));
                   label.setAttribute("text-anchor", "end");
                   label.setAttribute("font-size", "11");
                   label.setAttribute("class", `matrix-label${state.filters.ambassador === ambassador ? " is-active" : ""}`);
@@ -4617,15 +5142,18 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
                   projectDates.forEach((date, dateIndex) => {
                     const value = matrixValues.get(`${ambassador}|${date}`) || 0;
-                    const intensity = value / maxValue;
+                    const cellIntensity = value / maxValue;
+                    const isPeak = bestCell && bestCell[0] === `${ambassador}|${date}`;
                     const rect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
                     rect.setAttribute("x", String(margin.left + dateIndex * cellWidth + 1));
                     rect.setAttribute("y", String(y + 1));
                     rect.setAttribute("width", String(cellWidth - 4));
                     rect.setAttribute("height", String(rowHeight - 4));
-                    rect.setAttribute("rx", "5");
-                    rect.setAttribute("fill", "rgba(28,35,104,1)");
-                    rect.setAttribute("fill-opacity", value ? String(0.14 + intensity * 0.86) : "0.08");
+                    rect.setAttribute("rx", "9");
+                    rect.setAttribute("fill", value ? interpolateRgb([255, 242, 173], [17, 29, 74], cellIntensity) : "rgba(17, 29, 74, 0.05)");
+                    rect.setAttribute("fill-opacity", "1");
+                    rect.setAttribute("stroke", isPeak ? "rgba(244, 201, 0, 0.92)" : "rgba(17, 29, 74, 0.08)");
+                    rect.setAttribute("stroke-width", isPeak ? "2.2" : "1");
                     rect.classList.add("clickable-cell");
                     const tooltipHtml = `<strong>${escapeHtml(ambassador)}</strong><br>${escapeHtml(formatDate(date))}<br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(value))}`;
                     rect.addEventListener("mouseenter", (event) => showTooltip(elements.movementChart, elements.movementTooltip, tooltipHtml, event.clientX, event.clientY));
@@ -4639,15 +5167,26 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                       renderAll();
                     });
                     svgNode.appendChild(rect);
+
+                    if (isPeak) {
+                      svgNode.insertAdjacentHTML(
+                        "beforeend",
+                        `<circle cx="${margin.left + dateIndex * cellWidth + cellWidth / 2}" cy="${y + rowHeight / 2}" r="4" fill="#FFD629" stroke="#111D4A" stroke-width="2"></circle>`
+                      );
+                    }
                   });
                 });
 
                 elements.movementChart.innerHTML = "";
                 elements.movementChart.appendChild(svgNode);
-                elements.movementSummary.textContent =
+                const bestParts = bestCell ? bestCell[0].split("|") : [];
+                setInsightSummary(elements.movementSummary, [
+                  leader ? { label: "מוביל נוכחי", value: `${leader[0]} · ${formatMetricValue(leader[1])}`, tone: "accent" } : null,
+                  bestCell ? { label: "פיק פעילות", value: `${bestParts[0]} · ${formatShortDate(bestParts[1])} · ${formatMetricValue(bestCell[1])}` } : null,
                   state.filters.ambassador === "all"
-                    ? `מוצגים 12 השגרירים המובילים לפי ${metricLabel} במסנן הנוכחי`
-                    : `מוצגת תנועת ${state.filters.ambassador} לפי ${metricLabel}`;
+                    ? { label: "מוצגים כעת", value: `${formatNumber(selectedAmbassadors.length)} שגרירים`, tone: "dark" }
+                    : { label: "פילוח פעיל", value: state.filters.ambassador, tone: "dark" },
+                ]);
               }
 
               function renderTable(rows) {
@@ -4789,9 +5328,19 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   });
                 });
 
-                elements.logoutButton.addEventListener("click", () => {
-                  clearSession();
+                elements.logoutButton.addEventListener("click", async () => {
+                  if (canUseBackendAuth() && state.auth.backendAvailable) {
+                    try {
+                      await authRequest(AUTH_CONFIG.logoutEndpoint, { method: "POST" });
+                    } catch (_error) {
+                      // If the local backend is unavailable, we still clear the local shell state.
+                    }
+                  }
+                  clearSessionState();
                   elements.loginPassword.value = "";
+                  if (elements.loginPasswordConfirm) {
+                    elements.loginPasswordConfirm.value = "";
+                  }
                   setLoginMessage("");
                   setPage("prizes");
                   renderAll();
@@ -4799,33 +5348,74 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
 
                 elements.loginForm.addEventListener("submit", async (event) => {
                   event.preventDefault();
+                  if (!canUseBackendAuth()) {
+                    setLoginMessage("כדי להיכנס לפאנל הניהול יש לפתוח את המערכת דרך שרת הניהול המקומי.", "error");
+                    return;
+                  }
                   const email = normalizeSearchToken(elements.loginEmail.value);
                   const password = elements.loginPassword.value;
-                  const allowedEmails = ACCESS_CONTROL.managerEmails.map((value) => normalizeSearchToken(value));
+                  const confirmPassword = elements.loginPasswordConfirm?.value || "";
                   if (!email || !password) {
                     setLoginMessage("יש למלא גם מייל וגם סיסמה.", "error");
                     return;
                   }
-                  if (!allowedEmails.includes(email)) {
-                    setLoginMessage("המייל שהוזן אינו מורשה לגישה לפאנל הניהול.", "error");
+                  if (state.auth.setupMode && !confirmPassword) {
+                    setLoginMessage("יש לאשר את הסיסמה כדי להשלים את ההגדרה הראשונית.", "error");
                     return;
                   }
-                  const passwordHash = await hashPassword(password);
-                  if (passwordHash !== ACCESS_CONTROL.adminPasswordHash) {
-                    setLoginMessage("הסיסמה שגויה. נסו שוב.", "error");
-                    return;
+                  try {
+                    const endpoint = state.auth.setupMode ? AUTH_CONFIG.setupEndpoint : AUTH_CONFIG.loginEndpoint;
+                    const { response, payload } = await authRequest(endpoint, {
+                      method: "POST",
+                      body: state.auth.setupMode
+                        ? { email, password, confirmPassword }
+                        : { email, password },
+                    });
+                    state.auth.backendAvailable = true;
+
+                    if (response.ok && payload?.authenticated && payload?.email) {
+                      setAuthenticatedSession(payload.email);
+                      setSetupMode(false);
+                      elements.loginPassword.value = "";
+                      if (elements.loginPasswordConfirm) {
+                        elements.loginPasswordConfirm.value = "";
+                      }
+                      setLoginMessage(payload.message || "הכניסה הצליחה. הדשבורד הניהולי נפתח.", "success");
+                      setPage("admin");
+                      renderAll();
+                      return;
+                    }
+
+                    if (payload?.code === "setup_required" || payload?.setupRequired) {
+                      setSetupMode(true);
+                      setLoginMessage(payload.message || "זו כניסה ראשונה. יש להגדיר סיסמה אישית.", "warning");
+                      if (elements.loginPasswordConfirm) {
+                        elements.loginPasswordConfirm.focus();
+                      }
+                      return;
+                    }
+
+                    setLoginMessage(payload?.message || "התחברות נכשלה.", "error");
+                  } catch (_error) {
+                    state.auth.backendAvailable = false;
+                    setLoginMessage("שרת הניהול המקומי אינו זמין כרגע. יש להפעיל אותו כדי להיכנס.", "error");
                   }
-                  storeSession(email);
-                  elements.loginPassword.value = "";
-                  setLoginMessage("הכניסה הצליחה. הדשבורד הניהולי נפתח.", "success");
-                  setPage("admin");
-                  renderAll();
                 });
 
                 elements.loginPasswordToggle.addEventListener("click", () => {
                   const isPassword = elements.loginPassword.type === "password";
                   elements.loginPassword.type = isPassword ? "text" : "password";
+                  if (elements.loginPasswordConfirm) {
+                    elements.loginPasswordConfirm.type = isPassword ? "text" : "password";
+                  }
                   elements.loginPasswordToggle.textContent = isPassword ? "הסתר" : "הצג";
+                });
+
+                elements.loginEmail.addEventListener("input", () => {
+                  if (state.auth.setupMode) {
+                    setSetupMode(false);
+                  }
+                  setLoginMessage("");
                 });
 
                 [
@@ -5007,7 +5597,10 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 duplicateIdCount: 0,
               };
               state.prizeModel = normalizePrizeModel(state.prizeModel);
+              hydrateRulesPage();
               resetFilterOptions();
+              setSetupMode(false);
+              await hydrateAuthSession();
               setPage(state.session ? "admin" : "prizes");
               setLoginMessage("");
               setImportMessage("המערכת מוכנה לקבלת קבצים. קובץ לא תקין לא ידרוס את הנתונים הפעילים.");
@@ -5024,8 +5617,9 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
         .replace("__INITIAL_META__", meta_json)
         .replace("__INITIAL_ORG_LOGO__", org_logo_json)
         .replace("__INITIAL_CAMPAIGN_LOGO__", campaign_logo_json)
+        .replace("__INITIAL_BACKDROP__", backdrop_json)
         .replace("__INITIAL_PRIZES__", prize_json)
-        .replace("__ACCESS_CONTROL__", access_json)
+        .replace("__AUTH_CONFIG__", auth_config_json)
     )
 
 
@@ -5380,8 +5974,9 @@ def main() -> None:
     meta = build_meta(rows)
     org_logo_data_uri = load_logo_data_uri(ORG_LOGO_PATH if ORG_LOGO_PATH.exists() else LEGACY_LOGO_PATH)
     campaign_logo_data_uri = load_logo_data_uri(CAMPAIGN_LOGO_PATH)
+    backdrop_data_uri = load_logo_data_uri(BACKDROP_PATH)
     prize_model = load_prize_model()
-    fragment = build_fragment(rows, meta, org_logo_data_uri, campaign_logo_data_uri, prize_model)
+    fragment = build_fragment(rows, meta, org_logo_data_uri, campaign_logo_data_uri, backdrop_data_uri, prize_model)
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     VIS_DIR.mkdir(parents=True, exist_ok=True)
     FRAGMENT_PATH.write_text(fragment, encoding="utf-8")

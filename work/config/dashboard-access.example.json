@@ -2,6 +2,5 @@
   "managerEmails": [
     "manager1@example.org",
     "manager2@example.org"
-  ],
-  "adminPasswordHash": "replace-with-sha256-hash"
+  ]
 }
