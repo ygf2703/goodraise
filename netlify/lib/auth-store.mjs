@@ -16,6 +16,7 @@ const DEFAULT_MANAGER_EMAILS = [
   "Moranmta@gmail.com",
   "4337579@gmail.com",
   "rasherov@gmail.com",
+  "ranbo7@gmail.com",
   "shaywolf251996@gmail.com",
   "Dinofek@gmail.com",
   "Yafit.neveshalev@gmail.com",
