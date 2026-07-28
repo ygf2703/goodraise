@@ -1,0 +1,12 @@
+{
+  "name": "osimtovbetzahov",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Netlify deployment support for the Osim Tov BeTzahov dashboard",
+  "scripts": {
+    "verify:auth": "node scripts/verify_netlify_auth.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.7.10"
+  }
+}

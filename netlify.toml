@@ -1,0 +1,28 @@
+[build]
+  command = "python work/build_yellow_dashboard.py && python scripts/verify_dashboard_release.py"
+  publish = "outputs"
+
+[build.environment]
+  PYTHON_VERSION = "3.12"
+  YELLOW_DASHBOARD_DEPLOY_MODE = "netlify"
+
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/admin"
+  to = "/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/rules"
+  to = "/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/privacy"
+  to = "/index.html"
+  status = 200
+  force = true

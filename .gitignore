@@ -1,9 +1,11 @@
+node_modules/
 work/__pycache__/
 work/source.csv
 work/prizes.xlsx
 work/prizes.csv
 work/config/dashboard-access.local.json
 work/data/
+outputs/index.html
 outputs/yellow-project-dashboard.html
 outputs/yellow-project-dashboard-browser.html
 outputs/.render-cache/

@@ -34,6 +34,7 @@ OUTPUT_HTML = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_HTML", str(OUTPUTS_DIR / "
 BROWSER_OUTPUT_HTML = Path(
     os.getenv("YELLOW_DASHBOARD_BROWSER_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-dashboard-browser.html"))
 ).resolve()
+INDEX_OUTPUT_HTML = Path(os.getenv("YELLOW_DASHBOARD_INDEX_OUTPUT_HTML", str(OUTPUTS_DIR / "index.html"))).resolve()
 PUBLIC_BROWSER_OUTPUT_HTML = Path(
     os.getenv("YELLOW_DASHBOARD_PUBLIC_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-public-dashboard.html"))
 ).resolve()
@@ -270,6 +271,31 @@ def load_prize_model() -> dict:
     }
 
 
+def build_auth_config() -> dict:
+    deploy_mode = (os.getenv("YELLOW_DASHBOARD_DEPLOY_MODE") or "").strip().lower()
+    use_netlify_paths = deploy_mode == "netlify" or os.getenv("NETLIFY") == "true"
+    if use_netlify_paths:
+        base_url = (os.getenv("YELLOW_DASHBOARD_AUTH_BASE_URL") or "").strip().rstrip("/")
+        prefix = f"{base_url}/api/auth" if base_url else "/api/auth"
+        return {
+            "mode": "backend",
+            "baseUrl": base_url,
+            "statusEndpoint": f"{prefix}/status",
+            "loginEndpoint": f"{prefix}/login",
+            "setupEndpoint": f"{prefix}/setup",
+            "logoutEndpoint": f"{prefix}/logout",
+        }
+
+    return {
+        "mode": "backend",
+        "baseUrl": os.getenv("YELLOW_DASHBOARD_AUTH_BASE_URL", "http://127.0.0.1:8767"),
+        "statusEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_STATUS_ENDPOINT", "http://127.0.0.1:8767/api/auth/status"),
+        "loginEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGIN_ENDPOINT", "http://127.0.0.1:8767/api/auth/login"),
+        "setupEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_SETUP_ENDPOINT", "http://127.0.0.1:8767/api/auth/setup"),
+        "logoutEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGOUT_ENDPOINT", "http://127.0.0.1:8767/api/auth/logout"),
+    }
+
+
 def build_fragment(
     rows: list[dict],
     meta: dict,
@@ -284,18 +310,7 @@ def build_fragment(
     campaign_logo_json = json.dumps(campaign_logo_data_uri, ensure_ascii=False)
     backdrop_json = json.dumps(backdrop_data_uri, ensure_ascii=False)
     prize_json = json.dumps(prize_model, ensure_ascii=False, separators=(",", ":"))
-    auth_config_json = json.dumps(
-        {
-            "mode": "backend",
-            "baseUrl": os.getenv("YELLOW_DASHBOARD_AUTH_BASE_URL", "http://127.0.0.1:8767"),
-            "statusEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_STATUS_ENDPOINT", "http://127.0.0.1:8767/api/auth/status"),
-            "loginEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGIN_ENDPOINT", "http://127.0.0.1:8767/api/auth/login"),
-            "setupEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_SETUP_ENDPOINT", "http://127.0.0.1:8767/api/auth/setup"),
-            "logoutEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGOUT_ENDPOINT", "http://127.0.0.1:8767/api/auth/logout"),
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
+    auth_config_json = json.dumps(build_auth_config(), ensure_ascii=False, separators=(",", ":"))
 
     template = textwrap.dedent(
         """
@@ -5783,7 +5798,9 @@ def export_browser_friendly_html() -> None:
     if end_index == -1 or end_index <= start_index:
         return
     browser_html = unescape(shell_html[start_index:end_index])
-    BROWSER_OUTPUT_HTML.write_text(build_browser_document(browser_html), encoding="utf-8")
+    browser_document = build_browser_document(browser_html)
+    BROWSER_OUTPUT_HTML.write_text(browser_document, encoding="utf-8")
+    INDEX_OUTPUT_HTML.write_text(browser_document, encoding="utf-8")
 
 
 def build_browser_document(fragment: str) -> str:
@@ -6131,6 +6148,7 @@ def main() -> None:
 
     browser_document = build_browser_document(fragment)
     BROWSER_OUTPUT_HTML.write_text(browser_document, encoding="utf-8")
+    INDEX_OUTPUT_HTML.write_text(browser_document, encoding="utf-8")
 
     if render_shell_output():
         export_browser_friendly_html()
