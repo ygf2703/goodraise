@@ -26,6 +26,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Public prize page with podium, prize tiers, and live competition summary
 - Public participant view stays open without registration, with a direct manager entry point from the same page
 - SaaS-style manager login screen for local pilot access
+- Safe-import behavior: invalid uploads do not replace the active dataset
 - File upload for base campaign CSV
 - File upload for comparison CSV
 - File upload for prize model from Excel or CSV
@@ -49,8 +50,14 @@ The app receives campaign export files and turns them into an active dashboard t
   Organization logo for Achim LaSemel.
 - `work/assets/osim-tov-betzahov-logo.png`
   Campaign logo for Osim Tov BeTzahov.
+- `work/samples/sample-source.csv`
+  Synthetic sample dataset for portable builds and CI.
+- `work/config/dashboard-access.example.json`
+  Example admin access config.
 - `outputs/dashboard-backlog-priorities.md`
   Working backlog and upgrade notes.
+- `docs/production-readiness.md`
+  Production checklist, config notes, and release gates.
 - `outputs/yellow-project-dashboard.html`
   Wrapped preview output. Ignored from git.
 - `outputs/yellow-project-dashboard-browser.html`
@@ -65,6 +72,7 @@ Important:
 - The current admin access layer is a local pilot gate implemented in the client.
 - Regular users do not sign in. Only predefined managers can enter the admin dashboard from the public participant page.
 - Before any public deployment, authentication must move to a secure server-side flow.
+- Recommended local override file: `work/config/dashboard-access.local.json` (ignored from git).
 
 Ignored from git:
 
@@ -78,12 +86,17 @@ Ignored from git:
 Current local build command:
 
 ```powershell
-& "C:\Users\noamf\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" work/build_yellow_dashboard.py
+python work/build_yellow_dashboard.py
 ```
 
 After build, open:
 
 - `outputs/yellow-project-dashboard-browser.html`
+
+Notes:
+
+- If `work/source.csv` is missing, the build falls back to `work/samples/sample-source.csv`.
+- If the Codex visualize renderer is unavailable, the script still produces standalone HTML outputs.
 
 ## Git Workflow
 

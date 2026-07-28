@@ -3,8 +3,10 @@ from __future__ import annotations
 import base64
 import csv
 import json
+import os
 import re
 import subprocess
+import sys
 import textwrap
 from datetime import datetime
 from html import unescape
@@ -13,22 +15,58 @@ from pathlib import Path
 import pandas as pd
 
 
-WORK_DIR = Path(r"C:\Users\noamf\Documents\Codex\2026-07-27\mu\work")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+WORK_DIR = Path(os.getenv("YELLOW_DASHBOARD_WORK_DIR", str(ROOT_DIR / "work"))).resolve()
 ASSETS_DIR = WORK_DIR / "assets"
-SOURCE_CSV = WORK_DIR / "source.csv"
-PRIZES_XLSX = WORK_DIR / "prizes.xlsx"
+CONFIG_DIR = WORK_DIR / "config"
+SAMPLES_DIR = WORK_DIR / "samples"
+SOURCE_CSV = Path(os.getenv("YELLOW_DASHBOARD_SOURCE_CSV", str(WORK_DIR / "source.csv"))).resolve()
+SAMPLE_SOURCE_CSV = Path(os.getenv("YELLOW_DASHBOARD_SAMPLE_SOURCE_CSV", str(SAMPLES_DIR / "sample-source.csv"))).resolve()
+PRIZES_XLSX = Path(os.getenv("YELLOW_DASHBOARD_PRIZES_XLSX", str(WORK_DIR / "prizes.xlsx"))).resolve()
+PRIZES_CSV = Path(os.getenv("YELLOW_DASHBOARD_PRIZES_CSV", str(WORK_DIR / "prizes.csv"))).resolve()
+ACCESS_CONTROL_PATH = Path(
+    os.getenv("YELLOW_DASHBOARD_ACCESS_CONTROL_JSON", str(CONFIG_DIR / "dashboard-access.local.json"))
+).resolve()
 ORG_LOGO_PATH = ASSETS_DIR / "achim-lasemel-logo.png"
 CAMPAIGN_LOGO_PATH = ASSETS_DIR / "osim-tov-betzahov-logo.png"
 LEGACY_LOGO_PATH = WORK_DIR / "brand-logo.png"
-VIS_DIR = Path(r"C:\Users\noamf\.codex\visualizations\2026\07\27\019fa494-6c18-70a0-bbb2-4a92c166188a")
-FRAGMENT_PATH = VIS_DIR / "yellow-project-dashboard.html"
-OUTPUT_HTML = Path(r"C:\Users\noamf\Documents\Codex\2026-07-27\mu\outputs\yellow-project-dashboard.html")
-BROWSER_OUTPUT_HTML = Path(r"C:\Users\noamf\Documents\Codex\2026-07-27\mu\outputs\yellow-project-dashboard-browser.html")
-RENDER_SCRIPT = Path(
-    r"C:\Users\noamf\.codex\plugins\cache\openai-bundled\visualize\1.0.11\skills\visualize\scripts\render.py"
+OUTPUTS_DIR = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_DIR", str(ROOT_DIR / "outputs"))).resolve()
+VIS_DIR = Path(os.getenv("YELLOW_DASHBOARD_VIS_DIR", str(OUTPUTS_DIR / ".render-cache"))).resolve()
+FRAGMENT_PATH = VIS_DIR / "yellow-project-dashboard-fragment.html"
+OUTPUT_HTML = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-dashboard.html"))).resolve()
+BROWSER_OUTPUT_HTML = Path(
+    os.getenv("YELLOW_DASHBOARD_BROWSER_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-dashboard-browser.html"))
+).resolve()
+DEFAULT_RENDER_SCRIPT = (
+    Path.home()
+    / ".codex"
+    / "plugins"
+    / "cache"
+    / "openai-bundled"
+    / "visualize"
+    / "1.0.11"
+    / "skills"
+    / "visualize"
+    / "scripts"
+    / "render.py"
 )
-PYTHON_EXE = Path(r"C:\Users\noamf\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe")
+RENDER_SCRIPT = Path(os.getenv("YELLOW_DASHBOARD_RENDER_SCRIPT", str(DEFAULT_RENDER_SCRIPT))).resolve()
+PYTHON_EXE = Path(os.getenv("YELLOW_DASHBOARD_PYTHON_EXE", sys.executable)).resolve()
 DATE_TIME_FORMAT = "%d/%m/%y %H:%M"
+DEFAULT_ACCESS_CONTROL = {
+    "managerEmails": [
+        "noamfrostig@gmail.com",
+        "themoti@gmail.com",
+        "Moranmta@gmail.com",
+        "4337579@gmail.com",
+        "rasherov@gmail.com",
+        "Yafit.neveshalev@gmail.com",
+        "Yovelk11@gmail.com",
+        "Lalobenny@gmail.com",
+        "aharonayal@gmail.com",
+    ],
+    "adminPasswordHash": "aaf587976eeb78f291c13743195dd667cbd1a175bbee14f7a8712b37ef6c1b47",
+}
 
 
 def parse_amount(value: str) -> float:
@@ -47,9 +85,21 @@ def ambassador_label(value: str) -> str:
     return cleaned if cleaned else "ללא שיוך"
 
 
+def get_source_csv_path() -> Path | None:
+    if SOURCE_CSV.exists():
+        return SOURCE_CSV
+    if SAMPLE_SOURCE_CSV.exists():
+        return SAMPLE_SOURCE_CSV
+    return None
+
+
 def load_rows() -> list[dict]:
+    source_path = get_source_csv_path()
+    if source_path is None:
+        return []
+
     rows: list[dict] = []
-    with SOURCE_CSV.open("r", encoding="utf-8", newline="") as handle:
+    with source_path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
         for raw in reader:
             created_raw = (raw.get("created_at") or "").strip()
@@ -110,11 +160,44 @@ def normalize_text(value: object) -> str:
     return str(value).strip()
 
 
-def load_prize_model() -> dict:
-    if not PRIZES_XLSX.exists():
-        return {"placePrizes": [], "tierPrizes": [], "tierRuleNote": ""}
+def load_access_control() -> dict:
+    access_control = dict(DEFAULT_ACCESS_CONTROL)
 
-    df = pd.read_excel(PRIZES_XLSX)
+    if ACCESS_CONTROL_PATH.exists():
+        try:
+            config_payload = json.loads(ACCESS_CONTROL_PATH.read_text(encoding="utf-8"))
+            file_emails = config_payload.get("managerEmails")
+            file_password_hash = config_payload.get("adminPasswordHash")
+            if isinstance(file_emails, list) and file_emails:
+                access_control["managerEmails"] = [str(email).strip() for email in file_emails if str(email).strip()]
+            if isinstance(file_password_hash, str) and file_password_hash.strip():
+                access_control["adminPasswordHash"] = file_password_hash.strip()
+        except json.JSONDecodeError:
+            pass
+
+    env_emails = os.getenv("YELLOW_DASHBOARD_MANAGER_EMAILS", "").strip()
+    if env_emails:
+        try:
+            parsed_emails = json.loads(env_emails)
+            if isinstance(parsed_emails, list) and parsed_emails:
+                access_control["managerEmails"] = [str(email).strip() for email in parsed_emails if str(email).strip()]
+        except json.JSONDecodeError:
+            access_control["managerEmails"] = [email.strip() for email in env_emails.split(",") if email.strip()]
+
+    env_password_hash = os.getenv("YELLOW_DASHBOARD_ADMIN_PASSWORD_HASH", "").strip()
+    if env_password_hash:
+        access_control["adminPasswordHash"] = env_password_hash
+
+    return access_control
+
+
+def load_prize_model() -> dict:
+    if PRIZES_XLSX.exists():
+        df = pd.read_excel(PRIZES_XLSX)
+    elif PRIZES_CSV.exists():
+        df = pd.read_csv(PRIZES_CSV)
+    else:
+        return {"placePrizes": [], "tierPrizes": [], "tierRuleNote": ""}
     columns = [normalize_text(column) for column in df.columns]
     if len(columns) < 2:
         return {"placePrizes": [], "tierPrizes": [], "tierRuleNote": ""}
@@ -178,24 +261,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
     org_logo_json = json.dumps(org_logo_data_uri, ensure_ascii=False)
     campaign_logo_json = json.dumps(campaign_logo_data_uri, ensure_ascii=False)
     prize_json = json.dumps(prize_model, ensure_ascii=False, separators=(",", ":"))
-    access_json = json.dumps(
-        {
-            "managerEmails": [
-                "noamfrostig@gmail.com",
-                "themoti@gmail.com",
-                "Moranmta@gmail.com",
-                "4337579@gmail.com",
-                "rasherov@gmail.com",
-                "Yafit.neveshalev@gmail.com",
-                "Yovelk11@gmail.com",
-                "Lalobenny@gmail.com",
-                "aharonayal@gmail.com",
-            ],
-            "adminPasswordHash": "aaf587976eeb78f291c13743195dd667cbd1a175bbee14f7a8712b37ef6c1b47",
-        },
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
+    access_json = json.dumps(load_access_control(), ensure_ascii=False, separators=(",", ":"))
 
     template = textwrap.dedent(
         """
@@ -573,6 +639,27 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               background: rgba(255, 214, 41, 0.12);
               color: var(--navy-950);
               border: 1px solid rgba(17, 29, 74, 0.12);
+            }
+
+            #yellow-dashboard-root .status-note.is-error,
+            #yellow-dashboard-root .status-chip.is-error {
+              background: rgba(255, 214, 41, 0.18);
+              border-inline-start: 4px solid var(--black);
+              color: var(--navy-950);
+            }
+
+            #yellow-dashboard-root .status-note.is-success,
+            #yellow-dashboard-root .status-chip.is-success {
+              background: rgba(17, 29, 74, 0.08);
+              border-inline-start: 4px solid var(--yolk-500);
+              color: var(--navy-950);
+            }
+
+            #yellow-dashboard-root .status-note.is-warning,
+            #yellow-dashboard-root .status-chip.is-warning {
+              background: rgba(255, 226, 102, 0.22);
+              border-inline-start: 4px solid var(--navy-900);
+              color: var(--navy-950);
             }
 
             #yellow-dashboard-root .hero-badge {
@@ -2045,6 +2132,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                                 <input id="prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" />
                               </label>
                             </div>
+                            <div id="import-status" class="status-note text-small" aria-live="polite">המערכת מוכנה לקבלת קבצים. קובץ לא תקין לא ידרוס את הנתונים הפעילים.</div>
                           </section>
 
                           <section class="control-group">
@@ -2320,6 +2408,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                 upload: root.querySelector("#csv-upload"),
                 compareUpload: root.querySelector("#compare-upload"),
                 prizeUpload: root.querySelector("#prize-upload"),
+                importStatus: root.querySelector("#import-status"),
                 goalTotal: root.querySelector("#goal-total"),
                 goalDaily: root.querySelector("#goal-daily"),
                 dailyMetric: root.querySelector("#daily-metric-select"),
@@ -2505,6 +2594,18 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               function setLoginMessage(message, tone = "") {
                 elements.loginMessage.textContent = message;
                 elements.loginMessage.className = `login-message text-small${tone ? ` is-${tone}` : ""}`;
+              }
+
+              function setImportMessage(message, tone = "") {
+                if (!elements.importStatus) {
+                  return;
+                }
+                elements.importStatus.textContent = message;
+                elements.importStatus.className = `status-note text-small${tone ? ` is-${tone}` : ""}`;
+              }
+
+              function hasBlockingValidation(validation) {
+                return Boolean(validation.missingColumns.length || !validation.validRows.length);
               }
 
               function renderBrandAssets() {
@@ -2880,6 +2981,28 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   placePrizes,
                   tierPrizes,
                   tierRuleNote: String(model.tierRuleNote || "").trim(),
+                };
+              }
+
+              function validatePrizeModelUpload(model, label) {
+                const normalized = normalizePrizeModel(model);
+                const warnings = [];
+                const errors = [];
+
+                if (!normalized.placePrizes.length) {
+                  warnings.push("לא זוהו פרסי מיקומים תקפים.");
+                }
+                if (!normalized.tierPrizes.length) {
+                  warnings.push("לא זוהו מדרגות פרס תקפות.");
+                }
+                if (!normalized.placePrizes.length && !normalized.tierPrizes.length) {
+                  errors.push(`לא נמצאו פרסים תקפים בקובץ ${label}.`);
+                }
+
+                return {
+                  normalized,
+                  warnings,
+                  errors,
                 };
               }
 
@@ -4677,15 +4800,30 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   if (!file) {
                     return;
                   }
-                  const text = await file.text();
-                  const ingested = ingestCsvText(text, file.name);
-                  state.meta = ingested.meta;
-                  state.rows = enrichRows(ingested.normalized, ingested.meta);
-                  state.sourceLabel = file.name;
-                  state.validation.base = ingested.validation;
-                  state.filters = getDefaultFilters(ingested.meta);
-                  resetFilterOptions();
-                  renderAll();
+                  try {
+                    const text = await file.text();
+                    const ingested = ingestCsvText(text, file.name);
+                    state.validation.base = ingested.validation;
+                    if (hasBlockingValidation(ingested.validation)) {
+                      setImportMessage(`קובץ העסקאות ${file.name} לא נטען. נשארים עם הנתונים הפעילים עד לתיקון הקלט.`, "error");
+                      renderAll();
+                      return;
+                    }
+                    state.meta = ingested.meta;
+                    state.rows = enrichRows(ingested.normalized, ingested.meta);
+                    state.sourceLabel = file.name;
+                    state.filters = getDefaultFilters(ingested.meta);
+                    resetFilterOptions();
+                    setImportMessage(
+                      ingested.validation.warnings.length
+                        ? `קובץ העסקאות ${file.name} נטען עם אזהרות. מומלץ לבדוק את לוח הולידציה לפני קבלת החלטות.`
+                        : `קובץ העסקאות ${file.name} נטען בהצלחה.`,
+                      ingested.validation.warnings.length ? "warning" : "success"
+                    );
+                    renderAll();
+                  } catch (_error) {
+                    setImportMessage(`טעינת קובץ העסקאות ${file.name} נכשלה. הנתונים הפעילים נשמרו כפי שהם.`, "error");
+                  }
                 });
 
                 elements.compareUpload.addEventListener("change", async (event) => {
@@ -4693,16 +4831,31 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   if (!file) {
                     return;
                   }
-                  const text = await file.text();
-                  const ingested = ingestCsvText(text, file.name);
-                  state.compare = {
-                    rows: enrichRows(ingested.normalized, ingested.meta),
-                    meta: ingested.meta,
-                    label: file.name,
-                  };
-                  state.validation.compare = ingested.validation;
-                  resetFilterOptions();
-                  renderAll();
+                  try {
+                    const text = await file.text();
+                    const ingested = ingestCsvText(text, file.name);
+                    state.validation.compare = ingested.validation;
+                    if (hasBlockingValidation(ingested.validation)) {
+                      setImportMessage(`קובץ ההשוואה ${file.name} לא נטען. ההשוואה הקודמת נשמרה ללא שינוי.`, "error");
+                      renderAll();
+                      return;
+                    }
+                    state.compare = {
+                      rows: enrichRows(ingested.normalized, ingested.meta),
+                      meta: ingested.meta,
+                      label: file.name,
+                    };
+                    resetFilterOptions();
+                    setImportMessage(
+                      ingested.validation.warnings.length
+                        ? `קובץ ההשוואה ${file.name} נטען עם אזהרות.`
+                        : `קובץ ההשוואה ${file.name} נטען בהצלחה.`,
+                      ingested.validation.warnings.length ? "warning" : "success"
+                    );
+                    renderAll();
+                  } catch (_error) {
+                    setImportMessage(`טעינת קובץ ההשוואה ${file.name} נכשלה. ההשוואה הפעילה לא השתנתה.`, "error");
+                  }
                 });
 
                 elements.prizeUpload.addEventListener("change", async (event) => {
@@ -4710,10 +4863,26 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
                   if (!file) {
                     return;
                   }
-                  const model = await loadPrizeModelFromFile(file);
-                  state.prizeModel = model;
-                  storePrizeModel(model);
-                  renderAll();
+                  try {
+                    const model = await loadPrizeModelFromFile(file);
+                    const validation = validatePrizeModelUpload(model, file.name);
+                    if (validation.errors.length) {
+                      setImportMessage(`קובץ הפרסים ${file.name} לא נטען. טבלת הפרסים הפעילה נשארה כפי שהיא.`, "error");
+                      renderAll();
+                      return;
+                    }
+                    state.prizeModel = validation.normalized;
+                    storePrizeModel(validation.normalized);
+                    setImportMessage(
+                      validation.warnings.length
+                        ? `קובץ הפרסים ${file.name} נטען חלקית. מומלץ לבדוק שחסרים פרסים או מדרגות לא נעלמו בטעות.`
+                        : `קובץ הפרסים ${file.name} נטען בהצלחה.`,
+                      validation.warnings.length ? "warning" : "success"
+                    );
+                    renderAll();
+                  } catch (_error) {
+                    setImportMessage(`טעינת קובץ הפרסים ${file.name} נכשלה.`, "error");
+                  }
                 });
               }
 
@@ -4735,6 +4904,7 @@ def build_fragment(rows: list[dict], meta: dict, org_logo_data_uri: str, campaig
               resetFilterOptions();
               setPage(state.session ? "admin" : "prizes");
               setLoginMessage("");
+              setImportMessage("המערכת מוכנה לקבלת קבצים. קובץ לא תקין לא ידרוס את הנתונים הפעילים.");
               bindEvents();
               renderAll();
             })();
@@ -4768,15 +4938,34 @@ def export_browser_friendly_html() -> None:
     BROWSER_OUTPUT_HTML.write_text(browser_html, encoding="utf-8")
 
 
-def main() -> None:
-    rows = load_rows()
-    meta = build_meta(rows)
-    org_logo_data_uri = load_logo_data_uri(ORG_LOGO_PATH if ORG_LOGO_PATH.exists() else LEGACY_LOGO_PATH)
-    campaign_logo_data_uri = load_logo_data_uri(CAMPAIGN_LOGO_PATH)
-    prize_model = load_prize_model()
-    fragment = build_fragment(rows, meta, org_logo_data_uri, campaign_logo_data_uri, prize_model)
-    VIS_DIR.mkdir(parents=True, exist_ok=True)
-    FRAGMENT_PATH.write_text(fragment, encoding="utf-8")
+def build_browser_document(fragment: str) -> str:
+    return textwrap.dedent(
+        f"""
+        <!doctype html>
+        <html lang="he" dir="rtl">
+          <head>
+            <meta charset="utf-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <title>Yellow Project Dashboard</title>
+            <style>
+              html, body {{
+                margin: 0;
+                min-height: 100%;
+                background: #F6F7FA;
+              }}
+            </style>
+          </head>
+          <body>
+            {fragment}
+          </body>
+        </html>
+        """
+    ).strip()
+
+
+def render_shell_output() -> bool:
+    if not RENDER_SCRIPT.exists():
+        return False
 
     subprocess.run(
         [
@@ -4787,7 +4976,27 @@ def main() -> None:
         ],
         check=True,
     )
-    export_browser_friendly_html()
+    return True
+
+
+def main() -> None:
+    rows = load_rows()
+    meta = build_meta(rows)
+    org_logo_data_uri = load_logo_data_uri(ORG_LOGO_PATH if ORG_LOGO_PATH.exists() else LEGACY_LOGO_PATH)
+    campaign_logo_data_uri = load_logo_data_uri(CAMPAIGN_LOGO_PATH)
+    prize_model = load_prize_model()
+    fragment = build_fragment(rows, meta, org_logo_data_uri, campaign_logo_data_uri, prize_model)
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    VIS_DIR.mkdir(parents=True, exist_ok=True)
+    FRAGMENT_PATH.write_text(fragment, encoding="utf-8")
+
+    browser_document = build_browser_document(fragment)
+    BROWSER_OUTPUT_HTML.write_text(browser_document, encoding="utf-8")
+
+    if render_shell_output():
+        export_browser_friendly_html()
+    else:
+        OUTPUT_HTML.write_text(browser_document, encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+id,created_at,email,full_name,Ambassador name,total,city,charged_success,charge_result
+S-1001,15/03/26 09:15,yael@example.org,יעל כהן,צוות מרכז,180,תל אביב,true,approved
+S-1002,15/03/26 11:40,dan@example.org,דן לוי,צוות צפון,360,חיפה,true,approved
+S-1003,16/03/26 13:05,noa@example.org,נועה רז,צוות מרכז,250,רמת גן,true,approved
+S-1004,17/03/26 18:20,omer@example.org,עומר טל,צוות דרום,500,באר שבע,true,approved
+S-1005,18/03/26 20:10,adi@example.org,עדי שחר,צוות ירושלים,720,ירושלים,true,approved
+S-1006,19/03/26 10:45,gal@example.org,גל נבון,צוות צפון,150,נהריה,false,card declined
+S-1007,20/03/26 14:30,shir@example.org,שיר אברהם,צוות מרכז,890,הרצליה,true,approved
+S-1008,21/03/26 16:55,ron@example.org,רון ברק,צוות דרום,420,אשדוד,true,approved
+S-1009,22/03/26 19:05,maya@example.org,מאיה שלו,צוות ירושלים,1100,מודיעין,true,approved
+S-1010,24/03/26 21:25,amit@example.org,עמית הדר,צוות מרכז,640,כפר סבא,true,approved

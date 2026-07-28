@@ -1,7 +1,10 @@
 work/__pycache__/
 work/source.csv
 work/prizes.xlsx
+work/prizes.csv
+work/config/dashboard-access.local.json
 outputs/yellow-project-dashboard.html
 outputs/yellow-project-dashboard-browser.html
+outputs/.render-cache/
 outputs/ui-review/
 *.pyc
