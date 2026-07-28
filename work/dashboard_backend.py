@@ -43,6 +43,12 @@ DEFAULT_MANAGER_EMAILS = [
     "Lalobenny@gmail.com",
     "aharonayal@gmail.com",
 ]
+ALLOWED_ORIGINS = {
+    "http://127.0.0.1:8766",
+    "http://127.0.0.1:8767",
+    "http://localhost:8766",
+    "http://localhost:8767",
+}
 
 
 def normalize_email(value: str) -> str:
@@ -300,6 +306,25 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         super().log_message(format, *args)
 
+    def get_cors_headers(self) -> list[tuple[str, str]]:
+        origin = (self.headers.get("Origin") or "").strip()
+        if origin and origin in ALLOWED_ORIGINS:
+            return [
+                ("Access-Control-Allow-Origin", origin),
+                ("Access-Control-Allow-Credentials", "true"),
+                ("Access-Control-Allow-Headers", "Content-Type"),
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+                ("Vary", "Origin"),
+            ]
+        return []
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT)
+        for key, value in self.get_cors_headers():
+            self.send_header(key, value)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
@@ -349,6 +374,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
+        for key, value in self.get_cors_headers():
+            self.send_header(key, value)
         if extra_headers:
             for key, value in extra_headers:
                 self.send_header(key, value)
@@ -367,6 +394,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(content)))
+        for key, value in self.get_cors_headers():
+            self.send_header(key, value)
         self.end_headers()
         self.wfile.write(content)
 
@@ -509,4 +538,3 @@ def serve(host: str = "127.0.0.1", port: int = 8767) -> None:
         pass
     finally:
         server.server_close()
-

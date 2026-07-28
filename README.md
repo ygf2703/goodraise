@@ -24,6 +24,8 @@ The app receives campaign export files and turns them into an active dashboard t
   - Manager-only admin dashboard
 - Sticky dual-brand header with manager status and page navigation
 - Public prize page with podium, prize tiers, and live competition summary
+- Public campaign snapshot hero with immediate KPI-style status cards
+- Daily winners / "Olim LaDeshe" section across the 10 campaign days
 - Public participant view stays open without registration, with a direct manager entry point from the same page
 - SaaS-style manager login screen with real local backend auth
 - Safe-import behavior: invalid uploads do not replace the active dataset
@@ -40,6 +42,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Ambassador movement view across campaign days
 - Heatmap by day and hour
 - Live prize board with current winners and next threshold visibility
+- Daily winner logic with unique ambassador roll-down when the same ambassador already won another day
 - Export of filtered rows to CSV
 
 ## Repository Structure
@@ -111,6 +114,10 @@ After startup, open:
 
 - `http://127.0.0.1:8767/`
 
+Optional browser preview with shared auth backend:
+
+- `http://127.0.0.1:8766/yellow-project-dashboard-browser.html`
+
 Notes:
 
 - If `work/source.csv` is missing, the build falls back to `work/samples/sample-source.csv`.
@@ -118,6 +125,7 @@ Notes:
 - Release verification is available through `scripts/verify_dashboard_release.py`.
 - The backend seeds the admin table from `work/config/dashboard-access.local.json` or the built-in manager list.
 - On first login with an approved email, the manager is prompted to define a personal password.
+- The preview on `8766` can authenticate against the local backend on `8767` through the configured local cross-origin auth flow.
 
 ## Git Workflow
 

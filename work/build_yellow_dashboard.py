@@ -287,10 +287,11 @@ def build_fragment(
     auth_config_json = json.dumps(
         {
             "mode": "backend",
-            "statusEndpoint": "/api/auth/status",
-            "loginEndpoint": "/api/auth/login",
-            "setupEndpoint": "/api/auth/setup",
-            "logoutEndpoint": "/api/auth/logout",
+            "baseUrl": os.getenv("YELLOW_DASHBOARD_AUTH_BASE_URL", "http://127.0.0.1:8767"),
+            "statusEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_STATUS_ENDPOINT", "http://127.0.0.1:8767/api/auth/status"),
+            "loginEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGIN_ENDPOINT", "http://127.0.0.1:8767/api/auth/login"),
+            "setupEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_SETUP_ENDPOINT", "http://127.0.0.1:8767/api/auth/setup"),
+            "logoutEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGOUT_ENDPOINT", "http://127.0.0.1:8767/api/auth/logout"),
         },
         ensure_ascii=False,
         separators=(",", ":"),
@@ -802,8 +803,8 @@ def build_fragment(
 
             #yellow-dashboard-root .public-hero-title {
               color: var(--white);
-              max-width: 11ch;
-              font-size: clamp(2.2rem, 4vw, 4.25rem);
+              max-width: 9ch;
+              font-size: clamp(2.1rem, 3.5vw, 3.6rem);
             }
 
             #yellow-dashboard-root .hero-subtitle,
@@ -817,11 +818,13 @@ def build_fragment(
 
             #yellow-dashboard-root .public-hero-watermark {
               position: absolute;
-              inset-inline-start: var(--space-6);
-              inset-block-start: 50%;
+              left: max(-4%, -42px);
+              right: auto;
+              top: 50%;
               transform: translateY(-50%);
-              width: clamp(180px, 18vw, 280px);
-              opacity: 0.4;
+              width: clamp(460px, 52vw, 920px);
+              max-width: 56%;
+              opacity: 0.03;
               pointer-events: none;
               z-index: 0;
             }
@@ -833,23 +836,25 @@ def build_fragment(
               object-fit: contain;
             }
 
-            #yellow-dashboard-root .public-badges,
-            #yellow-dashboard-root .public-snapshot-grid {
-              display: grid;
-              grid-template-columns: repeat(4, minmax(0, 1fr));
-              align-items: stretch;
-              gap: var(--space-3);
+            #yellow-dashboard-root .public-badges {
+              display: block;
+              width: 100%;
             }
 
             #yellow-dashboard-root .public-snapshot-grid {
+              display: grid;
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              align-items: stretch;
+              gap: var(--space-3);
               margin-top: var(--space-2);
+              width: 100%;
             }
 
             #yellow-dashboard-root .public-snapshot-card {
               display: grid;
               gap: var(--space-2);
-              min-height: 134px;
-              padding: 1rem 1.1rem;
+              min-height: 150px;
+              padding: 1.05rem 1.1rem;
               border-radius: var(--radius-xl);
               background: rgba(255, 255, 255, 0.09);
               border: 1px solid rgba(255, 255, 255, 0.1);
@@ -862,7 +867,7 @@ def build_fragment(
             }
 
             #yellow-dashboard-root .public-snapshot-card--wide {
-              grid-column: span 2;
+              grid-column: span 1;
             }
 
             #yellow-dashboard-root .public-snapshot-label {
@@ -873,7 +878,7 @@ def build_fragment(
 
             #yellow-dashboard-root .public-snapshot-value {
               color: var(--white);
-              font-size: clamp(1.3rem, 2vw, 2rem);
+              font-size: clamp(1.25rem, 1.8vw, 1.9rem);
               font-weight: 800;
               line-height: 1.15;
               font-variant-numeric: tabular-nums;
@@ -881,13 +886,13 @@ def build_fragment(
 
             #yellow-dashboard-root .public-snapshot-card--primary .public-snapshot-value {
               color: var(--yolk-200);
-              font-size: clamp(1.6rem, 2.6vw, 2.4rem);
+              font-size: clamp(1.7rem, 2.6vw, 2.45rem);
             }
 
             #yellow-dashboard-root .public-snapshot-meta {
               color: rgba(255, 255, 255, 0.82);
-              font-size: 0.92rem;
-              line-height: 1.5;
+              font-size: 0.9rem;
+              line-height: 1.45;
             }
 
             #yellow-dashboard-root .public-snapshot-status {
@@ -960,7 +965,7 @@ def build_fragment(
             }
 
             #yellow-dashboard-root .admin-overview-grid {
-              grid-template-columns: minmax(0, 1.15fr) minmax(380px, 0.85fr);
+              grid-template-columns: minmax(0, 1fr);
               align-items: start;
             }
 
@@ -1452,6 +1457,61 @@ def build_fragment(
               gap: var(--space-4);
             }
 
+            #yellow-dashboard-root .daily-winners-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+              gap: var(--space-4);
+            }
+
+            #yellow-dashboard-root .daily-winner-card {
+              display: grid;
+              gap: var(--space-3);
+              padding: var(--space-4);
+              border-radius: var(--radius-lg);
+              background: rgba(17, 29, 74, 0.04);
+              border: 1px solid rgba(17, 29, 74, 0.08);
+            }
+
+            #yellow-dashboard-root .daily-winner-head {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: var(--space-3);
+            }
+
+            #yellow-dashboard-root .daily-winner-day {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              min-width: 74px;
+              padding: 0.42rem 0.72rem;
+              border-radius: 999px;
+              background: var(--navy-950);
+              color: var(--yolk-500);
+              font-size: 0.9rem;
+              font-weight: 800;
+            }
+
+            #yellow-dashboard-root .daily-winner-date {
+              color: var(--text-muted);
+              font-size: 0.9rem;
+              font-weight: 600;
+            }
+
+            #yellow-dashboard-root .daily-winner-name {
+              color: var(--navy-950);
+              font-size: 1.08rem;
+              font-weight: 800;
+              line-height: 1.3;
+            }
+
+            #yellow-dashboard-root .daily-winner-amount {
+              color: var(--navy-900);
+              font-size: 1.2rem;
+              font-weight: 800;
+              font-variant-numeric: tabular-nums;
+            }
+
             #yellow-dashboard-root .prize-card {
               overflow: hidden;
               display: grid;
@@ -1904,7 +1964,7 @@ def build_fragment(
               }
 
               #yellow-dashboard-root .public-snapshot-card--wide {
-                grid-column: span 2;
+                grid-column: span 1;
               }
 
               #yellow-dashboard-root .public-hero-brand,
@@ -1924,9 +1984,11 @@ def build_fragment(
               }
 
               #yellow-dashboard-root .public-hero-watermark {
-                width: 180px;
-                inset-inline-start: var(--space-4);
-                opacity: 0.28;
+                left: -6%;
+                right: auto;
+                width: clamp(280px, 40vw, 460px);
+                max-width: 44%;
+                opacity: 0.022;
               }
 
               #yellow-dashboard-root .filters-grid,
@@ -2864,7 +2926,7 @@ def build_fragment(
               async function authRequest(endpoint, options = {}) {
                 const response = await fetch(endpoint, {
                   method: options.method || "GET",
-                  credentials: "same-origin",
+                  credentials: "include",
                   headers: {
                     "Content-Type": "application/json",
                     ...(options.headers || {}),
@@ -3819,6 +3881,52 @@ def build_fragment(
                 };
               }
 
+              function computeDailyWinners(referenceRows) {
+                const projectDates = state.meta.projectDates?.length ? state.meta.projectDates : state.meta.uniqueDates || [];
+                const groupedByDate = new Map();
+                referenceRows.forEach((row) => {
+                  const dateKey = row.date;
+                  if (!dateKey) {
+                    return;
+                  }
+                  if (!groupedByDate.has(dateKey)) {
+                    groupedByDate.set(dateKey, new Map());
+                  }
+                  const byAmbassador = groupedByDate.get(dateKey);
+                  const ambassador = row.ambassador || "ללא שיוך";
+                  if (ambassador === "ללא שיוך") {
+                    return;
+                  }
+                  const current = byAmbassador.get(ambassador) || { ambassador, total: 0, deals: 0 };
+                  current.total += Number(row.amount || 0);
+                  current.deals += 1;
+                  byAmbassador.set(ambassador, current);
+                });
+
+                const usedAmbassadors = new Set();
+                return projectDates.slice(0, 10).map((dateKey, index) => {
+                  const candidates = Array.from((groupedByDate.get(dateKey) || new Map()).values())
+                    .sort((left, right) => {
+                      if (right.total !== left.total) {
+                        return right.total - left.total;
+                      }
+                      if (right.deals !== left.deals) {
+                        return right.deals - left.deals;
+                      }
+                      return left.ambassador.localeCompare(right.ambassador, "he");
+                    });
+                  const uniqueCandidate = candidates.find((candidate) => !usedAmbassadors.has(candidate.ambassador)) || candidates[0] || null;
+                  if (uniqueCandidate) {
+                    usedAmbassadors.add(uniqueCandidate.ambassador);
+                  }
+                  return {
+                    date: dateKey,
+                    dayNumber: index + 1,
+                    winner: uniqueCandidate,
+                  };
+                });
+              }
+
               function getActiveFilters() {
                 const summary = [];
                 if (state.filters.ambassador !== "all") {
@@ -4540,6 +4648,7 @@ def build_fragment(
 
               function renderPrizeBoard(prizeRows) {
                 const standings = computePrizeStandings(prizeRows);
+                const dailyWinners = computeDailyWinners(prizeRows);
                 const { placeWinners, tiers, prizeModel, selectedFocus } = standings;
 
                 elements.prizeSummary.textContent = selectedFocus
@@ -4600,6 +4709,45 @@ def build_fragment(
                                   </div>
                                 </article>
                               `;
+                            })
+                            .join("")}
+                        </div>
+                      </div>
+                    `
+                  : "";
+
+                const dailyWinnersMarkup = dailyWinners.length
+                  ? `
+                      <div class="dashboard-section">
+                        <div class="section-head">
+                          <h3>מנצחי הימים / עולים לדשא</h3>
+                          <div class="text-small text-muted">לכל יום קלנדרי נבחר/ת השגריר/ה שגייס/ה הכי הרבה בין 00:00 ל-23:59. אם אותו שגריר כבר זכה ביום אחר, מוצג/ת הבא/ה אחריו/ה.</div>
+                        </div>
+                        <div class="daily-winners-grid">
+                          ${dailyWinners
+                            .map((item) => {
+                              return item.winner
+                                ? `
+                                    <article class="daily-winner-card">
+                                      <div class="daily-winner-head">
+                                        <span class="daily-winner-day">יום ${escapeHtml(String(item.dayNumber))}</span>
+                                        <span class="daily-winner-date">${escapeHtml(formatDate(item.date))}</span>
+                                      </div>
+                                      <div class="daily-winner-name">${escapeHtml(item.winner.ambassador)}</div>
+                                      <div class="daily-winner-amount">${escapeHtml(formatAmount(item.winner.total))}</div>
+                                      <div class="text-small text-muted">${escapeHtml(formatNumber(item.winner.deals))} עסקאות באותו יום</div>
+                                    </article>
+                                  `
+                                : `
+                                    <article class="daily-winner-card">
+                                      <div class="daily-winner-head">
+                                        <span class="daily-winner-day">יום ${escapeHtml(String(item.dayNumber))}</span>
+                                        <span class="daily-winner-date">${escapeHtml(formatDate(item.date))}</span>
+                                      </div>
+                                      <div class="daily-winner-name">עדיין אין מנצח/ת ליום הזה</div>
+                                      <div class="text-small text-muted">ברגע שייקלטו עסקאות ליום הזה, המוביל/ה יוצג/תוצג כאן.</div>
+                                    </article>
+                                  `;
                             })
                             .join("")}
                         </div>
@@ -4685,7 +4833,7 @@ def build_fragment(
                     `
                   : `<div class="empty-state">לא נטענה טבלת פרסים תקפה. אפשר להעלות קובץ פרסים חדש ב-CSV או Excel.</div>`;
 
-                elements.prizeBoard.innerHTML = `${podiumMarkup}${tiersMarkup}`;
+                elements.prizeBoard.innerHTML = `${podiumMarkup}${dailyWinnersMarkup}${tiersMarkup}`;
               }
 
               function createSvg(width, height, ariaLabel) {
