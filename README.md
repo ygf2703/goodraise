@@ -18,11 +18,14 @@ The app receives campaign export files and turns them into an active dashboard t
 - Premium blue/yellow executive UI with both campaign and organization logos
 - Assistant typography and shared design-system classes across all pages
 - Multi-page experience:
+  - Public project and donation page
   - Public prizes and competition page
   - Public participation rules page
   - Public privacy page
   - Manager-only admin dashboard
 - Fixed dual-brand header with manager status and page navigation
+- Public project page with branded hero, flexible story content, configurable image or video, preset donation amounts, donor details, and handoff to an external payment provider
+- Manager-side campaign designer for local styling control over colors, typography, hero media, CTAs, and preset donation cards
 - Public prize page with podium, prize tiers, and live competition summary
 - Public campaign snapshot hero with immediate KPI-style status cards
 - Daily winners / "Olim LaDeshe" section across the 10 campaign days
@@ -56,6 +59,10 @@ The app receives campaign export files and turns them into an active dashboard t
   Organization logo for Achim LaSemel.
 - `work/assets/osim-tov-betzahov-logo.png`
   Campaign logo for Osim Tov BeTzahov.
+- `work/assets/campaign-project-hero.jpeg`
+  Default public-facing media asset for the project donation page.
+- `work/content/project-page-default.md`
+  Default markdown story shown on the public project page.
 - `work/samples/sample-source.csv`
   Synthetic sample dataset for portable builds and CI.
 - `work/config/dashboard-access.example.json`

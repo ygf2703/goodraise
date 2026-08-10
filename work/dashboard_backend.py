@@ -30,7 +30,7 @@ DB_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_AUTH_DB_PATH", str(DATA_DIR / "dashboard-auth.sqlite3"))
 ).resolve()
 SESSION_COOKIE_NAME = "yellow_dashboard_admin_session"
-SESSION_DURATION_HOURS = 12
+SESSION_DURATION_HOURS = 24 * 30
 PASSWORD_ITERATIONS = 200_000
 DEFAULT_MANAGER_EMAILS = [
     "noamfrostig@gmail.com",
@@ -49,11 +49,13 @@ DEFAULT_MANAGER_EMAILS = [
 ALLOWED_ORIGINS = {
     "http://127.0.0.1:8766",
     "http://127.0.0.1:8767",
+    "http://127.0.0.1:8791",
     "http://localhost:8766",
     "http://localhost:8767",
+    "http://localhost:8791",
 }
 SECURITY_HEADERS = (
-    ("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:8767 http://localhost:8767; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"),
+    ("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:8767 http://localhost:8767 http://127.0.0.1:8791 http://localhost:8791; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"),
     ("Referrer-Policy", "strict-origin-when-cross-origin"),
     ("X-Content-Type-Options", "nosniff"),
     ("X-Frame-Options", "DENY"),
@@ -397,6 +399,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/auth/logout":
             self.handle_auth_logout()
             return
+        if parsed.path == "/api/auth/reset-local":
+            self.handle_auth_reset_local()
+            return
         self.respond_json(HTTPStatus.NOT_FOUND, {"message": "הנתיב המבוקש לא נמצא."})
 
     def read_json_body(self) -> dict[str, Any]:
@@ -602,6 +607,47 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.respond_json(
             HTTPStatus.OK,
             {"loggedOut": True},
+            extra_headers=[("Set-Cookie", build_set_cookie(None, 0))],
+        )
+
+    def handle_auth_reset_local(self) -> None:
+        payload = self.read_json_body()
+        email = normalize_email(str(payload.get("email", "")))
+        if not email:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש להזין מייל מנהל/ת כדי לאפס סיסמה."})
+            return
+
+        with get_connection() as connection:
+            ensure_schema(connection)
+            seed_admins(connection)
+            admin = get_admin(connection, email)
+            if not admin or not bool(admin["is_active"]):
+                self.respond_json(
+                    HTTPStatus.FORBIDDEN,
+                    {"message": "המייל שהוזן אינו מורשה לאיפוס במערכת הניהול המקומית."},
+                )
+                return
+            connection.execute(
+                """
+                UPDATE admins
+                SET password_hash = NULL, password_set_at = NULL, last_login_at = NULL
+                WHERE lower(email) = ?
+                """,
+                (normalize_email(email),),
+            )
+            connection.execute(
+                "DELETE FROM admin_sessions WHERE lower(admin_email) = ?",
+                (normalize_email(email),),
+            )
+            connection.commit()
+
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "reset": True,
+                "email": email,
+                "message": "הסיסמה אופסה במערכת המקומית. בכניסה הבאה יש להגדיר סיסמה חדשה.",
+            },
             extra_headers=[("Set-Cookie", build_set_cookie(None, 0))],
         )
 
