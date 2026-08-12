@@ -1,14 +1,33 @@
-﻿import { getStore } from "@netlify/blobs";
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { authorize } from "./authorization.mjs";
+import {
+  ROLE_ANALYST,
+  ROLE_PLATFORM_ADMIN,
+  ROLE_VIEWER,
+  isoNow,
+  normalizeEmail,
+  normalizeRole,
+  normalizeSlug,
+  normalizeStableId,
+} from "./multi-tenant-model.mjs";
+import { createPlatformStore } from "./platform-store.mjs";
+import {
+  appendAuditEvent,
+  buildCampaignContext,
+  ensureMultiTenantMigration,
+  getCampaign,
+  getOrganization,
+  listCampaignSummaries,
+} from "./campaign-repositories.mjs";
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const DEV_STORE_PATH = resolve(ROOT_DIR, "work", "data", "netlify-auth-dev.json");
 const LOCAL_ACCESS_CONTROL_PATH = resolve(ROOT_DIR, "work", "config", "dashboard-access.local.json");
 const EXAMPLE_ACCESS_CONTROL_PATH = resolve(ROOT_DIR, "work", "config", "dashboard-access.example.json");
-const ADMIN_DATASET_PATH = resolve(ROOT_DIR, "netlify", "data", "admin-dataset.json");
 const STORE_NAME = "yellow-dashboard-auth";
 const SESSION_COOKIE_NAME = "yellow_dashboard_admin_session";
 const SESSION_DURATION_HOURS = 24 * 30;
@@ -16,56 +35,12 @@ const PASSWORD_ITERATIONS = 200_000;
 const MAX_AUTH_ATTEMPTS = 5;
 const AUTH_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_LOCKOUT_MS = 20 * 60 * 1000;
-const ROLE_PLATFORM_ADMIN = "platform_admin";
-const ROLE_ORGANIZATION_ADMIN = "organization_admin";
-const ROLE_CAMPAIGN_MANAGER = "campaign_manager";
-const ROLE_ANALYST = "analyst";
-const ROLE_VIEWER = "viewer";
-const KNOWN_ROLES = new Set([
-  ROLE_PLATFORM_ADMIN,
-  ROLE_ORGANIZATION_ADMIN,
-  ROLE_CAMPAIGN_MANAGER,
-  ROLE_ANALYST,
-  ROLE_VIEWER,
-]);
-const ROLE_ORDER = {
-  [ROLE_VIEWER]: 1,
-  [ROLE_ANALYST]: 2,
-  [ROLE_CAMPAIGN_MANAGER]: 3,
-  [ROLE_ORGANIZATION_ADMIN]: 4,
-  [ROLE_PLATFORM_ADMIN]: 5,
-};
 
-function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function normalizeSlug(value, fallback = "default") {
-  const cleaned = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return cleaned || fallback;
-}
-
-function normalizeRole(value, fallback = ROLE_PLATFORM_ADMIN) {
-  const candidate = String(value || "").trim().toLowerCase();
-  return KNOWN_ROLES.has(candidate) ? candidate : fallback;
-}
-
-function normalizeCampaignScope(values) {
-  if (Array.isArray(values)) {
-    return values.map((value) => normalizeSlug(value)).filter(Boolean);
-  }
-  if (typeof values === "string" && values.trim()) {
-    return values.split(",").map((value) => normalizeSlug(value)).filter(Boolean);
-  }
-  return [];
-}
-
-function isoNow() {
-  return new Date().toISOString();
+function getPersistence() {
+  return createPlatformStore({
+    storeName: STORE_NAME,
+    devStorePath: DEV_STORE_PATH,
+  });
 }
 
 function toMillis(value) {
@@ -94,13 +69,10 @@ function parseManagerRecords(rawValue) {
   if (!raw) {
     return [];
   }
-
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed
-        .map((value) => normalizeManagerRecord(value))
-        .filter(Boolean);
+      return parsed.map((value) => normalizeManagerRecord(value)).filter(Boolean);
     }
   } catch {
     return raw
@@ -108,7 +80,19 @@ function parseManagerRecords(rawValue) {
       .map((value) => normalizeManagerRecord(value))
       .filter(Boolean);
   }
+  return [];
+}
 
+function normalizeCampaignScope(values) {
+  if (Array.isArray(values)) {
+    return values.map((value) => normalizeStableId(value)).filter(Boolean);
+  }
+  if (typeof values === "string" && values.trim()) {
+    return values
+      .split(",")
+      .map((value) => normalizeStableId(value))
+      .filter(Boolean);
+  }
   return [];
 }
 
@@ -121,7 +105,9 @@ function normalizeManagerRecord(value) {
     return {
       email,
       role: ROLE_PLATFORM_ADMIN,
-      organizationSlug: "default-org",
+      organizationId: "",
+      organizationSlug: "",
+      campaignIds: [],
       campaignSlugs: [],
       isActive: true,
     };
@@ -136,11 +122,22 @@ function normalizeManagerRecord(value) {
     return null;
   }
 
+  const organizationSlug = normalizeSlug(value.organizationSlug || value.organizationId || "");
+  const organizationId = normalizeStableId(value.organizationId || organizationSlug || "");
+  const campaignIds = normalizeCampaignScope(value.campaignIds || value.campaignSlugs);
+  const campaignSlugs = Array.isArray(value.campaignSlugs)
+    ? value.campaignSlugs.map((item) => normalizeSlug(item)).filter(Boolean)
+    : typeof value.campaignSlugs === "string"
+      ? value.campaignSlugs.split(",").map((item) => normalizeSlug(item)).filter(Boolean)
+      : [];
+
   return {
     email,
     role: normalizeRole(value.role, ROLE_PLATFORM_ADMIN),
-    organizationSlug: normalizeSlug(value.organizationSlug || "default-org"),
-    campaignSlugs: normalizeCampaignScope(value.campaignSlugs),
+    organizationId,
+    organizationSlug,
+    campaignIds,
+    campaignSlugs,
     isActive: value.isActive !== false,
   };
 }
@@ -214,10 +211,7 @@ function verifyPassword(password, storedHash) {
     const salt = Buffer.from(saltBase64, "base64url");
     const expectedDigest = Buffer.from(digestBase64, "base64url");
     const candidateDigest = pbkdf2Sync(password, salt, iterations, expectedDigest.length, "sha256");
-    return (
-      candidateDigest.length === expectedDigest.length &&
-      timingSafeEqual(candidateDigest, expectedDigest)
-    );
+    return candidateDigest.length === expectedDigest.length && timingSafeEqual(candidateDigest, expectedDigest);
   } catch {
     return false;
   }
@@ -232,11 +226,9 @@ function buildCookieValue(token, requestUrl, maxAgeSeconds) {
     "SameSite=Lax",
     `Max-Age=${maxAgeSeconds}`,
   ];
-
   if (process.env.NETLIFY || process.env.NETLIFY_LOCAL || url.protocol === "https:") {
     parts.push("Secure");
   }
-
   return parts.join("; ");
 }
 
@@ -247,111 +239,6 @@ function getClientAddress(request) {
 
 function getUserAgent(request) {
   return request.headers.get("user-agent") || "";
-}
-
-async function loadAdminDatasetPayload() {
-  try {
-    const content = await readFile(ADMIN_DATASET_PATH, "utf8");
-    const payload = JSON.parse(content);
-    return payload && typeof payload === "object" ? payload : null;
-  } catch {
-    return null;
-  }
-}
-
-async function readDevStore() {
-  try {
-    const content = await readFile(DEV_STORE_PATH, "utf8");
-    const parsed = JSON.parse(content);
-    if (parsed && typeof parsed === "object" && parsed.items && typeof parsed.items === "object") {
-      return parsed;
-    }
-  } catch {
-    return { items: {} };
-  }
-
-  return { items: {} };
-}
-
-async function writeDevStore(store) {
-  await mkdir(dirname(DEV_STORE_PATH), { recursive: true });
-  await writeFile(DEV_STORE_PATH, JSON.stringify(store, null, 2), "utf8");
-}
-
-function createFileStore() {
-  return {
-    async getJSON(key) {
-      const store = await readDevStore();
-      return store.items[key] ?? null;
-    },
-    async setJSON(key, value) {
-      const store = await readDevStore();
-      store.items[key] = value;
-      await writeDevStore(store);
-    },
-    async delete(key) {
-      const store = await readDevStore();
-      delete store.items[key];
-      await writeDevStore(store);
-    },
-    async listJSON(prefix) {
-      const store = await readDevStore();
-      return Object.entries(store.items)
-        .filter(([key]) => key.startsWith(prefix))
-        .map(([key, value]) => ({ key, value }));
-    },
-  };
-}
-
-function createBlobStore() {
-  const store = getStore(STORE_NAME);
-
-  return {
-    async getJSON(key) {
-      return (await store.get(key, { type: "json" })) ?? null;
-    },
-    async setJSON(key, value) {
-      await store.setJSON(key, value);
-    },
-    async delete(key) {
-      await store.delete(key);
-    },
-    async listJSON(prefix) {
-      const items = [];
-      let cursor;
-
-      do {
-        const page = await store.list(cursor ? { prefix, cursor } : { prefix });
-        for (const blob of page.blobs || []) {
-          const value = await store.get(blob.key, { type: "json" });
-          if (value !== null) {
-            items.push({ key: blob.key, value });
-          }
-        }
-        cursor = page.cursor || undefined;
-      } while (cursor);
-
-      return items;
-    },
-  };
-}
-
-function isNetlifyRuntime() {
-  return Boolean(
-    process.env.NETLIFY_LOCAL ||
-      process.env.NETLIFY ||
-      process.env.SITE_ID ||
-      process.env.URL ||
-      process.env.SITE_NAME,
-  );
-}
-
-function getPersistence() {
-  if (isNetlifyRuntime()) {
-    return createBlobStore();
-  }
-
-  return createFileStore();
 }
 
 async function recordAuditEvent(store, event) {
@@ -373,17 +260,10 @@ async function recordFailedAttempt(store, email, clientAddress) {
   const key = rateLimitKey(email, clientAddress);
   const now = Date.now();
   const existing = await getRateLimitRecord(store, email, clientAddress);
-  const windowStartedAt =
-    existing && now - toMillis(existing.windowStartedAt) <= AUTH_WINDOW_MS
-      ? existing.windowStartedAt
-      : new Date(now).toISOString();
-  const count =
-    existing && now - toMillis(existing.windowStartedAt) <= AUTH_WINDOW_MS
-      ? Number(existing.count || 0) + 1
-      : 1;
-  const blockedUntil =
-    count >= MAX_AUTH_ATTEMPTS ? new Date(now + AUTH_LOCKOUT_MS).toISOString() : existing?.blockedUntil || "";
-
+  const sameWindow = existing && now - toMillis(existing.windowStartedAt) <= AUTH_WINDOW_MS;
+  const windowStartedAt = sameWindow ? existing.windowStartedAt : new Date(now).toISOString();
+  const count = sameWindow ? Number(existing.count || 0) + 1 : 1;
+  const blockedUntil = count >= MAX_AUTH_ATTEMPTS ? new Date(now + AUTH_LOCKOUT_MS).toISOString() : existing?.blockedUntil || "";
   await store.setJSON(key, {
     email: normalizeEmail(email),
     clientAddress,
@@ -391,11 +271,7 @@ async function recordFailedAttempt(store, email, clientAddress) {
     windowStartedAt,
     blockedUntil,
   });
-
-  return {
-    count,
-    blockedUntil,
-  };
+  return { count, blockedUntil };
 }
 
 async function ensureNotRateLimited(store, email, clientAddress) {
@@ -407,14 +283,9 @@ async function ensureNotRateLimited(store, email, clientAddress) {
     const retryAfterSeconds = Math.max(1, Math.ceil((toMillis(record.blockedUntil) - Date.now()) / 1000));
     return failureResponse(
       429,
-      "×™×•×ª×¨ ×ž×“×™ × ×™×¡×™×•× ×•×ª ×”×ª×—×‘×¨×•×ª. × ×¡×• ×©×•×‘ ×‘×¢×•×“ ×ž×¡×¤×¨ ×“×§×•×ª.",
-      {
-        code: "rate_limited",
-        retryAfterSeconds,
-      },
-      {
-        "retry-after": String(retryAfterSeconds),
-      },
+      "יותר מדי ניסיונות התחברות. נסו שוב בעוד מספר דקות.",
+      { code: "rate_limited", retryAfterSeconds },
+      { "retry-after": String(retryAfterSeconds) },
     );
   }
   return null;
@@ -423,12 +294,13 @@ async function ensureNotRateLimited(store, email, clientAddress) {
 async function ensureAdminSeed(store) {
   const createdAt = isoNow();
   for (const manager of await loadManagerRecords()) {
-    const key = adminKey(manager.email);
-    const existing = await store.getJSON(key);
-    await store.setJSON(key, {
+    const existing = await store.getJSON(adminKey(manager.email));
+    await store.setJSON(adminKey(manager.email), {
       email: manager.email,
       role: manager.role,
+      organizationId: manager.organizationId,
       organizationSlug: manager.organizationSlug,
+      campaignIds: manager.campaignIds,
       campaignSlugs: manager.campaignSlugs,
       isActive: manager.isActive,
       createdAt: existing?.createdAt || createdAt,
@@ -448,10 +320,6 @@ async function saveAdminRecord(store, record) {
   await store.setJSON(adminKey(record.email), record);
 }
 
-function hasRequiredRole(role, minimumRole) {
-  return (ROLE_ORDER[normalizeRole(role, ROLE_VIEWER)] || 0) >= (ROLE_ORDER[normalizeRole(minimumRole, ROLE_PLATFORM_ADMIN)] || 0);
-}
-
 async function deleteSessionsForEmail(store, email) {
   const sessions = await store.listJSON("session:");
   for (const item of sessions) {
@@ -465,321 +333,15 @@ async function getSessionRecord(store, token) {
   if (!token) {
     return null;
   }
-
   const record = await store.getJSON(sessionKey(token));
   if (!record) {
     return null;
   }
-
   if (toMillis(record.expiresAt) <= Date.now()) {
     await store.delete(sessionKey(token));
     return null;
   }
-
   return record;
-}
-
-export async function getAuthStatus(request) {
-  const store = getPersistence();
-  const token = getSessionToken(request);
-  const session = await getSessionRecord(store, token);
-  const admin = session?.adminEmail ? await getAdminRecord(store, session.adminEmail) : null;
-  const authenticatedEmail = admin ? normalizeEmail(admin.email) : "";
-
-  return {
-    authenticated: Boolean(authenticatedEmail),
-    email: authenticatedEmail,
-    role: admin?.role || "",
-    organizationSlug: admin?.organizationSlug || "",
-    campaignSlugs: Array.isArray(admin?.campaignSlugs) ? admin.campaignSlugs : [],
-    sessionExpiresAt: session?.expiresAt || "",
-    setupSupported: true,
-  };
-}
-
-export async function requireManagerAccess(request, minimumRole = ROLE_VIEWER, unauthorizedMessage = "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ.") {
-  const auth = await getAuthStatus(request);
-  if (!auth?.authenticated || !auth?.email) {
-    return {
-      error: failureResponse(401, unauthorizedMessage),
-      auth: null,
-    };
-  }
-  if (!hasRequiredRole(auth.role, minimumRole)) {
-    return {
-      error: failureResponse(403, "××™×Ÿ ×”×¨×©××” ×ž×¡×¤×§×ª ×œ×‘×™×¦×•×¢ ×”×¤×¢×•×œ×” ×”×ž×‘×•×§×©×ª."),
-      auth,
-    };
-  }
-  return { auth };
-}
-
-export async function getRuntimeHealth() {
-  const store = getPersistence();
-  await ensureAdminSeed(store);
-  const dataset = await loadAdminDatasetPayload();
-  const managers = await loadManagerRecords();
-  const sessions = await store.listJSON("session:");
-  return {
-    ok: true,
-    service: "yellow-dashboard-netlify-auth",
-    application: {
-      status: "ok",
-      runtime: isNetlifyRuntime() ? "netlify" : "local-dev-store",
-    },
-    persistence: {
-      status: "ok",
-      managerSeedCount: managers.length,
-      activeSessionCount: sessions.length,
-    },
-    dataSource: {
-      adminDatasetReady: Boolean(dataset),
-      adminDatasetRows: Array.isArray(dataset?.rows) ? dataset.rows.length : 0,
-    },
-    time: {
-      checkedAt: isoNow(),
-      sessionDurationHours: SESSION_DURATION_HOURS,
-    },
-  };
-}
-
-export async function getAdminDataset(request) {
-  const store = getPersistence();
-  const access = await requireManagerAccess(request, ROLE_ANALYST, "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™×™×.");
-  if (access.error) {
-    await recordAuditEvent(store, {
-      type: "dataset_denied",
-      email: normalizeEmail(access.auth?.email || ""),
-      clientAddress: getClientAddress(request),
-      userAgent: getUserAgent(request),
-      outcome: "denied",
-    });
-    return access.error;
-  }
-
-  const payload = await loadAdminDatasetPayload();
-  if (!payload) {
-    return failureResponse(404, "×ž××’×¨ ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™ ×œ× ×–×ž×™×Ÿ ×›×¨×’×¢. ××¤×©×¨ ×œ×”×¢×œ×•×ª ×§×•×‘×¥ ×¢×¡×§××•×ª ×™×“× ×™×ª ×œ××—×¨ ×”×›× ×™×¡×”.");
-  }
-
-  await recordAuditEvent(store, {
-    type: "dataset_view",
-    email: access.auth.email,
-    clientAddress: getClientAddress(request),
-    userAgent: getUserAgent(request),
-    outcome: "success",
-  });
-
-  return jsonResponse(200, {
-    rows: Array.isArray(payload.rows) ? payload.rows : [],
-    meta: payload.meta && typeof payload.meta === "object" ? payload.meta : {},
-    sourceLabel: payload.sourceLabel || "×§×•×‘×¥ ×‘×¡×™×¡ ×ž××•×‘×˜×—",
-    generatedAt: payload.generatedAt || "",
-  });
-}
-
-export async function loginManager({ email, password, request }) {
-  const normalizedEmail = normalizeEmail(email);
-  const store = getPersistence();
-  const clientAddress = getClientAddress(request);
-  const userAgent = getUserAgent(request);
-
-  const rateLimitResponse = await ensureNotRateLimited(store, normalizedEmail, clientAddress);
-  if (rateLimitResponse) {
-    await recordAuditEvent(store, {
-      type: "login_blocked",
-      email: normalizedEmail,
-      clientAddress,
-      userAgent,
-      outcome: "blocked",
-    });
-    return rateLimitResponse;
-  }
-
-  const admin = await getAdminRecord(store, normalizedEmail);
-
-  if (!normalizedEmail || !password) {
-    return failureResponse(400, "×™×© ×œ×ž×œ× ×’× ×ž×™×™×œ ×•×’× ×¡×™×¡×ž×”.");
-  }
-
-  if (!admin || !admin.isActive) {
-    await recordFailedAttempt(store, normalizedEmail, clientAddress);
-    await recordAuditEvent(store, {
-      type: "login_denied",
-      email: normalizedEmail,
-      clientAddress,
-      userAgent,
-      outcome: "denied",
-    });
-    return failureResponse(403, "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ×’×™×©×” ×œ×¤×× ×œ ×”× ×™×”×•×œ.");
-  }
-
-  if (!admin.passwordHash) {
-    await recordAuditEvent(store, {
-      type: "login_setup_required",
-      email: normalizedEmail,
-      clientAddress,
-      userAgent,
-      outcome: "setup_required",
-    });
-    return failureResponse(
-      409,
-      "×–×• ×›× ×™×¡×” ×¨××©×•× ×” ×¢×‘×•×¨ ×”×ž×™×™×œ ×”×–×”. ×™×© ×œ×”×’×“×™×¨ ×¡×™×¡×ž×” ××™×©×™×ª ×œ×¤× ×™ ×›× ×™×¡×”.",
-      { code: "setup_required", setupRequired: true },
-    );
-  }
-
-  if (!verifyPassword(password, admin.passwordHash)) {
-    const failedAttempt = await recordFailedAttempt(store, normalizedEmail, clientAddress);
-    await recordAuditEvent(store, {
-      type: "login_failed",
-      email: normalizedEmail,
-      clientAddress,
-      userAgent,
-      outcome: "invalid_password",
-      detail: failedAttempt.count >= MAX_AUTH_ATTEMPTS ? "locked" : "",
-    });
-    return failureResponse(401, "×”×¡×™×¡×ž×” ×©×’×•×™×”. × ×¡×• ×©×•×‘.");
-  }
-
-  const now = isoNow();
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000).toISOString();
-  const token = randomBytes(32).toString("base64url");
-  admin.lastLoginAt = now;
-
-  await clearFailedAttempts(store, normalizedEmail, clientAddress);
-  await saveAdminRecord(store, admin);
-  await store.setJSON(sessionKey(token), {
-    token,
-    adminEmail: normalizedEmail,
-    createdAt: now,
-    expiresAt,
-  });
-  await recordAuditEvent(store, {
-    type: "login_success",
-    email: normalizedEmail,
-    clientAddress,
-    userAgent,
-    outcome: "success",
-  });
-
-  return successResponse(
-    {
-      authenticated: true,
-      email: normalizedEmail,
-      message: "×”×›× ×™×¡×” ×”×¦×œ×™×—×”. ×”×“×©×‘×•×¨×“ ×”× ×™×”×•×œ×™ × ×¤×ª×—.",
-    },
-    request.url,
-    token,
-  );
-}
-
-export async function setupManagerPassword({ email, password, confirmPassword, request }) {
-  const normalizedEmail = normalizeEmail(email);
-  const store = getPersistence();
-  const clientAddress = getClientAddress(request);
-  const userAgent = getUserAgent(request);
-
-  const rateLimitResponse = await ensureNotRateLimited(store, normalizedEmail, clientAddress);
-  if (rateLimitResponse) {
-    await recordAuditEvent(store, {
-      type: "setup_blocked",
-      email: normalizedEmail,
-      clientAddress,
-      userAgent,
-      outcome: "blocked",
-    });
-    return rateLimitResponse;
-  }
-
-  const admin = await getAdminRecord(store, normalizedEmail);
-
-  if (!normalizedEmail || !password || !confirmPassword) {
-    return failureResponse(400, "×™×© ×œ×ž×œ× ×ž×™×™×œ, ×¡×™×¡×ž×” ×•××™×ž×•×ª ×¡×™×¡×ž×”.");
-  }
-
-  if (!admin || !admin.isActive) {
-    await recordFailedAttempt(store, normalizedEmail, clientAddress);
-    await recordAuditEvent(store, {
-      type: "setup_denied",
-      email: normalizedEmail,
-      clientAddress,
-      userAgent,
-      outcome: "denied",
-    });
-    return failureResponse(403, "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ×”×’×“×™×¨ ×’×™×©×ª ×ž× ×”×œ.");
-  }
-
-  if (password !== confirmPassword) {
-    return failureResponse(400, "××™×ž×•×ª ×”×¡×™×¡×ž×” ×œ× ×ª×•××.");
-  }
-
-  if (password.length < 8) {
-    return failureResponse(400, "×™×© ×œ×‘×—×•×¨ ×¡×™×¡×ž×” ×‘××•×¨×š 8 ×ª×•×•×™× ×œ×¤×—×•×ª.");
-  }
-
-  if (admin.passwordHash) {
-    return failureResponse(409, "×›×‘×¨ ×”×•×’×“×¨×” ×¡×™×¡×ž×” ×¢×‘×•×¨ ×”×ž×™×™×œ ×”×–×”. × ×™×ª×Ÿ ×œ×¢×‘×•×¨ ×œ×ž×¡×š ×”×›× ×™×¡×” ×”×¨×’×™×œ.");
-  }
-
-  const now = isoNow();
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000).toISOString();
-  const token = randomBytes(32).toString("base64url");
-
-  admin.passwordHash = hashPassword(password);
-  admin.passwordSetAt = now;
-  admin.lastLoginAt = now;
-
-  await clearFailedAttempts(store, normalizedEmail, clientAddress);
-  await saveAdminRecord(store, admin);
-  await store.setJSON(sessionKey(token), {
-    token,
-    adminEmail: normalizedEmail,
-    createdAt: now,
-    expiresAt,
-  });
-  await recordAuditEvent(store, {
-    type: "setup_success",
-    email: normalizedEmail,
-    clientAddress,
-    userAgent,
-    outcome: "success",
-  });
-
-  return successResponse(
-    {
-      authenticated: true,
-      email: normalizedEmail,
-      message: "×”×¡×™×¡×ž×” × ×©×ž×¨×” ×•×”×’×™×©×” ×œ×¤×× ×œ ×”× ×™×”×•×œ × ×¤×ª×—×”.",
-    },
-    request.url,
-    token,
-  );
-}
-
-export async function logoutManager(request) {
-  const token = getSessionToken(request);
-  const store = getPersistence();
-  const session = await getSessionRecord(store, token);
-
-  if (token) {
-    await store.delete(sessionKey(token));
-  }
-  await recordAuditEvent(store, {
-    type: "logout",
-    email: normalizeEmail(session?.adminEmail || ""),
-    clientAddress: getClientAddress(request),
-    userAgent: getUserAgent(request),
-    outcome: "success",
-  });
-
-  return jsonResponse(
-    200,
-    { loggedOut: true },
-    {
-      "Set-Cookie": buildCookieValue("", request.url, 0),
-    },
-  );
 }
 
 export function getSessionToken(request) {
@@ -800,23 +362,512 @@ export function jsonResponse(status, payload, extraHeaders = {}) {
     "cache-control": "no-store",
     ...extraHeaders,
   });
-
   return new Response(JSON.stringify(payload), { status, headers });
 }
 
 function failureResponse(status, message, extraPayload = {}, extraHeaders = {}) {
-  return jsonResponse(
-    status,
-    {
-      message,
-      ...extraPayload,
-    },
-    extraHeaders,
-  );
+  return jsonResponse(status, { message, ...extraPayload }, extraHeaders);
 }
 
 function successResponse(payload, requestUrl, token) {
   return jsonResponse(200, payload, {
     "Set-Cookie": buildCookieValue(token, requestUrl, SESSION_DURATION_HOURS * 60 * 60),
   });
+}
+
+function filterAccessibleCampaignSummaries(auth, summaries) {
+  if (!auth?.authenticated) {
+    return [];
+  }
+  const role = normalizeRole(auth.role, ROLE_VIEWER);
+  if (role === ROLE_PLATFORM_ADMIN) {
+    return summaries;
+  }
+  const organizationSlug = String(auth.organizationSlug || "").trim().toLowerCase();
+  const allowedCampaigns = new Set(
+    [...(auth.campaignIds || []), ...(auth.campaignSlugs || [])]
+      .map((value) => normalizeStableId(value))
+      .filter(Boolean),
+  );
+  return summaries.filter((item) => {
+    if (organizationSlug && String(item.organizationSlug || "").trim().toLowerCase() !== organizationSlug) {
+      return false;
+    }
+    if (role === "organization_admin") {
+      return true;
+    }
+    if (!allowedCampaigns.size) {
+      return false;
+    }
+    return allowedCampaigns.has(normalizeStableId(item.campaignId)) || allowedCampaigns.has(normalizeStableId(item.campaignSlug));
+  });
+}
+
+async function getAccessibleCampaignSummaries(auth) {
+  const summaries = await listCampaignSummaries();
+  return filterAccessibleCampaignSummaries(auth, summaries).map((item) => ({
+    ...item,
+    organizationSlug: item.organizationSlug || normalizeSlug(item.organizationName || ""),
+  }));
+}
+
+export async function getAuthStatus(request) {
+  const store = getPersistence();
+  const token = getSessionToken(request);
+  const session = await getSessionRecord(store, token);
+  const admin = session?.adminEmail ? await getAdminRecord(store, session.adminEmail) : null;
+  const authenticatedEmail = admin ? normalizeEmail(admin.email) : "";
+  const auth = {
+    authenticated: Boolean(authenticatedEmail),
+    email: authenticatedEmail,
+    role: admin?.role || "",
+    organizationId: admin?.organizationId || "",
+    organizationSlug: admin?.organizationSlug || "",
+    campaignIds: Array.isArray(admin?.campaignIds) ? admin.campaignIds : [],
+    campaignSlugs: Array.isArray(admin?.campaignSlugs) ? admin.campaignSlugs : [],
+    sessionExpiresAt: session?.expiresAt || "",
+    setupSupported: true,
+  };
+  if (!auth.authenticated) {
+    return auth;
+  }
+  const accessibleCampaigns = await getAccessibleCampaignSummaries(auth);
+  return {
+    ...auth,
+    accessibleCampaigns,
+  };
+}
+
+export async function requireManagerAccess(request, minimumRole = ROLE_VIEWER, unauthorizedMessage = "נדרשת התחברות מנהל.") {
+  const auth = await getAuthStatus(request);
+  if (!auth?.authenticated || !auth?.email) {
+    return {
+      error: failureResponse(401, unauthorizedMessage),
+      auth: null,
+    };
+  }
+  if (normalizeRole(auth.role, ROLE_VIEWER) === ROLE_VIEWER && minimumRole !== ROLE_VIEWER) {
+    return {
+      error: failureResponse(403, "אין הרשאה מספקת לביצוע הפעולה המבוקשת."),
+      auth,
+    };
+  }
+  return { auth };
+}
+
+function resolveQueryScope(request) {
+  const url = new URL(request.url);
+  return {
+    organizationId: normalizeStableId(url.searchParams.get("organizationId") || ""),
+    campaignId: normalizeStableId(url.searchParams.get("campaignId") || ""),
+  };
+}
+
+export async function resolveScopedAccess(request, options = {}) {
+  await ensureMultiTenantMigration();
+  const baseAccess = await requireManagerAccess(request, ROLE_VIEWER, options.unauthorizedMessage);
+  if (baseAccess.error) {
+    return baseAccess;
+  }
+
+  const auth = baseAccess.auth;
+  const summaries = await getAccessibleCampaignSummaries(auth);
+  const requestedOrganizationId = normalizeStableId(options.organizationId || resolveQueryScope(request).organizationId || "");
+  const requestedCampaignId = normalizeStableId(options.campaignId || resolveQueryScope(request).campaignId || "");
+  const hasExplicitScope = Boolean(requestedOrganizationId || requestedCampaignId);
+  const matchedSummary =
+    summaries.find((item) => {
+      const campaignMatch = requestedCampaignId
+        ? normalizeStableId(item.campaignId) === requestedCampaignId || normalizeStableId(item.campaignSlug) === requestedCampaignId
+        : true;
+      const organizationMatch = requestedOrganizationId
+        ? normalizeStableId(item.organizationId) === requestedOrganizationId
+        : true;
+      return campaignMatch && organizationMatch;
+    }) || null;
+  const selectedSummary = matchedSummary || (!hasExplicitScope ? summaries[0] || null : null);
+
+  if (hasExplicitScope && !matchedSummary) {
+    const requestedOrganization = requestedOrganizationId ? await getOrganization(requestedOrganizationId) : null;
+    const requestedCampaign = requestedOrganizationId && requestedCampaignId
+      ? await getCampaign(requestedOrganizationId, requestedCampaignId)
+      : null;
+    const resourceExists = Boolean(requestedCampaign || requestedOrganization);
+    return {
+      error: failureResponse(resourceExists ? 403 : 404, resourceExists ? "אין הרשאה לקמפיין או לארגון המבוקש." : "הקמפיין המבוקש אינו קיים."),
+      auth,
+    };
+  }
+
+  if (!selectedSummary) {
+    return {
+      error: failureResponse(404, "לא נמצא קמפיין זמין עבור המשתמש המחובר."),
+      auth,
+    };
+  }
+
+  const organization = await getOrganization(selectedSummary.organizationId);
+  const campaign = await getCampaign(selectedSummary.organizationId, selectedSummary.campaignId);
+  if (!organization || !campaign) {
+    return {
+      error: failureResponse(404, "הקמפיין המבוקש אינו קיים."),
+      auth,
+    };
+  }
+
+  const authorization = authorize(auth, options.action || "campaign_view", organization, campaign);
+  if (!authorization.ok) {
+    await appendAuditEvent({
+      user: auth.email,
+      role: auth.role,
+      organizationId: organization.id,
+      campaignId: campaign.id,
+      action: "unauthorized_campaign_access",
+      outcome: "denied",
+      detail: {
+        requestedAction: options.action || "campaign_view",
+      },
+    });
+    return {
+      error: failureResponse(authorization.status, authorization.message),
+      auth,
+    };
+  }
+
+  return {
+    auth,
+    organization,
+    campaign,
+    accessibleCampaigns: summaries,
+  };
+}
+
+export async function getRuntimeHealth() {
+  const store = getPersistence();
+  await ensureAdminSeed(store);
+  const sessions = await store.listJSON("session:");
+  const managers = await loadManagerRecords();
+  const summaries = await listCampaignSummaries();
+  const migration = await ensureMultiTenantMigration();
+  const liveCampaigns = summaries.filter((item) => item.status === "live").length;
+  return {
+    ok: true,
+    service: "goodraise-multi-tenant-auth",
+    application: {
+      status: "ok",
+      runtime: process.env.NETLIFY || process.env.NETLIFY_LOCAL ? "netlify" : "local-dev-store",
+    },
+    persistence: {
+      status: "ok",
+      managerSeedCount: managers.length,
+      activeSessionCount: sessions.length,
+      campaignCount: summaries.length,
+      liveCampaignCount: liveCampaigns,
+      organizationCount: new Set(summaries.map((item) => item.organizationId)).size,
+    },
+    migration,
+    time: {
+      checkedAt: isoNow(),
+      sessionDurationHours: SESSION_DURATION_HOURS,
+    },
+  };
+}
+
+export async function getAdminDataset(request, scope = {}) {
+  const store = getPersistence();
+  const access = await resolveScopedAccess(request, {
+    action: "dataset_view",
+    organizationId: scope.organizationId,
+    campaignId: scope.campaignId,
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים.",
+  });
+  if (access.error) {
+    await recordAuditEvent(store, {
+      type: "dataset_denied",
+      email: normalizeEmail(access.auth?.email || ""),
+      clientAddress: getClientAddress(request),
+      userAgent: getUserAgent(request),
+      outcome: "denied",
+    });
+    return access.error;
+  }
+
+  const context = await buildCampaignContext(access.organization.id, access.campaign.id);
+  if (!context?.dataset) {
+    return failureResponse(404, "מאגר הנתונים הניהולי לקמפיין המבוקש אינו זמין כרגע.");
+  }
+
+  await recordAuditEvent(store, {
+    type: "dataset_view",
+    email: access.auth.email,
+    clientAddress: getClientAddress(request),
+    userAgent: getUserAgent(request),
+    outcome: "success",
+  });
+  await appendAuditEvent({
+    user: access.auth.email,
+    role: access.auth.role,
+    organizationId: access.organization.id,
+    campaignId: access.campaign.id,
+    action: "dataset_view",
+    outcome: "success",
+  });
+
+  return jsonResponse(200, {
+    organizationId: access.organization.id,
+    campaignId: access.campaign.id,
+    organization: access.organization,
+    campaign: access.campaign,
+    rows: Array.isArray(context.dataset.rows) ? context.dataset.rows : [],
+    meta: context.dataset.meta && typeof context.dataset.meta === "object" ? context.dataset.meta : {},
+    sourceLabel: context.dataset.sourceLabel || "קובץ בסיס מאובטח",
+    generatedAt: context.dataset.generatedAt || "",
+  });
+}
+
+export async function loginManager({ email, password, request }) {
+  const normalizedEmail = normalizeEmail(email);
+  const store = getPersistence();
+  const clientAddress = getClientAddress(request);
+  const userAgent = getUserAgent(request);
+  const rateLimitResponse = await ensureNotRateLimited(store, normalizedEmail, clientAddress);
+  if (rateLimitResponse) {
+    await recordAuditEvent(store, {
+      type: "login_blocked",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "blocked",
+    });
+    return rateLimitResponse;
+  }
+
+  const admin = await getAdminRecord(store, normalizedEmail);
+  if (!normalizedEmail || !password) {
+    return failureResponse(400, "יש למלא גם מייל וגם סיסמה.");
+  }
+  if (!admin || !admin.isActive) {
+    await recordFailedAttempt(store, normalizedEmail, clientAddress);
+    await recordAuditEvent(store, {
+      type: "login_denied",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "denied",
+    });
+    return failureResponse(403, "המייל שהוזן אינו מורשה לגישה לפאנל הניהול.");
+  }
+  if (!admin.passwordHash) {
+    await recordAuditEvent(store, {
+      type: "login_setup_required",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "setup_required",
+    });
+    return failureResponse(
+      409,
+      "זו כניסה ראשונה עבור המייל הזה. יש להגדיר סיסמה אישית לפני כניסה.",
+      { code: "setup_required", setupRequired: true },
+    );
+  }
+  if (!verifyPassword(password, admin.passwordHash)) {
+    const failedAttempt = await recordFailedAttempt(store, normalizedEmail, clientAddress);
+    await recordAuditEvent(store, {
+      type: "login_failed",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "invalid_password",
+      detail: failedAttempt.count >= MAX_AUTH_ATTEMPTS ? "locked" : "",
+    });
+    return failureResponse(401, "הסיסמה שגויה. נסו שוב.");
+  }
+
+  const now = isoNow();
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000).toISOString();
+  const token = randomBytes(32).toString("base64url");
+  admin.lastLoginAt = now;
+  await clearFailedAttempts(store, normalizedEmail, clientAddress);
+  await saveAdminRecord(store, admin);
+  await store.setJSON(sessionKey(token), {
+    token,
+    adminEmail: normalizedEmail,
+    createdAt: now,
+    expiresAt,
+  });
+  await recordAuditEvent(store, {
+    type: "login_success",
+    email: normalizedEmail,
+    clientAddress,
+    userAgent,
+    outcome: "success",
+  });
+  await appendAuditEvent({
+    user: normalizedEmail,
+    role: admin.role,
+    organizationId: admin.organizationId || "",
+    campaignId: "",
+    action: "login_success",
+    outcome: "success",
+  });
+  return successResponse(
+    {
+      authenticated: true,
+      email: normalizedEmail,
+      message: "הכניסה הצליחה. הדשבורד הניהולי נפתח.",
+    },
+    request.url,
+    token,
+  );
+}
+
+export async function setupManagerPassword({ email, password, confirmPassword, request }) {
+  const normalizedEmail = normalizeEmail(email);
+  const store = getPersistence();
+  const clientAddress = getClientAddress(request);
+  const userAgent = getUserAgent(request);
+  const rateLimitResponse = await ensureNotRateLimited(store, normalizedEmail, clientAddress);
+  if (rateLimitResponse) {
+    await recordAuditEvent(store, {
+      type: "setup_blocked",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "blocked",
+    });
+    return rateLimitResponse;
+  }
+
+  const admin = await getAdminRecord(store, normalizedEmail);
+  if (!normalizedEmail || !password || !confirmPassword) {
+    return failureResponse(400, "יש למלא מייל, סיסמה ואימות סיסמה.");
+  }
+  if (!admin || !admin.isActive) {
+    await recordFailedAttempt(store, normalizedEmail, clientAddress);
+    await recordAuditEvent(store, {
+      type: "setup_denied",
+      email: normalizedEmail,
+      clientAddress,
+      userAgent,
+      outcome: "denied",
+    });
+    return failureResponse(403, "המייל שהוזן אינו מורשה להגדיר גישת מנהל.");
+  }
+  if (password !== confirmPassword) {
+    return failureResponse(400, "אימות הסיסמה לא תואם.");
+  }
+  if (password.length < 8) {
+    return failureResponse(400, "יש לבחור סיסמה באורך 8 תווים לפחות.");
+  }
+  if (admin.passwordHash) {
+    return failureResponse(409, "כבר הוגדרה סיסמה עבור המייל הזה. ניתן לעבור למסך הכניסה הרגיל.");
+  }
+
+  const now = isoNow();
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000).toISOString();
+  const token = randomBytes(32).toString("base64url");
+  admin.passwordHash = hashPassword(password);
+  admin.passwordSetAt = now;
+  admin.lastLoginAt = now;
+  await clearFailedAttempts(store, normalizedEmail, clientAddress);
+  await saveAdminRecord(store, admin);
+  await store.setJSON(sessionKey(token), {
+    token,
+    adminEmail: normalizedEmail,
+    createdAt: now,
+    expiresAt,
+  });
+  await recordAuditEvent(store, {
+    type: "setup_success",
+    email: normalizedEmail,
+    clientAddress,
+    userAgent,
+    outcome: "success",
+  });
+  await appendAuditEvent({
+    user: normalizedEmail,
+    role: admin.role,
+    organizationId: admin.organizationId || "",
+    campaignId: "",
+    action: "password_setup",
+    outcome: "success",
+  });
+  return successResponse(
+    {
+      authenticated: true,
+      email: normalizedEmail,
+      message: "הסיסמה נשמרה והגישה לפאנל הניהול נפתחה.",
+    },
+    request.url,
+    token,
+  );
+}
+
+export async function logoutManager(request) {
+  const token = getSessionToken(request);
+  const store = getPersistence();
+  const session = await getSessionRecord(store, token);
+  if (token) {
+    await store.delete(sessionKey(token));
+  }
+  await recordAuditEvent(store, {
+    type: "logout",
+    email: normalizeEmail(session?.adminEmail || ""),
+    clientAddress: getClientAddress(request),
+    userAgent: getUserAgent(request),
+    outcome: "success",
+  });
+  return jsonResponse(
+    200,
+    { loggedOut: true },
+    { "Set-Cookie": buildCookieValue("", request.url, 0) },
+  );
+}
+
+export async function changeManagerPassword({ request, currentPassword, newPassword, confirmPassword }) {
+  const baseAccess = await requireManagerAccess(request, ROLE_VIEWER, "נדרשת התחברות כדי להחליף סיסמה.");
+  if (baseAccess.error) {
+    return baseAccess.error;
+  }
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return failureResponse(400, "יש למלא סיסמה נוכחית, סיסמה חדשה ואימות סיסמה.");
+  }
+  if (newPassword !== confirmPassword) {
+    return failureResponse(400, "אימות הסיסמה החדשה לא תואם.");
+  }
+  if (newPassword.length < 8) {
+    return failureResponse(400, "הסיסמה החדשה חייבת לכלול לפחות 8 תווים.");
+  }
+
+  const store = getPersistence();
+  const admin = await getAdminRecord(store, baseAccess.auth.email);
+  if (!admin || !admin.passwordHash || !verifyPassword(currentPassword, admin.passwordHash)) {
+    return failureResponse(401, "הסיסמה הנוכחית שגויה.");
+  }
+  admin.passwordHash = hashPassword(newPassword);
+  admin.passwordSetAt = isoNow();
+  await saveAdminRecord(store, admin);
+  await deleteSessionsForEmail(store, baseAccess.auth.email);
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000).toISOString();
+  await store.setJSON(sessionKey(token), {
+    token,
+    adminEmail: baseAccess.auth.email,
+    createdAt: isoNow(),
+    expiresAt,
+  });
+  await appendAuditEvent({
+    user: baseAccess.auth.email,
+    role: baseAccess.auth.role,
+    organizationId: baseAccess.auth.organizationId || "",
+    campaignId: "",
+    action: "password_changed",
+    outcome: "success",
+  });
+  return jsonResponse(
+    200,
+    { changed: true, message: "הסיסמה הוחלפה בהצלחה." },
+    { "Set-Cookie": buildCookieValue(token, request.url, SESSION_DURATION_HOURS * 60 * 60) },
+  );
 }

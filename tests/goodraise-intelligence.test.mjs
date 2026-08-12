@@ -51,6 +51,8 @@ function buildRows() {
 
 function buildContext() {
   return {
+    organizationId: "org-alpha",
+    campaignId: "campaign-alpha-1",
     meta: {
       projectDates: ["2026-08-01", "2026-08-02", "2026-08-03"],
       uniqueDates: ["2026-08-01", "2026-08-02", "2026-08-03"],
@@ -105,4 +107,14 @@ test("GoodRaise intelligence engine returns explainable health, forecast, priori
   assert.ok(priorities[0].reason);
   assert.ok(attention.length > 0);
   assert.ok(fingerprint.ambassadorCount === 4);
+});
+
+test("GoodRaise intelligence engine fails fast when campaign scope is missing", async () => {
+  const createEngine = await loadEngineFactory();
+  const engine = createEngine({ groupBy, sumAmount, buildLeaderboard });
+  const rows = buildRows();
+  const context = buildContext();
+  delete context.organizationId;
+
+  assert.throws(() => engine.buildHealthModel(rows, context), /organizationId and campaignId context/);
 });

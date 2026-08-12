@@ -58,6 +58,8 @@ function buildSyntheticData(size) {
   return {
     rows,
     context: {
+      organizationId: "benchmark-org",
+      campaignId: `benchmark-${size}`,
       meta: {
         projectDates: dates,
         uniqueDates: dates,
@@ -91,11 +93,44 @@ function buildSyntheticData(size) {
   };
 }
 
+function buildPortfolioMetadata(count) {
+  return Array.from({ length: count }, (_value, index) => ({
+    organizationId: `org-${Math.floor(index / 25) + 1}`,
+    campaignId: `campaign-${index + 1}`,
+    campaignName: `Campaign ${index + 1}`,
+    status: index % 3 === 0 ? "live" : "draft",
+    target: 100000 + index * 500,
+    raised: 25000 + index * 275,
+    targetPercent: Number((((25000 + index * 275) / (100000 + index * 500)) * 100).toFixed(2)),
+    lastUpdated: "2026-08-12T09:00:00.000Z",
+    startAt: "2026-08-23T00:00:00",
+    endAt: "2026-09-01T23:59:00",
+  }));
+}
+
+function benchmarkPortfolioSelector(campaigns) {
+  const startedAt = performance.now();
+  const liveCampaigns = campaigns.filter((campaign) => campaign.status === "live");
+  const campaignMap = new Map(campaigns.map((campaign) => [campaign.campaignId, campaign]));
+  const selectedIds = [campaigns[0]?.campaignId, campaigns[Math.floor(campaigns.length / 2)]?.campaignId, campaigns[campaigns.length - 1]?.campaignId].filter(Boolean);
+  const selectedCampaigns = selectedIds.map((campaignId) => campaignMap.get(campaignId)).filter(Boolean);
+  const durationMs = performance.now() - startedAt;
+  return {
+    campaigns: campaigns.length,
+    liveCampaigns: liveCampaigns.length,
+    selectedIds,
+    selectedCampaigns: selectedCampaigns.length,
+    durationMs: Number(durationMs.toFixed(2)),
+  };
+}
+
 async function main() {
   const createEngine = await loadEngineFactory();
   const engine = createEngine({ groupBy, sumAmount, buildLeaderboard });
   const sizes = [1000, 10000, 100000];
+  const portfolioSizes = [10, 100, 1000];
   const results = [];
+  const portfolioResults = [];
 
   for (const size of sizes) {
     const { rows, context } = buildSyntheticData(size);
@@ -119,7 +154,11 @@ async function main() {
     });
   }
 
-  console.log(JSON.stringify({ generatedAt: new Date().toISOString(), results }, null, 2));
+  for (const size of portfolioSizes) {
+    portfolioResults.push(benchmarkPortfolioSelector(buildPortfolioMetadata(size)));
+  }
+
+  console.log(JSON.stringify({ generatedAt: new Date().toISOString(), results, portfolioResults }, null, 2));
 }
 
 main().catch((error) => {

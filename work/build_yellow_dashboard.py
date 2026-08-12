@@ -138,7 +138,7 @@ def get_source_label() -> str:
 
 def build_meta(rows: list[dict]) -> dict:
     unique_dates = sorted({row["date"] for row in rows})
-    project_dates = unique_dates[:10]
+    project_dates = unique_dates
     default_from = project_dates[0] if project_dates else (unique_dates[0] if unique_dates else "")
     default_to = project_dates[-1] if project_dates else (unique_dates[-1] if unique_dates else "")
     return {
@@ -265,10 +265,10 @@ def build_default_campaign_page_settings() -> dict:
     return {
         "projectDatesLabel": "23.08.2026–01.09.2026",
         "platformBaseUrl": "https://goodraise.netlify.app",
-        "projectSlug": "osim_tov_betzahov26",
-        "eyebrow": "ראש השנה 2026 · אחים לסמל · קרן מכבי",
-        "title": "עושים טוב בצהוב",
-        "subtitle": "14 שנים של ערבות הדדית, גיוס קהילתי ואריזת אלפי מארזי חג למשפחות, חיילים בודדים, שורדי שואה ומבוגרים עריריים.",
+        "projectSlug": "campaign-2026",
+        "eyebrow": "GoodRaise campaign",
+        "title": "Campaign Title",
+        "subtitle": "עדכנו את הטקסט, המדיה והמיתוג מתוך הגדרות הקמפיין כדי להתאים את עמוד הפרויקט לקמפיין הפעיל.",
         "storyMarkdown": load_markdown_text(PROJECT_PAGE_CONTENT_PATH),
         "primaryCtaLabel": "המשך לתרומה מאובטחת",
         "secondaryCtaLabel": "צפייה במובילים ובזוכים",
@@ -277,7 +277,9 @@ def build_default_campaign_page_settings() -> dict:
         "successHint": "לאחר לחיצה תועברו לעמוד התשלום של ספק התרומות החיצוני עם פרטי התרומה שבחרתם.",
         "mediaType": "image",
         "mediaUrl": load_file_data_uri(PROJECT_HERO_IMAGE_PATH),
-        "mediaAlt": "מתנדבי עושים טוב בצהוב באירוע אריזת מארזי חג",
+        "mediaAlt": "Campaign hero media",
+        "campaignLogoUrl": load_file_data_uri(CAMPAIGN_LOGO_PATH),
+        "organizationLogoUrl": load_file_data_uri(ORG_LOGO_PATH),
         "fontFamily": "Assistant",
         "theme": {
             "primary": "#111D4A",
@@ -625,8 +627,8 @@ def build_fragment(
               justify-content: space-between;
               gap: var(--space-5);
               padding: var(--space-4) var(--space-5);
-              background: rgba(11, 20, 53, 0.96);
-              border-color: rgba(255, 214, 41, 0.14);
+              background: linear-gradient(135deg, var(--topbar-primary, rgba(11, 20, 53, 0.96)), var(--topbar-secondary, rgba(36, 55, 124, 0.94)));
+              border-color: color-mix(in srgb, var(--topbar-accent, #FFD629) 22%, transparent);
               backdrop-filter: blur(14px);
             }
 
@@ -636,7 +638,7 @@ def build_fragment(
               inset-inline: var(--space-5);
               inset-block-end: 0;
               height: 1px;
-              background: linear-gradient(90deg, transparent, rgba(255, 214, 41, 0.55), transparent);
+              background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--topbar-accent, #FFD629) 72%, transparent), transparent);
             }
 
             #yellow-dashboard-root .topbar-brand,
@@ -694,7 +696,7 @@ def build_fragment(
             #yellow-dashboard-root .brand-divider {
               inline-size: 1px;
               block-size: 52px;
-              background: rgba(255, 255, 255, 0.22);
+              background: color-mix(in srgb, var(--topbar-accent, #FFD629) 40%, rgba(255, 255, 255, 0.24));
               flex: 0 0 auto;
             }
 
@@ -708,12 +710,6 @@ def build_fragment(
               font-size: 1.12rem;
               font-weight: 700;
               letter-spacing: 0.01em;
-            }
-
-            #yellow-dashboard-root .topbar-subtitle {
-              color: rgba(255, 255, 255, 0.7);
-              font-size: 0.94rem;
-              font-weight: 400;
             }
 
             #yellow-dashboard-root .topbar-actions {
@@ -2922,13 +2918,12 @@ def build_fragment(
               </div>
               <div class="topbar-brand">
                 <div class="brand-logo-cluster">
-                  <img id="topbar-campaign-logo" class="topbar-campaign-logo" alt="לוגו עושים טוב בצהוב" />
+                  <img id="topbar-campaign-logo" class="topbar-campaign-logo" alt="לוגו הקמפיין" />
                   <span class="brand-divider" aria-hidden="true"></span>
-                  <img id="topbar-logo" class="topbar-logo" alt="לוגו אחים לסמל" />
+                  <img id="topbar-logo" class="topbar-logo" alt="לוגו הארגון" />
                 </div>
                 <div id="topbar-meta" class="topbar-meta" hidden>
-                  <div class="topbar-title">מערכת ניהול קמפיין</div>
-                  <div class="topbar-subtitle">עושים טוב בצהוב · אחים לסמל · בקרה, תחרות ותובנות מנהלים</div>
+                  <div id="topbar-title" class="topbar-title">מערכת ניהול קמפיין</div>
                 </div>
               </div>
             </header>
@@ -3172,7 +3167,7 @@ def build_fragment(
                           <div class="brand-command-head">
                             <div class="brand-copy">
                               <span class="brand-kicker">Executive campaign operations</span>
-                              <h1 class="hero-title">מרכז השליטה של עושים טוב בצהוב</h1>
+                              <h1 class="hero-title">מרכז השליטה של הקמפיין</h1>
                               <p class="hero-subtitle">מסך ניהולי מרוכז לפילוח לפי תאריך, שעה, טווח שעות, יום פרויקט, שגריר/ה, תורם/ת וסכום, כולל השוואת קבצים, יעדים, גרפים, טבלאות וייצוא.</p>
                             </div>
                             <div class="brand-command-logos">
@@ -3600,6 +3595,7 @@ def build_fragment(
                 publicOrgLogo: root.querySelector("#public-org-logo"),
                 loginCampaignLogo: root.querySelector("#login-campaign-logo"),
                 loginOrgLogo: root.querySelector("#login-org-logo"),
+                topbarTitle: root.querySelector("#topbar-title"),
                 navButtons: Array.from(root.querySelectorAll("[data-page-target]")),
                 adminEntryButtons: Array.from(root.querySelectorAll("[data-admin-login]")),
                 metricButtons: Array.from(root.querySelectorAll("[data-metric-select]")),
@@ -3748,6 +3744,11 @@ def build_fragment(
                   setupMode: false,
                   adminDatasetLoaded: false,
                   campaignConfigLoaded: false,
+                  accessibleCampaigns: [],
+                  currentScope: {
+                    organizationId: "",
+                    campaignId: "",
+                  },
                 },
                 filters: getDefaultFilters(cloneSerializable(INITIAL_META)),
                 view: {
@@ -4371,7 +4372,7 @@ def build_fragment(
                 return {
                   basics: {
                     campaignName: String(INITIAL_CAMPAIGN_PAGE_SETTINGS.title || "").trim(),
-                    organizationName: "אחים לסמל",
+                    organizationName: "",
                     slug: normalizeUrlSlug(INITIAL_CAMPAIGN_PAGE_SETTINGS.projectSlug || "campaign"),
                     target: 0,
                     currency: "ILS",
@@ -4452,6 +4453,8 @@ def build_fragment(
                     mediaType: campaignPage.mediaType,
                     mediaUrl: campaignPage.mediaUrl,
                     mediaAlt: campaignPage.mediaAlt,
+                    campaignLogoUrl: campaignPage.campaignLogoUrl,
+                    organizationLogoUrl: campaignPage.organizationLogoUrl,
                     fontFamily: campaignPage.fontFamily,
                     theme: cloneSerializable(campaignPage.theme),
                   },
@@ -4517,6 +4520,8 @@ def build_fragment(
                   mediaType: branding.mediaType || base.mediaType,
                   mediaUrl: branding.mediaUrl || base.mediaUrl,
                   mediaAlt: branding.mediaAlt || base.mediaAlt,
+                  campaignLogoUrl: branding.campaignLogoUrl || base.campaignLogoUrl,
+                  organizationLogoUrl: branding.organizationLogoUrl || base.organizationLogoUrl,
                   fontFamily: branding.fontFamily || base.fontFamily,
                   theme: branding.theme || base.theme,
                   amountCards: donation.presets || base.amountCards,
@@ -4713,6 +4718,25 @@ def build_fragment(
               function getCampaignRegistryActiveEntry(registry = state?.campaignRegistry) {
                 const normalized = normalizeCampaignRegistry(registry);
                 return normalized.campaigns.find((item) => item.id === normalized.activeCampaignId) || normalized.campaigns[0] || null;
+              }
+
+              function getActiveCampaignIdentity(registry = state?.campaignRegistry, campaignId = state?.activeCampaignId || "") {
+                const normalized = normalizeCampaignRegistry(registry);
+                const targetEntry =
+                  normalized.campaigns.find((item) => item.id === String(campaignId || "").trim()) ||
+                  normalized.campaigns.find((item) => item.id === normalized.activeCampaignId) ||
+                  normalized.campaigns[0] ||
+                  null;
+                const basics = targetEntry?.config?.basics && typeof targetEntry.config.basics === "object" ? targetEntry.config.basics : {};
+                const organization = targetEntry?.config?.organization && typeof targetEntry.config.organization === "object" ? targetEntry.config.organization : {};
+                return {
+                  organizationId: String(organization.id || basics.organizationId || "").trim(),
+                  organizationSlug: String(organization.slug || basics.organizationSlug || "").trim(),
+                  organizationName: String(organization.name || basics.organizationName || "").trim(),
+                  campaignId: String(targetEntry?.id || basics.id || "").trim(),
+                  campaignSlug: String(targetEntry?.slug || basics.slug || "").trim(),
+                  campaignName: String(targetEntry?.name || basics.campaignName || "").trim(),
+                };
               }
 
               function normalizeCampaignBuilderConfig(value) {
@@ -4918,7 +4942,7 @@ def build_fragment(
                 return nextRegistry;
               }
 
-              function switchActiveCampaign(campaignId, options = {}) {
+              async function switchActiveCampaign(campaignId, options = {}) {
                 const currentRegistry = options.skipCurrentSync ? normalizeCampaignRegistry(state.campaignRegistry) : syncCampaignRegistryFromState({ persistRegistry: false });
                 const nextRegistry = normalizeCampaignRegistry({
                   ...currentRegistry,
@@ -4933,6 +4957,9 @@ def build_fragment(
                 applyCampaignBuilderConfig(targetEntry.config, { preserveSourceConfig: false });
                 persistActiveCampaignLegacyState();
                 storeCampaignRegistry(state.campaignRegistry);
+                if (canUseBackendAuth() && isManagerAuthenticated()) {
+                  await loadProtectedManagerData(getActiveCampaignIdentity(nextRegistry, targetEntry.id));
+                }
                 if (options.message) {
                   setCampaignBuilderStatus(options.message, "success");
                 }
@@ -4969,11 +4996,21 @@ def build_fragment(
 
               function createNewCampaignDraft() {
                 const currentRegistry = syncCampaignRegistryFromState({ persistRegistry: false });
+                const currentScope = getActiveCampaignIdentity(currentRegistry, currentRegistry.activeCampaignId);
                 const snapshot = createDefaultCampaignSnapshot();
                 const name = getUniqueCampaignName("קמפיין חדש", currentRegistry);
                 const slug = getUniqueCampaignSlug("new-campaign", currentRegistry);
                 snapshot.basics.campaignName = name;
                 snapshot.basics.slug = slug;
+                snapshot.organization = {
+                  ...(snapshot.organization || {}),
+                  id: currentScope.organizationId,
+                  slug: currentScope.organizationSlug,
+                  name: currentScope.organizationName,
+                };
+                snapshot.basics.organizationId = currentScope.organizationId;
+                snapshot.basics.organizationSlug = currentScope.organizationSlug;
+                snapshot.basics.organizationName = currentScope.organizationName;
                 snapshot.branding.title = name;
                 snapshot.branding.projectDatesLabel = buildProjectWindowLabelFromBasics(snapshot.basics);
                 const entry = createCampaignRegistryEntry(snapshot, { name, slug });
@@ -5173,11 +5210,13 @@ def build_fragment(
               async function saveCampaignBuilderConfig(options = {}) {
                 const snapshot = getCampaignBuilderSnapshot();
                 const localRegistry = syncCampaignRegistryFromState({ persistRegistry: false, persistLegacy: false });
+                const scope = getActiveCampaignIdentity(localRegistry, localRegistry.activeCampaignId);
                 const persistedLocal = [storeCampaignRegistry(localRegistry), persistActiveCampaignLegacyState()].every(Boolean);
                 if (!persistedLocal && !options.silent) {
                   setCampaignBuilderStatus("חלק מהטיוטה לא נשמר מקומית בדפדפן.", "warning");
                 }
-                if (!canUseBackendAuth() || !AUTH_CONFIG.campaignConfigEndpoint || !isManagerAuthenticated()) {
+                const endpoint = buildScopedAdminEndpoint("campaign-config", scope);
+                if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
                   state.campaignBuilder.meta.lastSavedAt = new Date().toISOString();
                   state.campaignBuilder.meta.lastSavedBy = state.session?.email || "";
                   syncCampaignRegistryFromState({
@@ -5187,13 +5226,14 @@ def build_fragment(
                   setCampaignBuilderStatus(`טיוטת קמפיין נשמרה מקומית · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                   return snapshot;
                 }
-                const { response, payload } = await authRequest(AUTH_CONFIG.campaignConfigEndpoint, {
+                const { response, payload } = await authRequest(endpoint, {
                   method: "POST",
                   body: { config: localRegistry },
                 });
                 if (!response.ok) {
                   throw new Error(payload?.message || "שמירת טיוטת הקמפיין בשרת נכשלה.");
                 }
+                applyServerScope(payload, scope);
                 state.campaignBuilder.meta.lastSavedAt = payload?.updatedAt || new Date().toISOString();
                 state.campaignBuilder.meta.lastSavedBy = payload?.updatedBy || state.session?.email || "";
                 state.campaignRegistry = normalizeCampaignRegistry(payload?.config || localRegistry);
@@ -5206,7 +5246,7 @@ def build_fragment(
                 return getCampaignRegistryActiveEntry(state.campaignRegistry)?.config || snapshot;
               }
 
-              async function hydrateCampaignBuilderConfig() {
+              async function hydrateCampaignBuilderConfig(scope = getActiveCampaignIdentity()) {
                 const localRegistry = readStoredCampaignRegistry();
                 state.campaignRegistry = localRegistry;
                 state.activeCampaignId = localRegistry.activeCampaignId;
@@ -5220,13 +5260,15 @@ def build_fragment(
                 }
                 persistActiveCampaignLegacyState();
                 storeCampaignRegistry(state.campaignRegistry);
-                if (!canUseBackendAuth() || !AUTH_CONFIG.campaignConfigEndpoint || !isManagerAuthenticated()) {
+                const endpoint = buildScopedAdminEndpoint("campaign-config", scope);
+                if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
                   state.auth.campaignConfigLoaded = false;
                   return state.campaignBuilder;
                 }
                 try {
-                  const { response, payload } = await authRequest(AUTH_CONFIG.campaignConfigEndpoint);
+                  const { response, payload } = await authRequest(endpoint);
                   if (response.ok && payload?.config) {
+                    applyServerScope(payload, scope);
                     state.campaignRegistry = normalizeCampaignRegistry(payload.config);
                     state.activeCampaignId = state.campaignRegistry.activeCampaignId;
                     const activeEntry = getCampaignRegistryActiveEntry(state.campaignRegistry);
@@ -5322,6 +5364,8 @@ def build_fragment(
                   mediaType: candidate.mediaType === "video" ? "video" : "image",
                   mediaUrl: String(candidate.mediaUrl || defaults.mediaUrl || "").trim(),
                   mediaAlt: String(candidate.mediaAlt || defaults.mediaAlt || "").trim(),
+                  campaignLogoUrl: String(candidate.campaignLogoUrl || defaults.campaignLogoUrl || "").trim(),
+                  organizationLogoUrl: String(candidate.organizationLogoUrl || defaults.organizationLogoUrl || "").trim(),
                   fontFamily: ["Assistant", "Heebo", "Rubik", "Arial"].includes(String(candidate.fontFamily || ""))
                     ? String(candidate.fontFamily)
                     : defaults.fontFamily,
@@ -5363,6 +5407,68 @@ def build_fragment(
 
               function canUseBackendAuth() {
                 return AUTH_CONFIG?.mode === "backend" && ["http:", "https:"].includes(window.location.protocol);
+              }
+
+              function buildAuthUrl(path) {
+                const baseUrl = String(AUTH_CONFIG?.baseUrl || "").trim().replace(/\\/$/, "");
+                return baseUrl ? `${baseUrl}${path}` : path;
+              }
+
+              function getFallbackAdminEndpoint(kind) {
+                if (kind === "dataset") {
+                  return AUTH_CONFIG?.datasetEndpoint || "";
+                }
+                if (kind === "campaign-config") {
+                  return AUTH_CONFIG?.campaignConfigEndpoint || "";
+                }
+                if (kind === "source-config") {
+                  return AUTH_CONFIG?.sourceConfigEndpoint || "";
+                }
+                if (kind === "source-refresh") {
+                  return AUTH_CONFIG?.sourceRefreshEndpoint || "";
+                }
+                return "";
+              }
+
+              function buildScopedAdminEndpoint(kind, scope = getActiveCampaignIdentity()) {
+                if (!canUseBackendAuth()) {
+                  return getFallbackAdminEndpoint(kind);
+                }
+                const organizationId = String(scope?.organizationId || "").trim();
+                const campaignId = String(scope?.campaignId || "").trim();
+                if (!organizationId || !campaignId) {
+                  return getFallbackAdminEndpoint(kind);
+                }
+                const encodedOrganizationId = encodeURIComponent(organizationId);
+                const encodedCampaignId = encodeURIComponent(campaignId);
+                const basePath = `/api/organizations/${encodedOrganizationId}/campaigns/${encodedCampaignId}`;
+                if (kind === "campaign-config") {
+                  return buildAuthUrl(basePath);
+                }
+                if (kind === "dataset") {
+                  return buildAuthUrl(`${basePath}/dataset`);
+                }
+                if (kind === "source-config") {
+                  return buildAuthUrl(`${basePath}/source`);
+                }
+                if (kind === "source-refresh") {
+                  return buildAuthUrl(`${basePath}/source/refresh`);
+                }
+                return getFallbackAdminEndpoint(kind);
+              }
+
+              function applyServerScope(payload = {}, fallbackScope = getActiveCampaignIdentity()) {
+                const organizationId = String(payload?.organizationId || payload?.organization?.id || fallbackScope?.organizationId || "").trim();
+                const campaignId = String(payload?.campaignId || payload?.campaign?.id || payload?.activeCampaign?.campaignId || fallbackScope?.campaignId || "").trim();
+                state.auth.currentScope = {
+                  organizationId,
+                  campaignId,
+                };
+                if (Array.isArray(payload?.accessibleCampaigns)) {
+                  state.auth.accessibleCampaigns = payload.accessibleCampaigns;
+                } else if (Array.isArray(payload?.portfolio)) {
+                  state.auth.accessibleCampaigns = payload.portfolio;
+                }
               }
 
               function canUseLocalPasswordReset() {
@@ -5412,6 +5518,11 @@ def build_fragment(
 
               function clearSessionState() {
                 state.session = null;
+                state.auth.accessibleCampaigns = [];
+                state.auth.currentScope = {
+                  organizationId: "",
+                  campaignId: "",
+                };
                 setSetupMode(false);
                 clearSourceRefreshTimer();
                 restorePublicDataset();
@@ -5452,6 +5563,7 @@ def build_fragment(
                   state.auth.backendAvailable = response.ok;
                   if (response.ok && payload?.authenticated && payload?.email) {
                     setAuthenticatedSession(payload.email);
+                    applyServerScope(payload);
                     await loadProtectedManagerData();
                     syncSourceAutoRefresh();
                   }
@@ -5461,18 +5573,20 @@ def build_fragment(
                 renderSourceConfigControls();
               }
 
-              async function loadAdminDataset() {
-                if (!canUseBackendAuth() || !AUTH_CONFIG.datasetEndpoint || !isManagerAuthenticated()) {
+              async function loadAdminDataset(scope = getActiveCampaignIdentity()) {
+                const endpoint = buildScopedAdminEndpoint("dataset", scope);
+                if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
                   state.auth.adminDatasetLoaded = false;
                   return false;
                 }
 
-                const { response, payload } = await authRequest(AUTH_CONFIG.datasetEndpoint);
+                const { response, payload } = await authRequest(endpoint);
                 if (!response.ok || !Array.isArray(payload?.rows) || !payload?.meta) {
                   state.auth.adminDatasetLoaded = false;
                   throw new Error(payload?.message || "טעינת הנתונים המוגנים נכשלה.");
                 }
 
+                applyServerScope(payload, scope);
                 state.rows = enrichRows(payload.rows, payload.meta);
                 state.meta = payload.meta;
                 state.sourceLabel = payload.sourceLabel || "קובץ בסיס מאובטח";
@@ -5513,15 +5627,17 @@ def build_fragment(
                 setSourceConfigStatus(status.message, status.tone);
               }
 
-              async function hydrateSourceConfig() {
+              async function hydrateSourceConfig(scope = getActiveCampaignIdentity()) {
                 state.sourceConfig = normalizeSourceConfig(state.sourceConfig);
-                if (!canUseBackendAuth() || !AUTH_CONFIG.sourceConfigEndpoint || !isManagerAuthenticated()) {
+                const endpoint = buildScopedAdminEndpoint("source-config", scope);
+                if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
                   renderSourceConfigControls();
                   return state.sourceConfig;
                 }
                 try {
-                  const { response, payload } = await authRequest(AUTH_CONFIG.sourceConfigEndpoint);
+                  const { response, payload } = await authRequest(endpoint);
                   if (response.ok && payload?.config) {
+                    applyServerScope(payload, scope);
                     state.sourceConfig = normalizeSourceConfig(payload.config);
                     setSourceConfigStatus(
                       state.sourceConfig.mode === "api"
@@ -5561,17 +5677,20 @@ def build_fragment(
               }
 
               async function saveSourceConfigFromControls(options = {}) {
-                if (!canUseBackendAuth() || !AUTH_CONFIG.sourceConfigEndpoint || !isManagerAuthenticated()) {
+                const scope = options.scope || getActiveCampaignIdentity();
+                const endpoint = buildScopedAdminEndpoint("source-config", scope);
+                if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
                   throw new Error("שמירת חיבור API זמינה רק למנהלים מחוברים דרך שרת הניהול.");
                 }
                 const nextConfig = collectSourceConfigFromControls();
-                const { response, payload } = await authRequest(AUTH_CONFIG.sourceConfigEndpoint, {
+                const { response, payload } = await authRequest(endpoint, {
                   method: "POST",
                   body: { config: nextConfig },
                 });
                 if (!response.ok) {
                   throw new Error(payload?.message || "שמירת הגדרות מקור הנתונים נכשלה.");
                 }
+                applyServerScope(payload, scope);
                 state.sourceConfig = normalizeSourceConfig(payload?.config || nextConfig);
                 renderSourceConfigControls();
                 syncSourceAutoRefresh();
@@ -5661,7 +5780,9 @@ def build_fragment(
               }
 
               async function refreshSourceDataFromApi(options = {}) {
-                if (!canUseBackendAuth() || !AUTH_CONFIG.sourceRefreshEndpoint || !isManagerAuthenticated()) {
+                const scope = options.scope || getActiveCampaignIdentity();
+                const endpoint = buildScopedAdminEndpoint("source-refresh", scope);
+                if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
                   throw new Error("משיכת נתונים מה-API זמינה רק למנהלים מחוברים דרך שרת הניהול.");
                 }
                 if (sourceRefreshInFlight) {
@@ -5669,11 +5790,12 @@ def build_fragment(
                 }
                 sourceRefreshInFlight = true;
                 try {
-                  const { response, payload } = await authRequest(AUTH_CONFIG.sourceRefreshEndpoint, { method: "POST" });
+                  const { response, payload } = await authRequest(endpoint, { method: "POST" });
                   if (!response.ok) {
                     throw new Error(payload?.message || "משיכת הנתונים מהמערכת החיצונית נכשלה.");
                   }
                   const ingested = ingestApiRefreshPayload(payload);
+                  applyServerScope(payload, scope);
                   state.validation.base = ingested.validation;
                   if (hasBlockingValidation(ingested.validation)) {
                     throw new Error("ה-API החזיר נתונים, אך הם לא עומדים במבנה הנדרש לדשבורד.");
@@ -5720,15 +5842,15 @@ def build_fragment(
                 }, refreshMinutes * 60 * 1000);
               }
 
-              async function loadProtectedManagerData() {
-                await hydrateSourceConfig();
-                await hydrateCampaignBuilderConfig();
+              async function loadProtectedManagerData(scope = getActiveCampaignIdentity()) {
+                await hydrateSourceConfig(scope);
+                await hydrateCampaignBuilderConfig(scope);
                 if (state.sourceConfig.mode === "api") {
                   try {
-                    return await refreshSourceDataFromApi({ silent: true, render: false });
+                    return await refreshSourceDataFromApi({ silent: true, render: false, scope });
                   } catch (error) {
                     try {
-                      await loadAdminDataset();
+                      await loadAdminDataset(scope);
                       setImportMessage(
                         `${error?.message || "משיכת הנתונים מה-API נכשלה."} נטען בינתיים מאגר הבסיס המוגן.`,
                         "warning"
@@ -5739,7 +5861,7 @@ def build_fragment(
                     }
                   }
                 }
-                return loadAdminDataset();
+                return loadAdminDataset(scope);
               }
 
               function setLoginMessage(message, tone = "") {
@@ -5769,29 +5891,52 @@ def build_fragment(
               }
 
               function renderBrandAssets() {
+                const settings = normalizeCampaignPageSettings(state.campaignPage || INITIAL_CAMPAIGN_PAGE_SETTINGS);
+                const campaignLogo = String(settings.campaignLogoUrl || INITIAL_CAMPAIGN_LOGO || "").trim();
+                const organizationLogo = String(settings.organizationLogoUrl || INITIAL_ORG_LOGO || "").trim();
+                const organizationName = String(state.campaignBuilder?.basics?.organizationName || "").trim() || "הארגון";
+                const primary = sanitizeHexColor(settings.theme?.primary, "#111D4A");
+                const secondary = sanitizeHexColor(settings.theme?.secondary, "#24377C");
+                const accent = sanitizeHexColor(settings.theme?.accent, "#FFD629");
+                root.style.setProperty("--brand-pattern-campaign", campaignLogo ? `url("${campaignLogo}")` : "none");
+                root.style.setProperty("--brand-pattern-organization", organizationLogo ? `url("${organizationLogo}")` : "none");
+                root.style.setProperty("--topbar-primary", primary);
+                root.style.setProperty("--topbar-secondary", secondary);
+                root.style.setProperty("--topbar-accent", accent);
                 if (elements.topbarCampaignLogo) {
-                  elements.topbarCampaignLogo.src = INITIAL_CAMPAIGN_LOGO;
+                  elements.topbarCampaignLogo.src = campaignLogo;
+                  elements.topbarCampaignLogo.alt = settings.title ? `לוגו ${settings.title}` : "לוגו הקמפיין";
                 }
                 if (elements.topbarLogo) {
-                  elements.topbarLogo.src = INITIAL_ORG_LOGO;
+                  elements.topbarLogo.src = organizationLogo;
+                  elements.topbarLogo.alt = `לוגו ${organizationName}`;
                 }
                 if (elements.publicLogo) {
-                  elements.publicLogo.src = INITIAL_CAMPAIGN_LOGO;
+                  elements.publicLogo.src = campaignLogo;
+                  elements.publicLogo.alt = settings.title ? `לוגו ${settings.title}` : "לוגו הקמפיין";
                 }
                 if (elements.publicOrgLogo) {
-                  elements.publicOrgLogo.src = INITIAL_ORG_LOGO;
+                  elements.publicOrgLogo.src = organizationLogo;
+                  elements.publicOrgLogo.alt = `לוגו ${organizationName}`;
                 }
                 if (elements.loginCampaignLogo) {
-                  elements.loginCampaignLogo.src = INITIAL_CAMPAIGN_LOGO;
+                  elements.loginCampaignLogo.src = campaignLogo;
+                  elements.loginCampaignLogo.alt = settings.title ? `לוגו ${settings.title}` : "לוגו הקמפיין";
                 }
                 if (elements.loginOrgLogo) {
-                  elements.loginOrgLogo.src = INITIAL_ORG_LOGO;
+                  elements.loginOrgLogo.src = organizationLogo;
+                  elements.loginOrgLogo.alt = `לוגו ${organizationName}`;
                 }
                 if (elements.logo) {
-                  elements.logo.src = INITIAL_CAMPAIGN_LOGO;
+                  elements.logo.src = campaignLogo;
+                  elements.logo.alt = settings.title ? `לוגו ${settings.title}` : "לוגו הקמפיין";
                 }
                 if (elements.brandOrgLogo) {
-                  elements.brandOrgLogo.src = INITIAL_ORG_LOGO;
+                  elements.brandOrgLogo.src = organizationLogo;
+                  elements.brandOrgLogo.alt = `לוגו ${organizationName}`;
+                }
+                if (elements.topbarTitle) {
+                  elements.topbarTitle.textContent = "מערכת ניהול קמפיין";
                 }
               }
 
@@ -6002,7 +6147,7 @@ def build_fragment(
 
               function ensureMeta(rows) {
                 const uniqueDates = [...new Set(rows.map((row) => row.date))].sort();
-                const projectDates = uniqueDates.slice(0, 10);
+                const projectDates = uniqueDates;
                 return {
                   uniqueDates,
                   projectDates,
@@ -6649,7 +6794,10 @@ def build_fragment(
               });
 
               function buildIntelligenceContext(rows) {
+                const activeScope = getActiveCampaignIdentity();
                 return {
+                  organizationId: activeScope.organizationId,
+                  campaignId: activeScope.campaignId,
                   rows,
                   meta: state.meta,
                   goals: state.goals,
@@ -6740,7 +6888,7 @@ def build_fragment(
                 });
 
                 const usedAmbassadors = new Set();
-                return projectDates.slice(0, 10).map((dateKey, index) => {
+                return projectDates.map((dateKey, index) => {
                   const candidates = Array.from((groupedByDate.get(dateKey) || new Map()).values())
                     .sort((left, right) => {
                       if (right.total !== left.total) {
@@ -8571,6 +8719,14 @@ def build_fragment(
                         כתובת או Data URI למדיה
                         <input class="form-control" type="text" value="${escapeAttribute(settings.mediaUrl)}" data-campaign-setting="mediaUrl" />
                       </label>
+                      <label class="form-label">
+                        לוגו קמפיין
+                        <input class="form-control" type="text" value="${escapeAttribute(settings.campaignLogoUrl || "")}" data-campaign-setting="campaignLogoUrl" />
+                      </label>
+                      <label class="form-label">
+                        לוגו ארגון
+                        <input class="form-control" type="text" value="${escapeAttribute(settings.organizationLogoUrl || "")}" data-campaign-setting="organizationLogoUrl" />
+                      </label>
                       <label class="form-label form-label--full">
                         טקסט חלופי
                         <input class="form-control" type="text" value="${escapeAttribute(settings.mediaAlt)}" data-campaign-setting="mediaAlt" />
@@ -8578,6 +8734,14 @@ def build_fragment(
                       <label class="form-label form-label--full">
                         העלאת מדיה
                         <input id="campaign-media-upload" class="form-control" type="file" accept="image/*,video/*" />
+                      </label>
+                      <label class="form-label">
+                        העלאת לוגו קמפיין
+                        <input id="campaign-logo-upload" class="form-control" type="file" accept="image/*" />
+                      </label>
+                      <label class="form-label">
+                        העלאת לוגו ארגון
+                        <input id="organization-logo-upload" class="form-control" type="file" accept="image/*" />
                       </label>
                     </div>
                     <div class="settings-inline-grid settings-inline-grid--three">
@@ -9296,6 +9460,9 @@ def build_fragment(
                       if (builderSettingPath === "basics.slug") {
                         state.campaignPage.projectSlug = value;
                       }
+                      if (builderSettingPath === "basics.organizationName") {
+                        renderBrandAssets();
+                      }
                       queueCampaignBuilderAutosave();
                       return;
                     }
@@ -9337,6 +9504,7 @@ def build_fragment(
                     state.campaignPage = normalizeCampaignPageSettings(state.campaignPage);
                     persistCampaignPageSettings(state.campaignPage);
                     state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
+                    renderBrandAssets();
                     renderProjectPage();
                     queueCampaignBuilderAutosave();
                   });
@@ -9351,7 +9519,7 @@ def build_fragment(
                     if (event.target?.dataset?.campaignRegistry === "active-id") {
                       const nextCampaignId = String(event.target.value || "").trim();
                       if (nextCampaignId && nextCampaignId !== state.activeCampaignId) {
-                        switchActiveCampaign(nextCampaignId, { message: "הקמפיין הפעיל הוחלף." });
+                        await switchActiveCampaign(nextCampaignId, { message: "הקמפיין הפעיל הוחלף." });
                         renderCampaignDesigner(true);
                         renderProjectPage();
                       }
@@ -9383,6 +9551,7 @@ def build_fragment(
                       state.campaignPage = normalizeCampaignPageSettings(state.campaignPage);
                       persistCampaignPageSettings(state.campaignPage);
                       state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
+                      renderBrandAssets();
                       if (["platformBaseUrl", "projectSlug"].includes(settingPath)) {
                         renderCampaignDesigner(true);
                       }
@@ -9414,6 +9583,34 @@ def build_fragment(
                       };
                       reader.onerror = () => {
                         setCampaignSettingsStatus("טעינת הקובץ נכשלה. נסה שוב עם תמונה אחרת או קובץ קטן יותר.", "error");
+                        renderCampaignDesigner(true);
+                      };
+                      reader.readAsDataURL(file);
+                      return;
+                    }
+
+                    if (event.target.id === "campaign-logo-upload" || event.target.id === "organization-logo-upload") {
+                      const [file] = event.target.files || [];
+                      if (!file) {
+                        return;
+                      }
+                      const targetField = event.target.id === "campaign-logo-upload" ? "campaignLogoUrl" : "organizationLogoUrl";
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        state.campaignPage[targetField] = String(reader.result || "");
+                        state.campaignPage = normalizeCampaignPageSettings(state.campaignPage);
+                        persistCampaignPageSettings(
+                          state.campaignPage,
+                          `הלוגו נטען ונשמר עבור ${targetField === "campaignLogoUrl" ? "הקמפיין" : "הארגון"}.`,
+                          "טעינת הלוגו הושלמה אך השמירה המקומית נכשלה. אפשר להדביק Data URI ידנית."
+                        );
+                        renderBrandAssets();
+                        renderCampaignDesigner(true);
+                        renderProjectPage();
+                        queueCampaignBuilderAutosave("לוגו הקמפיין עודכן ונשמר בטיוטת הקמפיין.");
+                      };
+                      reader.onerror = () => {
+                        setCampaignSettingsStatus("טעינת קובץ הלוגו נכשלה. נסה/י תמונה אחרת או הדבקת Data URI.", "error");
                         renderCampaignDesigner(true);
                       };
                       reader.readAsDataURL(file);
@@ -10148,7 +10345,7 @@ def render_public_dashboard_html(snapshot: dict, org_logo_data_uri: str, campaig
             <meta charset="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <meta name="robots" content="noindex,nofollow" />
-            <title>עושים טוב בצהוב | דשבורד ציבורי</title>
+            <title>GoodRaise | דשבורד ציבורי</title>
             <style>
               :root {{
                 --navy-1000: #070D24;

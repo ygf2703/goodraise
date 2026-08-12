@@ -1,196 +1,10 @@
-import { getStore } from "@netlify/blobs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { getAuthStatus, jsonResponse } from "./auth-store.mjs";
-
-const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const DEV_STORE_PATH = resolve(ROOT_DIR, "work", "data", "netlify-source-config-dev.json");
-const STORE_NAME = "yellow-dashboard-source-config";
-const CONFIG_KEY = "source-config";
-
-const DEFAULT_FIELD_MAP = {
-  id: "id",
-  created_at: "created_at",
-  full_name: "full_name",
-  email: "email",
-  "Ambassador name": "Ambassador name",
-  total: "total",
-  city: "city",
-  charged_success: "charged_success",
-  charge_result: "charge_result",
-};
-
-function defaultSourceConfig() {
-  return {
-    mode: "file",
-    api: {
-      endpoint: "",
-      method: "GET",
-      responseFormat: "csv",
-      recordsPath: "",
-      authType: "none",
-      bearerToken: "",
-      hasBearerToken: false,
-      autoRefreshMinutes: 5,
-      headersText: "",
-      bodyText: "",
-      fieldMapText: JSON.stringify(DEFAULT_FIELD_MAP, null, 2),
-    },
-  };
-}
-
-function normalizePositiveInteger(value, fallback) {
-  const numeric = Number.parseInt(String(value ?? "").trim(), 10);
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : fallback;
-}
+import { jsonResponse, resolveScopedAccess } from "./auth-store.mjs";
+import { normalizeSourceConfig, redactSourceConfig } from "./multi-tenant-model.mjs";
+import { appendAuditEvent, ensureMultiTenantMigration, getCampaignDataset, saveCampaignDataset, getCampaignSource, saveCampaignSource } from "./campaign-repositories.mjs";
+import { safeFetchUrl } from "./source-security.mjs";
 
 function normalizeMultilineText(value) {
   return String(value || "").replace(/\r\n/g, "\n").trim();
-}
-
-function normalizeFieldMapText(value) {
-  const text = String(value || "").trim();
-  if (!text) {
-    return JSON.stringify(DEFAULT_FIELD_MAP, null, 2);
-  }
-
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return JSON.stringify(parsed, null, 2);
-    }
-  } catch {
-    return JSON.stringify(DEFAULT_FIELD_MAP, null, 2);
-  }
-
-  return JSON.stringify(DEFAULT_FIELD_MAP, null, 2);
-}
-
-function normalizeSourceConfig(rawConfig, existingConfig = null) {
-  const defaults = defaultSourceConfig();
-  const candidate = rawConfig && typeof rawConfig === "object" ? rawConfig : {};
-  const existingApi = existingConfig?.api && typeof existingConfig.api === "object" ? existingConfig.api : defaults.api;
-  const apiCandidate = candidate.api && typeof candidate.api === "object" ? candidate.api : {};
-  const incomingToken = String(apiCandidate.bearerToken || "").trim();
-  const clearBearerToken = Boolean(apiCandidate.clearBearerToken);
-  const preservedToken = clearBearerToken ? "" : incomingToken || String(existingApi.bearerToken || "").trim();
-
-  return {
-    mode: candidate.mode === "api" ? "api" : "file",
-    api: {
-      endpoint: String(apiCandidate.endpoint || "").trim(),
-      method: String(apiCandidate.method || defaults.api.method).trim().toUpperCase() === "POST" ? "POST" : "GET",
-      responseFormat: String(apiCandidate.responseFormat || defaults.api.responseFormat).trim().toLowerCase() === "json" ? "json" : "csv",
-      recordsPath: String(apiCandidate.recordsPath || "").trim(),
-      authType: String(apiCandidate.authType || defaults.api.authType).trim().toLowerCase() === "bearer" ? "bearer" : "none",
-      bearerToken: preservedToken,
-      hasBearerToken: Boolean(preservedToken),
-      autoRefreshMinutes: normalizePositiveInteger(apiCandidate.autoRefreshMinutes, defaults.api.autoRefreshMinutes),
-      headersText: normalizeMultilineText(apiCandidate.headersText),
-      bodyText: normalizeMultilineText(apiCandidate.bodyText),
-      fieldMapText: normalizeFieldMapText(apiCandidate.fieldMapText),
-    },
-  };
-}
-
-function redactSourceConfig(config) {
-  const normalized = normalizeSourceConfig(config);
-  return {
-    ...normalized,
-    api: {
-      ...normalized.api,
-      bearerToken: "",
-      hasBearerToken: Boolean(normalized.api.hasBearerToken),
-    },
-  };
-}
-
-async function readDevStore() {
-  try {
-    const content = await readFile(DEV_STORE_PATH, "utf8");
-    const parsed = JSON.parse(content);
-    if (parsed && typeof parsed === "object" && parsed.items && typeof parsed.items === "object") {
-      return parsed;
-    }
-  } catch {
-    return { items: {} };
-  }
-
-  return { items: {} };
-}
-
-async function writeDevStore(store) {
-  await mkdir(dirname(DEV_STORE_PATH), { recursive: true });
-  await writeFile(DEV_STORE_PATH, JSON.stringify(store, null, 2), "utf8");
-}
-
-function createFileStore() {
-  return {
-    async getJSON(key) {
-      const store = await readDevStore();
-      return store.items[key] ?? null;
-    },
-    async setJSON(key, value) {
-      const store = await readDevStore();
-      store.items[key] = value;
-      await writeDevStore(store);
-    },
-  };
-}
-
-function createBlobStore() {
-  const store = getStore(STORE_NAME);
-  return {
-    async getJSON(key) {
-      return (await store.get(key, { type: "json" })) ?? null;
-    },
-    async setJSON(key, value) {
-      await store.setJSON(key, value);
-    },
-  };
-}
-
-function isNetlifyRuntime() {
-  return Boolean(
-    process.env.NETLIFY_LOCAL ||
-      process.env.NETLIFY ||
-      process.env.SITE_ID ||
-      process.env.URL ||
-      process.env.SITE_NAME,
-  );
-}
-
-function getPersistence() {
-  return isNetlifyRuntime() ? createBlobStore() : createFileStore();
-}
-
-async function ensureAuthenticatedAdmin(request) {
-  const auth = await getAuthStatus(request);
-  if (!auth?.authenticated || !auth?.email) {
-    return {
-      error: jsonResponse(401, {
-        message: "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים.",
-      }),
-    };
-  }
-
-  return { email: auth.email };
-}
-
-async function loadStoredSourceConfig() {
-  const store = getPersistence();
-  const stored = await store.getJSON(CONFIG_KEY);
-  return normalizeSourceConfig(stored);
-}
-
-async function saveStoredSourceConfig(rawConfig) {
-  const store = getPersistence();
-  const existing = await store.getJSON(CONFIG_KEY);
-  const normalized = normalizeSourceConfig(rawConfig, existing);
-  await store.setJSON(CONFIG_KEY, normalized);
-  return normalized;
 }
 
 function parseHeadersText(text) {
@@ -211,6 +25,152 @@ function parseHeadersText(text) {
       }
     });
   return headers;
+}
+
+function parseCsvLine(line) {
+  const values = [];
+  let current = "";
+  let inQuotes = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (character === "," && !inQuotes) {
+      values.push(current);
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  values.push(current);
+  return values;
+}
+
+function parseCsv(text) {
+  const lines = String(text || "")
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim().length > 0);
+  if (!lines.length) {
+    return [];
+  }
+  const headers = parseCsvLine(lines[0]).map((value) => String(value || "").trim());
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line);
+    const record = {};
+    headers.forEach((header, index) => {
+      record[header] = String(cells[index] || "").trim();
+    });
+    return record;
+  });
+}
+
+function getValueByPath(record, path) {
+  return String(path || "")
+    .split(".")
+    .filter(Boolean)
+    .reduce((current, segment) => {
+      if (current && typeof current === "object") {
+        return current[segment];
+      }
+      return undefined;
+    }, record);
+}
+
+function parseBoolean(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+function parseAmount(value) {
+  const numeric = Number(String(value || "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function parseCreatedAt(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return null;
+  }
+  const ddmmyy = raw.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
+  if (ddmmyy) {
+    const [, day, month, year, hour, minute] = ddmmyy;
+    const fullYear = Number(year) >= 70 ? `19${year}` : `20${year}`;
+    const isoCandidate = `${fullYear}-${month}-${day}T${hour}:${minute}:00`;
+    return Number.isFinite(Date.parse(isoCandidate)) ? isoCandidate : null;
+  }
+  const isoCandidate = raw.includes("T") ? raw : raw.replace(" ", "T");
+  return Number.isFinite(Date.parse(isoCandidate)) ? new Date(isoCandidate).toISOString().slice(0, 16) : null;
+}
+
+function buildMeta(rows) {
+  const uniqueDates = [...new Set(rows.map((row) => row.date).filter(Boolean))].sort();
+  const defaultFrom = uniqueDates[0] || "";
+  const defaultTo = uniqueDates[uniqueDates.length - 1] || "";
+  return {
+    uniqueDates,
+    projectDates: uniqueDates,
+    defaultFrom,
+    defaultTo,
+    minDate: defaultFrom,
+    maxDate: defaultTo,
+    rowCount: rows.length,
+    projectWindowLabel: defaultFrom && defaultTo ? `${defaultFrom} עד ${defaultTo}` : "",
+  };
+}
+
+function normalizeDatasetRows(rawRows, sourceConfig) {
+  const fieldMapText = sourceConfig?.api?.fieldMapText || "{}";
+  let fieldMap = {};
+  try {
+    fieldMap = JSON.parse(fieldMapText);
+  } catch {
+    fieldMap = {};
+  }
+  return rawRows
+    .map((record, index) => {
+      const id = getValueByPath(record, fieldMap.id || "id") || `row-${index + 1}`;
+      const createdAt = parseCreatedAt(getValueByPath(record, fieldMap.created_at || "created_at"));
+      if (!createdAt) {
+        return null;
+      }
+      const createdDate = new Date(createdAt);
+      return {
+        id: String(id).trim(),
+        createdIso: createdAt.slice(0, 16),
+        date: createdAt.slice(0, 10),
+        hour: createdDate.getHours(),
+        email: String(getValueByPath(record, fieldMap.email || "email") || "").trim().toLowerCase(),
+        donor: String(getValueByPath(record, fieldMap.full_name || "full_name") || "").trim() || "ללא שם",
+        ambassador: String(getValueByPath(record, fieldMap["Ambassador name"] || "Ambassador name") || "").trim() || "ללא שיוך",
+        amount: parseAmount(getValueByPath(record, fieldMap.total || "total")),
+        city: String(getValueByPath(record, fieldMap.city || "city") || "").trim() || "ללא עיר",
+        status: parseBoolean(getValueByPath(record, fieldMap.charged_success || "charged_success")) ? "success" : "failed",
+        chargeResult: String(getValueByPath(record, fieldMap.charge_result || "charge_result") || "").trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
+function resolveJsonRows(payload, sourceConfig) {
+  if (Array.isArray(payload?.rows)) {
+    return payload.rows;
+  }
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  const path = String(sourceConfig?.api?.recordsPath || "").trim();
+  if (!path) {
+    return [];
+  }
+  const resolved = path.split(".").filter(Boolean).reduce((current, segment) => (current && typeof current === "object" ? current[segment] : undefined), payload);
+  return Array.isArray(resolved) ? resolved : [];
 }
 
 async function fetchConfiguredSource(config) {
@@ -237,71 +197,100 @@ async function fetchConfiguredSource(config) {
     }
   }
 
-  const response = await fetch(endpoint, {
+  const { response, text, finalUrl } = await safeFetchUrl(endpoint, {
     method: normalized.api.method,
     headers,
     body,
+    timeoutMs: 15000,
+    maxBytes: 5 * 1024 * 1024,
+    maxRedirects: 3,
   });
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(
-      `המערכת החיצונית החזירה שגיאה ${response.status}${detail ? `: ${detail.slice(0, 180)}` : ""}`,
-    );
+    throw new Error(`המערכת החיצונית החזירה שגיאה ${response.status}.`);
   }
 
-  const payload =
-    normalized.api.responseFormat === "json"
-      ? await response.json()
-      : await response.text();
+  const payload = normalized.api.responseFormat === "json" ? JSON.parse(text || "{}") : text;
+  const rawRows = normalized.api.responseFormat === "json" ? resolveJsonRows(payload, normalized) : parseCsv(payload);
+  const rows = normalizeDatasetRows(rawRows, normalized);
+  const meta = buildMeta(rows);
 
   return {
     mode: normalized.mode,
-    sourceLabel: `API · ${endpoint}`,
+    sourceLabel: `API · ${finalUrl}`,
     fetchedAt: new Date().toISOString(),
     format: normalized.api.responseFormat,
     payload,
-    recordsPath: normalized.api.recordsPath,
-    fieldMapText: normalized.api.fieldMapText,
-    autoRefreshMinutes: normalized.api.autoRefreshMinutes,
+    rows,
+    meta,
   };
 }
 
-export async function getAdminSourceConfig(request) {
-  const auth = await ensureAuthenticatedAdmin(request);
-  if (auth.error) {
-    return auth.error;
+export async function getAdminSourceConfig(request, scope = {}) {
+  await ensureMultiTenantMigration();
+  const access = await resolveScopedAccess(request, {
+    action: "source_view",
+    organizationId: scope.organizationId,
+    campaignId: scope.campaignId,
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים.",
+  });
+  if (access.error) {
+    return access.error;
   }
 
-  const config = await loadStoredSourceConfig();
+  const config = await getCampaignSource(access.organization.id, access.campaign.id);
   return jsonResponse(200, {
+    organizationId: access.organization.id,
+    campaignId: access.campaign.id,
     config: redactSourceConfig(config),
     message: "הגדרות מקור הנתונים נטענו.",
   });
 }
 
-export async function saveAdminSourceConfig(request, rawConfig) {
-  const auth = await ensureAuthenticatedAdmin(request);
-  if (auth.error) {
-    return auth.error;
+export async function saveAdminSourceConfig(request, rawConfig, scope = {}) {
+  await ensureMultiTenantMigration();
+  const access = await resolveScopedAccess(request, {
+    action: "source_update",
+    organizationId: scope.organizationId,
+    campaignId: scope.campaignId,
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים.",
+  });
+  if (access.error) {
+    return access.error;
   }
 
-  const normalized = await saveStoredSourceConfig(rawConfig);
+  const normalized = await saveCampaignSource(access.organization.id, access.campaign.id, rawConfig);
+  await appendAuditEvent({
+    user: access.auth.email,
+    role: access.auth.role,
+    organizationId: access.organization.id,
+    campaignId: access.campaign.id,
+    action: "source_update",
+    outcome: "success",
+  });
   return jsonResponse(200, {
     saved: true,
+    organizationId: access.organization.id,
+    campaignId: access.campaign.id,
     config: redactSourceConfig(normalized),
     message: normalized.mode === "api" ? "חיבור ה-API נשמר בשרת." : "מצב מקור הנתונים נשמר על טעינת קובץ.",
   });
 }
 
-export async function refreshAdminSource(request) {
-  const auth = await ensureAuthenticatedAdmin(request);
-  if (auth.error) {
-    return auth.error;
+export async function refreshAdminSource(request, scope = {}) {
+  await ensureMultiTenantMigration();
+  const access = await resolveScopedAccess(request, {
+    action: "source_refresh",
+    organizationId: scope.organizationId,
+    campaignId: scope.campaignId,
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור.",
+  });
+  if (access.error) {
+    return access.error;
   }
 
   try {
-    const config = await loadStoredSourceConfig();
+    const config = await getCampaignSource(access.organization.id, access.campaign.id);
     if (config.mode !== "api") {
       return jsonResponse(409, {
         message: "מקור הנתונים הפעיל מוגדר כרגע כקובץ, לא כ-API.",
@@ -309,12 +298,45 @@ export async function refreshAdminSource(request) {
     }
 
     const payload = await fetchConfiguredSource(config);
+    const existingDataset = await getCampaignDataset(access.organization.id, access.campaign.id);
+    await saveCampaignDataset(access.organization.id, access.campaign.id, {
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      rows: payload.rows,
+      meta: payload.meta,
+      sourceLabel: payload.sourceLabel,
+      generatedAt: payload.fetchedAt,
+      updatedAt: payload.fetchedAt,
+      previousGeneratedAt: existingDataset?.generatedAt || "",
+    });
+    await appendAuditEvent({
+      user: access.auth.email,
+      role: access.auth.role,
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      action: "source_refresh",
+      outcome: "success",
+    });
     return jsonResponse(200, {
       ok: true,
-      ...payload,
-      message: "הנתונים נמשכו בהצלחה מהמערכת החיצונית.",
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      sourceLabel: payload.sourceLabel,
+      fetchedAt: payload.fetchedAt,
+      rows: payload.rows,
+      meta: payload.meta,
+      message: "הנתונים נמשכו בהצלחה ממערכת המקור ונשמרו עבור הקמפיין.",
     });
   } catch (error) {
+    await appendAuditEvent({
+      user: access.auth.email,
+      role: access.auth.role,
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      action: "source_refresh",
+      outcome: "error",
+      detail: { message: error instanceof Error ? error.message : "refresh_failed" },
+    });
     return jsonResponse(502, {
       message: error instanceof Error ? error.message : "משיכת הנתונים ממערכת המקור נכשלה.",
     });

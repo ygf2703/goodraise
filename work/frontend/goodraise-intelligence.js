@@ -24,6 +24,19 @@ function createGoodRaiseIntelligence(deps) {
       .slice(-1)[0] || "";
   }
 
+  function ensureExplicitCampaignContext(context) {
+    const organizationId = String(context?.organizationId || "").trim();
+    const campaignId = String(context?.campaignId || "").trim();
+    if (!organizationId || !campaignId) {
+      throw new Error("GoodRaise Intelligence requires explicit organizationId and campaignId context.");
+    }
+    return {
+      ...(context && typeof context === "object" ? context : {}),
+      organizationId,
+      campaignId,
+    };
+  }
+
   function getReferenceRowsBeforeLatestDate(rows) {
     const latest = latestIso(rows);
     if (!latest) {
@@ -68,7 +81,8 @@ function createGoodRaiseIntelligence(deps) {
   }
 
   function buildVelocityModel(rows, context) {
-    const bounds = getCampaignBounds(rows, context.meta);
+    const scopedContext = ensureExplicitCampaignContext(context);
+    const bounds = getCampaignBounds(rows, scopedContext.meta);
     const lastHourRows = rowsWithinHours(rows, bounds.latestMillis, 1, 0);
     const last3HourRows = rowsWithinHours(rows, bounds.latestMillis, 3, 0);
     const previous3HourRows = rowsWithinHours(rows, bounds.latestMillis, 6, 3);
@@ -151,16 +165,17 @@ function createGoodRaiseIntelligence(deps) {
   }
 
   function buildAmbassadorModels(rows, context) {
-    const directory = context.ambassadorDirectory || [];
+    const scopedContext = ensureExplicitCampaignContext(context);
+    const directory = scopedContext.ambassadorDirectory || [];
     const directoryMap = getAmbassadorDirectoryMap(directory);
-    const bounds = getCampaignBounds(rows, context.meta);
+    const bounds = getCampaignBounds(rows, scopedContext.meta);
     const perAmbassador = groupBy(rows.filter((row) => row.ambassador && row.ambassador !== "ללא שיוך"), (row) => row.ambassador);
     const allNames = unique([...directory.map((record) => String(record.fullName || "").trim()), ...Array.from(perAmbassador.keys())]).sort((left, right) => left.localeCompare(right, "he"));
     const fullLeaderboard = buildLeaderboard(rows);
     const previousLeaderboard = buildLeaderboard(getReferenceRowsBeforeLatestDate(rows));
     const currentRanks = new Map(fullLeaderboard.map((entry, index) => [entry.ambassador, index + 1]));
     const previousRanks = new Map(previousLeaderboard.map((entry, index) => [entry.ambassador, index + 1]));
-    const goalFallback = Number(context.goals?.ambassadorGoal || context.campaignBuilder?.goals?.ambassadorGoal || 0);
+    const goalFallback = Number(scopedContext.goals?.ambassadorGoal || scopedContext.campaignBuilder?.goals?.ambassadorGoal || 0);
 
     return allNames.map((name) => {
       const ambassadorRows = perAmbassador.get(name) || [];
@@ -178,7 +193,7 @@ function createGoodRaiseIntelligence(deps) {
       const directoryRecord = directoryMap.get(name) || {};
       const target = Number(directoryRecord.personalTarget || goalFallback || 0);
       const targetProgress = target > 0 ? total / target : 0;
-      const nextPrizeThreshold = getNextPrizeThreshold(total, context.prizeModel);
+      const nextPrizeThreshold = getNextPrizeThreshold(total, scopedContext.prizeModel);
       const prizeGap = nextPrizeThreshold > 0 ? Math.max(0, nextPrizeThreshold - total) : 0;
       const currentRank = currentRanks.get(name) || 0;
       const previousRank = previousRanks.get(name) || 0;
@@ -219,10 +234,11 @@ function createGoodRaiseIntelligence(deps) {
   }
 
   function buildForecastModel(rows, context) {
-    const bounds = getCampaignBounds(rows, context.meta);
-    const velocity = buildVelocityModel(rows, context);
+    const scopedContext = ensureExplicitCampaignContext(context);
+    const bounds = getCampaignBounds(rows, scopedContext.meta);
+    const velocity = buildVelocityModel(rows, scopedContext);
     const total = sumAmount(rows);
-    const target = Number(context.goals?.total || 0);
+    const target = Number(scopedContext.goals?.total || 0);
     const weightedAmountPerHour = velocity.previous3Hours.amount > 0
       ? velocity.last3Hours.amountPerHour * 0.6 + velocity.campaignAverage.amountPerHour * 0.4
       : velocity.campaignAverage.amountPerHour;
@@ -249,12 +265,13 @@ function createGoodRaiseIntelligence(deps) {
   }
 
   function buildHealthModel(rows, context) {
+    const scopedContext = ensureExplicitCampaignContext(context);
     const total = sumAmount(rows);
-    const bounds = getCampaignBounds(rows, context.meta);
-    const velocity = buildVelocityModel(rows, context);
-    const ambassadors = buildAmbassadorModels(rows, context);
-    const target = Number(context.goals?.total || 0);
-    const dailyGoal = Number(context.goals?.daily || 0);
+    const bounds = getCampaignBounds(rows, scopedContext.meta);
+    const velocity = buildVelocityModel(rows, scopedContext);
+    const ambassadors = buildAmbassadorModels(rows, scopedContext);
+    const target = Number(scopedContext.goals?.total || 0);
+    const dailyGoal = Number(scopedContext.goals?.daily || 0);
     const progressRatio = target > 0 ? total / target : 0;
     const paceGap = progressRatio - bounds.elapsedRatio;
     const failedCount = rows.filter((row) => row.status === "failed").length;
@@ -321,7 +338,8 @@ function createGoodRaiseIntelligence(deps) {
   }
 
   function buildPriorityList(rows, context) {
-    const ambassadors = buildAmbassadorModels(rows, context);
+    const scopedContext = ensureExplicitCampaignContext(context);
+    const ambassadors = buildAmbassadorModels(rows, scopedContext);
     const priorities = [];
     ambassadors.forEach((item) => {
       if (!item.hasStarted) {
@@ -374,10 +392,11 @@ function createGoodRaiseIntelligence(deps) {
   }
 
   function buildAttentionNow(rows, context) {
-    const ambassadors = buildAmbassadorModels(rows, context);
-    const velocity = buildVelocityModel(rows, context);
-    const health = buildHealthModel(rows, context);
-    const priorityList = buildPriorityList(rows, context);
+    const scopedContext = ensureExplicitCampaignContext(context);
+    const ambassadors = buildAmbassadorModels(rows, scopedContext);
+    const velocity = buildVelocityModel(rows, scopedContext);
+    const health = buildHealthModel(rows, scopedContext);
+    const priorityList = buildPriorityList(rows, scopedContext);
     const items = [];
     const notStarted = ambassadors.filter((item) => !item.hasStarted);
     const nearPrize = ambassadors.filter((item) => item.prizeGap > 0 && item.prizeGap <= 500);
@@ -406,7 +425,7 @@ function createGoodRaiseIntelligence(deps) {
       items.push({
         severity: 84,
         issue: `חסרים ${Math.round(health.todayGap)} ליעד היומי.`,
-        evidence: `גויסו היום ${Math.round(velocity.today.amount)} לעומת יעד של ${Math.round(context.goals?.daily || 0)}.`,
+        evidence: `גויסו היום ${Math.round(velocity.today.amount)} לעומת יעד של ${Math.round(scopedContext.goals?.daily || 0)}.`,
         entities: priorityList.slice(0, 3).map((item) => item.ambassador),
         action: "מעבר לרשימת ההזדמנויות המובילות",
       });
@@ -443,10 +462,11 @@ function createGoodRaiseIntelligence(deps) {
   }
 
   function buildFingerprint(rows, context) {
-    const velocity = buildVelocityModel(rows, context);
-    const ambassadors = buildAmbassadorModels(rows, context);
+    const scopedContext = ensureExplicitCampaignContext(context);
+    const velocity = buildVelocityModel(rows, scopedContext);
+    const ambassadors = buildAmbassadorModels(rows, scopedContext);
     const total = sumAmount(rows);
-    const target = Number(context.goals?.total || 0);
+    const target = Number(scopedContext.goals?.total || 0);
     return {
       campaignDurationHours: Math.round(velocity.bounds.totalHours),
       target,

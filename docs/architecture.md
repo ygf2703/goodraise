@@ -2,273 +2,248 @@
 
 Updated: 2026-08-12
 
-## System Overview
+## System Position
 
-GoodRaise is a campaign intelligence and operations platform built around one core principle:
+GoodRaise is now architected as a multi-campaign operations platform with a clear hierarchy:
 
-`Data Source -> Normalization -> Domain Interpretation -> Intelligence Models -> Admin/Public Delivery`
+`Platform -> Organization -> Campaign -> Dataset / Source / Users / Ambassadors / Intelligence`
 
-The repository keeps a lightweight stack:
+The canonical hosted path is the Netlify Functions stack plus record-oriented persistence. The public browser shell and the protected manager shell consume campaign-scoped resources rather than a single global dataset/config blob.
 
-- Python builder for deterministic dashboard generation
-- Local Python backend for authenticated manager operations
-- Netlify Functions path for hosted manager authentication and protected dataset access
-- Static browser shell for the public and admin-facing UI
-- Lightweight file/blob persistence instead of a heavy backend platform
-
-## Main Components
-
-### 1. Dashboard Build Layer
-
-- File: `work/build_yellow_dashboard.py`
-- Responsibility:
-  - load source data
-  - prepare public/admin payloads
-  - inject HTML/CSS/JS shell
-  - generate browser output and publishable `index.html`
-  - stage the protected admin dataset
-
-### 2. Intelligence Layer
-
-- File: `work/frontend/goodraise-intelligence.js`
-- Responsibility:
-  - campaign health score
-  - velocity model
-  - forecast model
-  - ambassador intelligence
-  - intervention priorities
-  - campaign fingerprint
-
-This layer is intentionally UI-independent. The dashboard renders its output, but the rules live in a reusable module.
-
-### 3. Local Operations Backend
-
-- File: `work/dashboard_backend.py`
-- Responsibility:
-  - session auth
-  - first-password setup
-  - role-aware access gates
-  - protected dataset delivery
-  - campaign config persistence
-  - source API config persistence
-  - source refresh
-  - health endpoint
-  - audit trail
-
-### 4. Hosted Auth / Protected Access Layer
-
-- Files:
-  - `netlify/functions/auth.mjs`
-  - `netlify/lib/auth-store.mjs`
-  - `netlify/lib/campaign-store.mjs`
-  - `netlify/lib/source-store.mjs`
-- Responsibility:
-  - manager auth/status/logout
-  - protected admin dataset access
-  - persisted campaign/source configuration
-  - runtime health snapshot
-
-## Component Diagram
-
-```mermaid
-flowchart RL
-  A["CSV / API Source"] --> B["Normalization + Mapping"]
-  B --> C["Domain Fields in Builder"]
-  C --> D["GoodRaise Intelligence Layer"]
-  D --> E["Public Browser Shell"]
-  D --> F["Protected Admin Experience"]
-  F --> G["Local Backend"]
-  F --> H["Netlify Functions"]
-  G --> I["SQLite + Local JSON"]
-  H --> J["Netlify Blobs / Dev JSON Store"]
-  C --> K["Protected Admin Dataset JSON"]
-```
-
-## Data Flow
-
-### Public Path
-
-1. Source data is loaded in the build.
-2. Public-safe summary output is embedded in the generated HTML.
-3. Public pages render:
-   - project page
-   - prizes page
-   - rules page
-   - privacy page
-   - public campaign snapshot
-
-### Admin Path
-
-1. Manager authenticates through the backend.
-2. Session cookie is issued.
-3. Admin shell requests protected dataset and protected config endpoints.
-4. Intelligence layer computes operational insights client-side from the protected dataset.
-5. Manager actions update campaign/source configuration on the server side.
-
-## Domain Model
-
-The repository is moving toward the following internal model:
-
-### Platform
-
-- future top-level product scope
-- hosts multiple organizations
+## Canonical Tenancy Model
 
 ### Organization
 
-- branding owner
-- manager scope boundary
-- future isolation boundary
+Required identity:
+
+- `id`
+- `slug`
+- `name`
+- `status`
+- `createdAt`
+- `updatedAt`
 
 ### Campaign
 
-- title
-- slug
-- dates
-- target
-- status
-- donation presets
-- media
-- design system
-- data source config
+Required identity:
 
-### Ambassador
+- `id`
+- `organizationId`
+- `slug`
+- `name`
+- `status`
+- `startAt`
+- `endAt`
+- `target`
+- `currency`
+- `createdAt`
+- `updatedAt`
 
-- identity fields
-- team
-- target
-- donation totals
-- activity history
-- prize proximity
-- operational status
+Every campaign-owned record is stored or resolved by:
 
-### Donation
+- `organizationId`
+- `campaignId`
 
-- donor identity fields
-- amount
-- timestamps
-- source identifiers
-- success/failure outcome
+This now applies to:
 
-### Team
+- campaign config
+- source config
+- protected dataset
+- ambassadors
+- teams
+- prizes
+- audit events
 
-- team name
-- manager
-- target
-- members
+## Persistence Boundaries
 
-### Prize
+The canonical persistence boundary is implemented in:
 
-- name
-- threshold
-- winners
-- near-threshold candidates
+- [netlify/lib/platform-store.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\platform-store.mjs)
+- [netlify/lib/campaign-repositories.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\campaign-repositories.mjs)
 
-### User
+Repository responsibilities:
 
-- manager email
-- role
-- organization scope
-- campaign scope
+- `OrganizationRepository` behavior
+- `CampaignRepository` behavior
+- `CampaignConfigRepository` behavior
+- `CampaignDatasetRepository` behavior
+- `CampaignSourceRepository` behavior
 
-### Role
+Current storage backends:
 
-- `platform_admin`
-- `organization_admin`
-- `campaign_manager`
-- `analyst`
-- `viewer`
+- Netlify Blobs in hosted mode
+- local JSON dev store in verification/local hosted emulation
 
-## Authentication
+The UI and intelligence layer do not need to know whether data is coming from Blobs today or SQL/Postgres later.
 
-### Local Backend
+## Record Key Strategy
 
-- manager allowlist seed
-- first-login password creation
-- PBKDF2 password hashing
-- server-side session cookie
-- session expiration
-- local password reset helper
-- password change endpoint
+The old monolithic registry blob is no longer the canonical persistence unit.
 
-### Netlify Path
+Current record keys:
 
-- allowlist seed from env/local dev file
-- PBKDF2 password hashing
-- server-side session persistence in Netlify Blobs or local dev file
-- protected dataset gated by session status
+- `organization:{organizationId}`
+- `campaign:{organizationId}:{campaignId}`
+- `campaign-config:{organizationId}:{campaignId}`
+- `campaign-source:{organizationId}:{campaignId}`
+- `campaign-dataset:{organizationId}:{campaignId}`
+- `audit:{timestamp}:{random}`
 
-## Authorization
+This prevents `Campaign A` updates from rewriting `Campaign B`.
 
-Server-side authorization is now based on role metadata rather than UI visibility alone.
+## Main Runtime Components
 
-Current practical rules:
+### Dashboard Build Layer
 
-- `analyst` and above:
-  - protected dataset access
-- `campaign_manager` and above:
-  - campaign config
-  - source config
-  - source refresh
+- [work/build_yellow_dashboard.py](C:\Users\noamf\Documents\Codex\2026-07-27\mu\work\build_yellow_dashboard.py)
 
-This is a foundation for fuller organization/campaign-scoped RBAC.
+Responsibilities:
 
-## Data Persistence
+- build public/static shell
+- inject browser runtime
+- prepare sanitized public payload
+- load the protected manager shell
+- derive campaign duration from actual campaign dates instead of a fixed 10-day assumption
 
-### Local
+### Intelligence Layer
 
-- `work/data/dashboard-auth.sqlite3`
-- `work/data/dashboard-source-config.json`
-- `work/data/dashboard-campaign-config.json`
-- `work/data/dashboard-audit-log.jsonl`
+- [work/frontend/goodraise-intelligence.js](C:\Users\noamf\Documents\Codex\2026-07-27\mu\work\frontend\goodraise-intelligence.js)
 
-### Hosted / Netlify
+Responsibilities:
 
-- Netlify Blobs-backed auth/session/config storage
-- local dev JSON fallback for verification runs
+- health
+- forecast
+- velocity
+- ambassador state
+- intervention priorities
+- attention-now
+- fingerprint
 
-## Integrations
+This layer now fails fast when `organizationId` or `campaignId` is missing from the invocation context.
 
-Current integration contract is:
+### Hosted Manager Runtime
 
-`External Platform Adapter -> Normalized GoodRaise Shape -> Intelligence Engine`
+- [netlify/functions/auth.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\functions\auth.mjs)
+- [netlify/lib/auth-store.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\auth-store.mjs)
+- [netlify/lib/campaign-store.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\campaign-store.mjs)
+- [netlify/lib/source-store.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\source-store.mjs)
+- [netlify/lib/source-security.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\source-security.mjs)
 
-Supported source modes:
+Responsibilities:
 
-- manual file upload
-- configured API pull
+- auth
+- password setup
+- password change
+- session persistence
+- scoped campaign config read/write
+- scoped source config read/write
+- scoped source refresh
+- scoped dataset delivery
+- organization campaign listing
+- campaign creation
+- audit trail
 
-This keeps GoodRaise integration-friendly and avoids tight coupling to a single fundraising platform.
+## Request Model
 
-## Analytics
+Canonical protected routes are organization/campaign scoped:
 
-The main analytics responsibilities are now separated conceptually:
+- `GET /api/organizations/:orgId/campaigns`
+- `POST /api/organizations/:orgId/campaigns`
+- `GET /api/organizations/:orgId/campaigns/:campaignId`
+- `POST|PUT /api/organizations/:orgId/campaigns/:campaignId`
+- `GET /api/organizations/:orgId/campaigns/:campaignId/dataset`
+- `GET /api/organizations/:orgId/campaigns/:campaignId/source`
+- `POST|PUT /api/organizations/:orgId/campaigns/:campaignId/source`
+- `POST /api/organizations/:orgId/campaigns/:campaignId/source/refresh`
 
-- baseline KPI aggregation in the build/runtime shell
-- reusable intelligence models in `work/frontend/goodraise-intelligence.js`
-- visual rendering in the generated dashboard shell
+Legacy `/api/admin/*` endpoints still exist as compatibility adapters, but the core logic now resolves an explicit organization/campaign scope.
 
-## Deployment
+## Authorization Model
 
-### Local
+Canonical authorization entrypoint:
 
-- build outputs to `outputs/`
-- backend served by `scripts/run_dashboard_server.ps1`
+- [netlify/lib/authorization.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\authorization.mjs)
 
-### Netlify
+Canonical access resolver:
 
-- Python build generates `outputs/index.html`
-- Function endpoint handles auth + protected resources
-- ignored protected files stay out of Git
+- [netlify/lib/auth-store.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\auth-store.mjs)
 
-## Scalability Strategy
+`resolveScopedAccess()` now behaves as follows:
 
-GoodRaise is not a microservice system and does not need to be one yet.
+- anonymous -> `401`
+- explicit forbidden scope -> `403`
+- explicit unknown scope -> `404`
+- implicit scope -> first accessible campaign only when no explicit scope was requested
 
-The intended scale path is:
+This closes the previous security bug where a forbidden request could silently fall back to another accessible campaign.
 
-1. Keep deterministic single-process logic.
-2. Separate domain/data/intelligence concerns.
-3. Persist campaign configuration server-side.
-4. Keep adapters external-platform-specific and intelligence-platform-agnostic.
-5. Replace local/blob persistence with a structured database later without rewriting the intelligence layer.
+## Campaign Data Flow
+
+1. Manager authenticates.
+2. Session status returns accessible campaign summaries.
+3. Browser runtime resolves active `organizationId/campaignId`.
+4. Runtime fetches:
+   - campaign config
+   - source config
+   - protected dataset
+5. Runtime recomputes intelligence only for that campaign.
+6. Campaign switching reloads target campaign data rather than reusing the previous dataset.
+
+## Migration
+
+Migration from the legacy campaign registry is handled by:
+
+- [netlify/lib/campaign-repositories.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\netlify\lib\campaign-repositories.mjs)
+
+Behavior:
+
+- detect legacy registry blob
+- create organization and campaign records
+- copy source config per campaign
+- copy legacy protected dataset per campaign when present
+- preserve active campaign marker where possible
+- retain legacy artifacts after successful migration
+- write a migration marker to prevent duplicate migration
+
+## Security Boundaries
+
+### Protected Dataset
+
+There is no longer one canonical global protected dataset.
+
+Hosted canonical access is campaign-scoped and returned by:
+
+- `GET /api/organizations/:orgId/campaigns/:campaignId/dataset`
+
+### Source Secrets
+
+Source secrets remain server-side. Browser responses only return redacted config:
+
+- `hasBearerToken: true|false`
+- `bearerToken: ""`
+
+### Source Connector Hardening
+
+The hosted source connector now blocks:
+
+- `file://`
+- `ftp://`
+- localhost
+- private IPv4 ranges
+- loopback
+- link-local
+- metadata endpoints
+- internal hostnames
+- unsafe redirects
+
+It also enforces:
+
+- timeout
+- response size limit
+- redirect limit
+
+## Transitional Areas
+
+The hosted multi-tenant path is now the canonical architecture.
+
+The local Python backend remains a transitional fallback and is not yet fully aligned with the record-oriented hosted persistence model. It should not be treated as the long-term source of truth for multi-tenant production hosting.

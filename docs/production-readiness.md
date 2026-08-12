@@ -1,107 +1,103 @@
-# Production Readiness
+# GoodRaise Production Readiness
 
-This project is still a campaign dashboard that can run locally, but it now also includes a real Netlify deployment path for manager authentication and page delivery.
+Updated: 2026-08-12
 
-## Implemented In This Iteration
+## Current Readiness Summary
 
-- Relative and environment-driven build paths in `work/build_yellow_dashboard.py`
-- Fallback local sample dataset for safe out-of-the-box builds
-- Optional local admin access config via `work/config/dashboard-access.local.json`
-- Local backend auth with SQLite manager table and server-side session cookie
-- First-password setup flow for approved manager emails
-- Local backend runner scripts for browser delivery through a single origin
-- Netlify build configuration with a published `index.html`
-- Netlify Functions auth endpoint mapped to `/api/auth/*`
-- Netlify Blobs persistence for approved manager passwords and sessions after deploy
-- Public dashboard output sanitized so donor-identifying fields are not embedded in the public HTML payload
-- Protected admin dataset generated separately and fetched only after authenticated manager login
-- Auth rate limiting and lightweight audit-event persistence for the Netlify login flow
-- Security headers added for Netlify delivery and local backend responses
-- Browser-friendly standalone HTML output even when Codex render tooling is unavailable
-- GitHub Actions build workflow
-- Release verification script for generated HTML outputs
-- Local verification script for the Netlify auth flow
-- Repository hygiene verification for ignored data/config paths
-- Stronger documentation for local-to-production handoff
-- Explainable GoodRaise Intelligence Layer separated into `work/frontend/goodraise-intelligence.js`
-- Synthetic intelligence scale benchmarks for `1,000`, `10,000`, and `100,000` donations
-- Local backend role metadata and role-aware access gates for protected manager actions
-- Structured local audit log in `work/data/dashboard-audit-log.jsonl`
-- Runtime health payload for the local backend and the Netlify auth function
-- Manager password-change support in the local backend
+The hosted Netlify path is now materially stronger for real multi-campaign operations because it includes:
 
-## Recommended Release Gates
+- server-side auth
+- scoped authorization
+- per-campaign dataset persistence
+- per-campaign source configuration
+- source SSRF protections
+- audit events
+- migration from legacy registry storage
+- CI checks for isolation and connector security
 
-Before a real public launch, complete the following:
+## Implemented Release Gates
 
-1. Add a real password recovery flow for hosted deployments.
-2. Complete server-side role enforcement across every hosted persistence path, not only the local backend.
-3. Replace transitional file/blob persistence with a structured database when live multi-organization rollout begins.
-4. Approve the legal text for rules, privacy, retention, and deletion.
-5. Add external monitoring and alerting around health, auth failures, and deployment issues.
-6. Validate backup and restore drills for hosted state.
-7. Run a full staging QA pass with sanitized data and real manager onboarding.
-8. Configure final Netlify secrets and validate the deployed first-login flow end-to-end.
+- protected routes require authenticated manager sessions
+- explicit forbidden scope returns `403`
+- source secrets are redacted from browser responses
+- source URLs are validated against localhost/private/internal destinations
+- campaign updates are record-oriented instead of monolithic shared-blob rewrites
+- legacy registry migration is covered by automated test
+- auth verification script now seeds and validates a scoped campaign dataset
 
-## Local Config
+## Operational Checks Now In CI
 
-Optional local admin config file:
+- build
+- dashboard verification
+- auth verification
+- intelligence tests
+- multi-campaign isolation tests
+- source security tests
+- repository hygiene
 
-- `work/config/dashboard-access.local.json`
-  Optional local manager override for the Python backend.
+## Still Required Before A Strong Hosted Production Rollout
 
-Optional Netlify runtime override:
+1. Align or retire the local Python backend as a canonical runtime path.
+2. Move canonical hosted persistence from local JSON/Blobs fallback toward structured database storage when tenant count grows.
+3. Add monitoring and alerting for auth failures, source refresh failures and runtime health.
+4. Add formal secret scanning and dependency security checks in CI.
+5. Finalize legal retention/deletion policy for donor and manager data.
+6. Validate backup/recovery procedures for hosted state.
 
-- `YELLOW_DASHBOARD_MANAGER_EMAILS`
-  JSON array or comma-separated manager email list for deployed auth.
+## Security Posture
 
-The repository intentionally does not keep real manager emails in tracked source. Local development should use the ignored `work/config/dashboard-access.local.json` file, and deployed environments should use `YELLOW_DASHBOARD_MANAGER_EMAILS`.
+### In Place
 
-Expected shape:
+- PBKDF2 password hashing
+- session cookies
+- login rate limiting
+- audit events
+- tenant-aware authorization
+- SSRF protections for external API connectors
+- source secret redaction
 
-```json
-{
-  "managerEmails": ["manager@example.org"]
-}
-```
+### Still Missing For Higher Maturity
 
-Environment overrides are also supported:
+- formal password recovery flow
+- external monitoring
+- structured production secrets rotation process
+- formal incident runbook
 
-- `YELLOW_DASHBOARD_MANAGER_EMAILS`
-- `YELLOW_DASHBOARD_AUTH_DB_PATH`
-- `YELLOW_DASHBOARD_SECURE_COOKIES`
-- `YELLOW_DASHBOARD_SOURCE_CSV`
-- `YELLOW_DASHBOARD_PRIZES_XLSX`
-- `YELLOW_DASHBOARD_PRIZES_CSV`
-- `YELLOW_DASHBOARD_OUTPUT_DIR`
-- `YELLOW_DASHBOARD_RENDER_SCRIPT`
-- `YELLOW_DASHBOARD_PYTHON_EXE`
+## Data Safety
 
-## Build Outputs
+Public and protected data remain separated:
 
-- `outputs/yellow-project-dashboard-browser.html`
-  Standalone browser-ready output.
-- `outputs/index.html`
-  Netlify publish entrypoint generated from the same dashboard build.
-- `outputs/yellow-project-dashboard.html`
-  Rendered shell output when the Codex visualize renderer exists, otherwise a standalone fallback copy.
-- `netlify/data/admin-dataset.json`
-  Protected admin-only dataset generated during build, bundled for authenticated backend access, and ignored from git. Never commit real donor data here.
+- public shell is sanitized
+- donor-level protected dataset is not embedded in public HTML
+- protected hosted dataset is campaign scoped
 
-## Verified Locally On 2026-08-12
+## Build / Validation Notes
 
-Commands executed:
+### Verified on 2026-08-12
+
+Executed:
 
 ```powershell
-& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" -m py_compile work\build_yellow_dashboard.py work\dashboard_backend.py
-& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" scripts\verify_dashboard_release.py
-& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests\goodraise-intelligence.test.mjs
-& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" scripts\benchmark_intelligence.mjs
+npm.cmd run verify:auth
+npm.cmd run test:intelligence
+npm.cmd run test:source-security
+npm.cmd run test:multi-campaign
+npm.cmd run benchmark:intelligence
 ```
 
 Results:
 
-- Python compile: passed
-- Release verification: passed
-- Intelligence test suite: passed
-- Intelligence scale benchmark: passed
+- auth verification: passed
+- intelligence tests: passed
+- source security tests: passed
+- multi-campaign isolation tests: passed
+- benchmark script: passed
+
+### Not fully verified in this sprint environment
+
+- Python dashboard build was not re-run from this machine's default shell before the bundled runtime path was loaded.
+- The local Python backend was not upgraded to the new hosted multi-tenant persistence model in this sprint.
+
+## Bottom Line
+
+GoodRaise is now much closer to production-credible hosted multi-campaign operation. The biggest remaining product risk is not cross-campaign leakage inside the hosted path; it is finishing the operational hardening around monitoring, structured hosted persistence, and local-path parity.

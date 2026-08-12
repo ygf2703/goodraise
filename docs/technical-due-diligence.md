@@ -4,109 +4,124 @@ Updated: 2026-08-12
 
 ## Executive Summary
 
-GoodRaise is no longer only a campaign-specific dashboard shell. The repository now demonstrates the core of a reusable campaign intelligence platform with:
+GoodRaise is now materially stronger as a platform asset because the hosted runtime is no longer only "multi-campaign by configuration". It now includes:
 
-- explainable operational intelligence
-- protected public/admin data separation
-- local and hosted auth paths
-- persisted campaign and source configuration
-- benchmarked intelligence performance
-- documented architecture and product IP
+- campaign-scoped datasets
+- campaign-scoped source config
+- record-oriented persistence
+- explicit organization/campaign authorization
+- source connector SSRF hardening
+- migration from the legacy registry blob
+- automated isolation tests
 
-## What An External Buyer / Integrator Would See
+## What Improved In This Sprint
+
+### Architecture
+
+- hosted persistence moved to independent organization/campaign records
+- campaign updates no longer depend on rewriting one giant registry blob
+- campaign creation is supported as an organization-scoped server operation
+
+### Security
+
+- explicit forbidden scope now returns `403` instead of silently falling back to another accessible campaign
+- source URLs are validated against unsafe schemes, localhost, private IP space and internal targets
+- browser responses never return stored bearer tokens
+
+### Product Credibility
+
+- multiple live campaigns can coexist
+- campaign switching is treated as a session/UI selection, not as a platform-wide singleton
+- intelligence calculations now require explicit campaign identity
+
+## Buyer / Integrator View
 
 ### Strengths
 
-- strong strategic adjacency to crowdfunding platforms
-- clear adapter pattern between external data source and GoodRaise intelligence
-- deterministic and explainable intelligence models
-- low infrastructure footprint
-- already usable in real campaign operations
+- clear fit as an "intelligence layer" on top of an existing crowdfunding platform
+- low infrastructure complexity
+- campaign-scoped data ownership is now explicit in the hosted path
+- deterministic and explainable operational models
+- CI now checks isolation and connector security rather than only rendering and auth basics
 
-### Weaknesses
+### Remaining Weaknesses
 
-- rendering layer is still concentrated in a large Python builder
-- full multi-campaign selector and organization management UI are not complete
-- local and hosted persistence are still transitional rather than final database architecture
-
-## Architecture Transferability
-
-Transferability is now materially better because:
-
-- intelligence logic is isolated into `work/frontend/goodraise-intelligence.js`
-- auth/config responsibilities are clearly split from UI
-- server-side configuration persistence exists
-- health/readiness documentation exists
-
-An acquiring engineering team would still want additional modularization, but no longer needs to begin with a total rewrite.
+- the local Python backend is still transitional and not yet fully upgraded to the new hosted tenancy architecture
+- the main dashboard build/runtime shell is still concentrated in a large Python builder file
+- portfolio-level organization UI is still foundation-only, not a full executive workspace
 
 ## Security Posture
 
-### Implemented
+Implemented in the hosted canonical path:
 
-- hashed passwords
+- PBKDF2 password hashing
 - session cookies
-- rate limiting in hosted auth path
-- protected admin dataset
-- repo hygiene verification
-- audit logging
-- role-aware protected access in the local backend
+- login rate limiting
+- audit events
+- scoped authorization
+- source secret redaction
+- SSRF protections
 
-### Still Needed For Stronger Production Maturity
+Still recommended before full enterprise-grade rollout:
 
-- formal password recovery flow
-- broader RBAC enforcement across all hosted config stores
-- tenant isolation enforcement in a structured database
-- formal secret scanning in CI
-- external monitoring integration
+- secret scanning in CI
+- production monitoring / alerting
+- formal disaster recovery drill
+- structured database migration beyond local JSON / Blobs fallback
 
-## Data Handling
+## Data Governance View
 
-- public output is sanitized
-- protected donor-level data is not embedded in the public shell
-- generated protected data stays ignored from Git
-- configuration and auth state are persisted separately
+What is improved:
 
-Remaining governance work:
+- donor-level protected datasets are scoped per campaign
+- public payload remains separate from admin payload
+- source secrets do not return to the browser
 
-- retention policy approval
-- deletion policy approval
-- recovery drill validation
+What still needs business/legal completion:
 
-## Performance / Scale
+- retention policy
+- deletion policy
+- incident response process
 
-Synthetic intelligence benchmark results:
+## Scale View
 
-- `1,000` donations: `34.75ms`
-- `10,000` donations: `219.54ms`
-- `100,000` donations: `2354.03ms`
+Measured on 2026-08-12:
+
+- `1,000` donations: `33.51ms`
+- `10,000` donations: `202.13ms`
+- `100,000` donations: `2067.52ms`
+
+Portfolio metadata selector benchmark:
+
+- `10` campaigns: `0.03ms`
+- `100` campaigns: `0.01ms`
+- `1,000` campaigns: `0.12ms`
 
 Interpretation:
 
-- intelligence computations scale acceptably for current campaign operations usage
-- the next likely performance ceiling is UI rendering of large raw record tables, not the intelligence core
+- the intelligence layer remains fast enough for campaign operations
+- the likely next ceiling remains browser rendering of large raw tables, not the intelligence math itself
 
-## Acquisition Readiness View
+## Acquisition Readiness Assessment
 
-GoodRaise is now closer to a licensable or acquirable product because it demonstrates:
+GoodRaise now credibly presents as:
 
-- product differentiation through operational intelligence
-- transferable architecture direction
-- benchmark-ready campaign summary modeling
-- integration-friendly boundaries with external crowdfunding systems
+`Multi-tenant Campaign Intelligence & Operations Platform`
 
-## Remaining Diligence Questions
+This is a meaningful improvement over a campaign-specific dashboard shell because:
 
-1. What final persistence technology will replace local/blob transitional stores?
-2. How will organization/campaign tenancy be enforced in the long-term data model?
-3. What recovery guarantees can the product commit to contractually?
-4. What legal retention/deletion policies will apply to donor and admin data?
-5. What monitoring and incident response posture will exist in production?
+- tenancy boundaries exist in hosted persistence
+- authorization is server-enforced
+- intelligence is scoped and reusable
+- migration exists for legacy campaign registry data
+
+## Remaining Due-Diligence Questions
+
+1. When will the local backend be aligned or retired as a canonical path?
+2. What structured database will replace local JSON/Blobs fallback first?
+3. What retention commitments can the product make contractually?
+4. What incident-monitoring stack will exist in production?
 
 ## Conclusion
 
-As of 2026-08-12, GoodRaise is credible as:
-
-`Campaign Intelligence & Operations Platform`
-
-It is not yet a fully enterprise-hardened SaaS platform, but it is materially beyond the level of a campaign-specific prototype.
+As of 2026-08-12, GoodRaise is materially closer to an integration-ready acquisition target. It is no longer just configurable for multiple campaigns; the hosted runtime now enforces campaign isolation in persistence, authorization and source access.

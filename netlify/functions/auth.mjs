@@ -1,4 +1,5 @@
 import {
+  changeManagerPassword,
   getAdminDataset,
   getAuthStatus,
   getRuntimeHealth,
@@ -7,14 +8,49 @@ import {
   logoutManager,
   setupManagerPassword,
 } from "../lib/auth-store.mjs";
-import { getAdminCampaignConfig, saveAdminCampaignConfig } from "../lib/campaign-store.mjs";
+import {
+  createOrganizationCampaign,
+  getAdminCampaignConfig,
+  getOrganizationCampaignList,
+  saveAdminCampaignConfig,
+} from "../lib/campaign-store.mjs";
+import {
+  appendAuditEvent,
+  ensureMultiTenantMigration,
+  listCampaignSummaries,
+} from "../lib/campaign-repositories.mjs";
 import {
   getAdminSourceConfig,
   refreshAdminSource,
   saveAdminSourceConfig,
 } from "../lib/source-store.mjs";
 
-const JSON_METHODS = new Set(["POST"]);
+const JSON_METHODS = new Set(["POST", "PUT", "PATCH"]);
+
+function matchScopedCampaignRoute(pathname, suffix = "") {
+  const escapedSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const expression = new RegExp(`^/api/organizations/([^/]+)/campaigns/([^/]+)${escapedSuffix}$`);
+  const match = pathname.match(expression);
+  if (!match) {
+    return null;
+  }
+  return {
+    organizationId: decodeURIComponent(match[1]),
+    campaignId: decodeURIComponent(match[2]),
+  };
+}
+
+function matchOrganizationRoute(pathname, suffix = "") {
+  const escapedSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const expression = new RegExp(`^/api/organizations/([^/]+)${escapedSuffix}$`);
+  const match = pathname.match(expression);
+  if (!match) {
+    return null;
+  }
+  return {
+    organizationId: decodeURIComponent(match[1]),
+  };
+}
 
 async function readRequestPayload(request) {
   if (!JSON_METHODS.has(request.method)) {
@@ -30,7 +66,9 @@ async function readRequestPayload(request) {
 }
 
 export default async (request) => {
+  await ensureMultiTenantMigration();
   const url = new URL(request.url);
+  const { pathname } = url;
 
   if (request.method === "OPTIONS") {
     return new Response(null, {
@@ -41,12 +79,12 @@ export default async (request) => {
     });
   }
 
-  if (url.pathname === "/api/health" && request.method === "GET") {
+  if (pathname === "/api/health" && request.method === "GET") {
     const payload = await getRuntimeHealth();
     return jsonResponse(payload.ok ? 200 : 503, payload);
   }
 
-  if (url.pathname === "/api/auth/status" && request.method === "GET") {
+  if (pathname === "/api/auth/status" && request.method === "GET") {
     const status = await getAuthStatus(request);
     return jsonResponse(200, {
       mode: "backend",
@@ -54,33 +92,7 @@ export default async (request) => {
     });
   }
 
-  if (url.pathname === "/api/admin/dataset" && request.method === "GET") {
-    return getAdminDataset(request);
-  }
-
-  if (url.pathname === "/api/admin/source-config" && request.method === "GET") {
-    return getAdminSourceConfig(request);
-  }
-
-  if (url.pathname === "/api/admin/campaign-config" && request.method === "GET") {
-    return getAdminCampaignConfig(request);
-  }
-
-  if (url.pathname === "/api/admin/source-config" && request.method === "POST") {
-    const payload = await readRequestPayload(request);
-    return saveAdminSourceConfig(request, payload.config || {});
-  }
-
-  if (url.pathname === "/api/admin/campaign-config" && request.method === "POST") {
-    const payload = await readRequestPayload(request);
-    return saveAdminCampaignConfig(request, payload.config || {});
-  }
-
-  if (url.pathname === "/api/admin/source-refresh" && request.method === "POST") {
-    return refreshAdminSource(request);
-  }
-
-  if (url.pathname === "/api/auth/login" && request.method === "POST") {
+  if (pathname === "/api/auth/login" && request.method === "POST") {
     const payload = await readRequestPayload(request);
     return loginManager({
       email: payload.email,
@@ -89,7 +101,7 @@ export default async (request) => {
     });
   }
 
-  if (url.pathname === "/api/auth/setup" && request.method === "POST") {
+  if (pathname === "/api/auth/setup" && request.method === "POST") {
     const payload = await readRequestPayload(request);
     return setupManagerPassword({
       email: payload.email,
@@ -99,8 +111,82 @@ export default async (request) => {
     });
   }
 
-  if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+  if (pathname === "/api/auth/logout" && request.method === "POST") {
     return logoutManager(request);
+  }
+
+  if (pathname === "/api/auth/change-password" && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return changeManagerPassword({
+      request,
+      currentPassword: payload.currentPassword,
+      newPassword: payload.newPassword,
+      confirmPassword: payload.confirmPassword,
+    });
+  }
+
+  if (pathname === "/api/admin/dataset" && request.method === "GET") {
+    return getAdminDataset(request);
+  }
+
+  if (pathname === "/api/admin/source-config" && request.method === "GET") {
+    return getAdminSourceConfig(request);
+  }
+
+  if (pathname === "/api/admin/campaign-config" && request.method === "GET") {
+    return getAdminCampaignConfig(request);
+  }
+
+  if (pathname === "/api/admin/source-config" && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return saveAdminSourceConfig(request, payload.config || {});
+  }
+
+  if (pathname === "/api/admin/campaign-config" && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return saveAdminCampaignConfig(request, payload.config || {});
+  }
+
+  if (pathname === "/api/admin/source-refresh" && request.method === "POST") {
+    return refreshAdminSource(request);
+  }
+
+  const scopedDataset = matchScopedCampaignRoute(pathname, "/dataset");
+  if (scopedDataset && request.method === "GET") {
+    return getAdminDataset(request, scopedDataset);
+  }
+
+  const scopedSource = matchScopedCampaignRoute(pathname, "/source");
+  if (scopedSource && request.method === "GET") {
+    return getAdminSourceConfig(request, scopedSource);
+  }
+  if (scopedSource && ["POST", "PUT"].includes(request.method)) {
+    const payload = await readRequestPayload(request);
+    return saveAdminSourceConfig(request, payload.config || {}, scopedSource);
+  }
+
+  const scopedRefresh = matchScopedCampaignRoute(pathname, "/source/refresh");
+  if (scopedRefresh && request.method === "POST") {
+    return refreshAdminSource(request, scopedRefresh);
+  }
+
+  const scopedCampaign = matchScopedCampaignRoute(pathname, "");
+  if (scopedCampaign && request.method === "GET") {
+    return getAdminCampaignConfig(request, scopedCampaign);
+  }
+  if (scopedCampaign && ["POST", "PUT"].includes(request.method)) {
+    const payload = await readRequestPayload(request);
+    return saveAdminCampaignConfig(request, payload.config || {}, scopedCampaign);
+  }
+
+  const orgCampaigns = matchOrganizationRoute(pathname, "/campaigns");
+  if (orgCampaigns && request.method === "GET") {
+    return getOrganizationCampaignList(request, orgCampaigns.organizationId);
+  }
+
+  if (orgCampaigns && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return createOrganizationCampaign(request, orgCampaigns.organizationId, payload.config || payload);
   }
 
   return jsonResponse(404, { message: "הנתיב המבוקש לא נמצא." });
@@ -109,13 +195,15 @@ export default async (request) => {
 export const config = {
   path: [
     "/api/health",
-    "/api/admin/dataset",
-    "/api/admin/campaign-config",
-    "/api/admin/source-config",
-    "/api/admin/source-refresh",
     "/api/auth/status",
     "/api/auth/login",
     "/api/auth/setup",
     "/api/auth/logout",
+    "/api/auth/change-password",
+    "/api/admin/dataset",
+    "/api/admin/campaign-config",
+    "/api/admin/source-config",
+    "/api/admin/source-refresh",
+    "/api/organizations/*",
   ],
 };

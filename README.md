@@ -7,7 +7,7 @@ Campaign intelligence and operations platform for fundraising projects, with pub
 The app receives campaign export files and turns them into an active dashboard that helps campaign managers:
 
 - analyze donations by date, exact date, hour, hour range, amount, ambassador, and donor
-- monitor campaign movement across the ten campaign days
+- monitor campaign movement across the actual campaign window
 - identify peak activity windows with daily charts and heatmaps
 - compare two campaign files and extract summary, facts, critical points, and insights
 - display live prize standings based on a prize table and thresholds
@@ -39,7 +39,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Ambassador directory upload (`full_name`, `email`, `phone`, `nickname`) with personal GoodRaise-style links in the format `https://goodraise.netlify.app/{projectSlug}/{nickname}`
 - Public prize page with podium, prize tiers, and live competition summary
 - Public campaign snapshot hero with immediate KPI-style status cards
-- Daily winners / "Olim LaDeshe" section across the 10 campaign days
+- Daily winners / "Olim LaDeshe" section across the configured campaign schedule
 - Public participant view stays open without registration, with a direct manager entry point from the same page
 - SaaS-style manager login screen with first-password setup and real session-based auth
 - Safe-import behavior: invalid uploads do not replace the active dataset
@@ -52,10 +52,13 @@ The app receives campaign export files and turns them into an active dashboard t
 - Filters for ambassador, project day, exact date, date range, exact hour, hour range, donor name, and amount range
 - Local backend with SQLite admin table, first-password setup, login session, and logout
 - Local backend role metadata with foundation roles for `platform_admin`, `organization_admin`, `campaign_manager`, `analyst`, and `viewer`
+- Local backend parity for campaign-scoped `/api/organizations/:orgId/campaigns/:campaignId/*` routes with server-side scope enforcement
 - Local password-change flow for authenticated managers
 - Local audit log for auth and protected operational actions
 - Local runtime health payload for application, persistence, and data-source status
+- Local source connector hardening with blocked private/internal targets, redirect validation, timeout, and response-size limits
 - Netlify deployment path with Functions-based auth and persistent manager/session storage
+- Hosted multi-campaign / multi-organization isolation with campaign-scoped config, source, permissions, and protected datasets
 - Hosted runtime health payload and protected dataset verification path
 - Public HTML ships only a sanitized public dataset, while full donor-level admin data is loaded after authenticated manager login
 - Login hardening with rate limiting, audit events, and stricter deployment security headers
@@ -96,9 +99,13 @@ The app receives campaign export files and turns them into an active dashboard t
 - `netlify/lib/auth-store.mjs`
   Shared auth storage and password/session logic for Netlify Functions, with local file fallback for verification.
 - `netlify/lib/campaign-store.mjs`
-  Shared campaign-builder configuration persistence for Netlify Functions, with local file fallback for development.
+  Shared campaign-builder persistence and organization-scoped campaign creation/update logic for Netlify Functions.
 - `netlify/lib/source-store.mjs`
   Shared source-API config persistence and protected refresh logic for Netlify Functions.
+- `netlify/lib/campaign-repositories.mjs`
+  Record-oriented hosted persistence boundary for organizations, campaigns, configs, sources, datasets, and migration.
+- `netlify/lib/source-security.mjs`
+  SSRF and network-hardening rules for external source connectors.
 - `netlify.toml`
   Netlify build, publish, functions, and route-rewrite configuration.
 - `package.json`
@@ -115,6 +122,10 @@ The app receives campaign export files and turns them into an active dashboard t
   Fails if sensitive local/config/data files slip back into git.
 - `tests/goodraise-intelligence.test.mjs`
   Automated test coverage for the intelligence engine.
+- `tests/multi-campaign-isolation.test.mjs`
+  Automated multi-organization / multi-campaign authorization and isolation coverage.
+- `tests/source-security.test.mjs`
+  Automated source-connector SSRF and unsafe-endpoint coverage.
 - `outputs/dashboard-backlog-priorities.md`
   Working backlog and upgrade notes.
 - `docs/scorecard-baseline.md`
@@ -125,6 +136,8 @@ The app receives campaign export files and turns them into an active dashboard t
   Documented GoodRaise product IP for health, velocity, forecast, and intervention logic.
 - `docs/scalability.md`
   Current scaling posture, bottlenecks, and benchmark findings.
+- `docs/multi-tenancy.md`
+  Tenancy model, authorization rules, dataset/source isolation, and threat model.
 - `docs/backup-and-recovery.md`
   Current backup/recovery posture and production gaps.
 - `docs/production-readiness.md`
@@ -151,7 +164,7 @@ Important:
 - Regular users do not sign in. Only predefined managers can enter the admin dashboard from the public participant page.
 - First login for each approved manager is a password-setup flow.
 - The generated public HTML intentionally hides donor-identifying fields and does not embed the full admin dataset.
-- The full admin dataset is generated into `netlify/data/admin-dataset.json`, is ignored from git, and is served only after an authenticated admin session.
+- Legacy `netlify/data/admin-dataset.json` is no longer the canonical hosted storage model. Protected hosted datasets are now persisted per campaign and served only after an authenticated admin session.
 - In local mode, manager auth is stored in `work/data/dashboard-auth.sqlite3`.
 - In local mode, source-API connection settings are stored in `work/data/dashboard-source-config.json`.
 - In local mode, campaign-builder state is stored in `work/data/dashboard-campaign-config.json`.
@@ -182,6 +195,8 @@ Build only:
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" scripts/verify_dashboard_release.py
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" scripts/verify_repository_hygiene.py
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests/goodraise-intelligence.test.mjs
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests/source-security.test.mjs
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests/multi-campaign-isolation.test.mjs
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" scripts/benchmark_intelligence.mjs
 ```
 
@@ -249,6 +264,10 @@ Useful local verification commands:
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" scripts/verify_dashboard_release.py
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" scripts/verify_netlify_auth.mjs
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests/goodraise-intelligence.test.mjs
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests/source-security.test.mjs
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests/multi-campaign-isolation.test.mjs
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests/local-backend-scope.test.mjs
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" scripts/benchmark_intelligence.mjs
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" scripts/verify_repository_hygiene.py
 ```
 

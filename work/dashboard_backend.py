@@ -3,10 +3,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import secrets
+import socket
 import sqlite3
+import re
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -15,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urljoin, urlparse
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -24,6 +27,7 @@ CONFIG_DIR = WORK_DIR / "config"
 DATA_DIR = WORK_DIR / "data"
 OUTPUTS_DIR = ROOT_DIR / "outputs"
 NETLIFY_DATA_DIR = ROOT_DIR / "netlify" / "data"
+PLATFORM_STORE_PATH = DATA_DIR / "goodraise-platform-dev.json"
 ADMIN_DATASET_PATH = NETLIFY_DATA_DIR / "admin-dataset.json"
 SOURCE_CONFIG_PATH = DATA_DIR / "dashboard-source-config.json"
 CAMPAIGN_CONFIG_PATH = DATA_DIR / "dashboard-campaign-config.json"
@@ -66,6 +70,18 @@ DEFAULT_SOURCE_FIELD_MAP = {
     "city": "city",
     "charged_success": "charged_success",
     "charge_result": "charge_result",
+}
+
+SOURCE_FETCH_TIMEOUT_SECONDS = 15
+SOURCE_FETCH_MAX_BYTES = 5 * 1024 * 1024
+SOURCE_FETCH_MAX_REDIRECTS = 3
+SOURCE_REDIRECT_STATUS_CODES = {301, 302, 303, 307, 308}
+BLOCKED_SOURCE_HOSTNAMES = {"localhost", "metadata.google.internal"}
+BLOCKED_SOURCE_HOST_SUFFIXES = (".localhost", ".internal")
+BLOCKED_SOURCE_METADATA_IPS = {
+    "169.254.169.254",
+    "100.100.100.200",
+    "::ffff:169.254.169.254",
 }
 
 ROLE_PLATFORM_ADMIN = "platform_admin"
@@ -536,6 +552,379 @@ def load_admin_dataset_payload() -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def read_platform_store() -> dict[str, Any]:
+    if not PLATFORM_STORE_PATH.exists():
+        return {"items": {}}
+    try:
+        payload = json.loads(PLATFORM_STORE_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"items": {}}
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), dict):
+        return {"items": {}}
+    return payload
+
+
+def write_platform_store(store: dict[str, Any]) -> None:
+    ensure_data_dir()
+    PLATFORM_STORE_PATH.write_text(json.dumps(store, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def platform_get(key: str) -> Any:
+    return read_platform_store().get("items", {}).get(key)
+
+
+def platform_set(key: str, value: Any) -> None:
+    store = read_platform_store()
+    store.setdefault("items", {})
+    store["items"][key] = _clone_json(value)
+    write_platform_store(store)
+
+
+def platform_list(prefix: str) -> list[tuple[str, Any]]:
+    items = read_platform_store().get("items", {})
+    return [(key, value) for key, value in items.items() if key.startswith(prefix)]
+
+
+def organization_key(organization_id: str) -> str:
+    return f"organization:{normalize_slug(organization_id, 'default-org')}"
+
+
+def campaign_key(organization_id: str, campaign_id: str) -> str:
+    return f"campaign:{normalize_slug(organization_id, 'default-org')}:{normalize_slug(campaign_id, 'campaign')}"
+
+
+def campaign_config_key(organization_id: str, campaign_id: str) -> str:
+    return f"campaign-config:{normalize_slug(organization_id, 'default-org')}:{normalize_slug(campaign_id, 'campaign')}"
+
+
+def campaign_source_key(organization_id: str, campaign_id: str) -> str:
+    return f"campaign-source:{normalize_slug(organization_id, 'default-org')}:{normalize_slug(campaign_id, 'campaign')}"
+
+
+def campaign_dataset_key(organization_id: str, campaign_id: str) -> str:
+    return f"campaign-dataset:{normalize_slug(organization_id, 'default-org')}:{normalize_slug(campaign_id, 'campaign')}"
+
+
+def get_platform_organization(organization_id: str) -> dict[str, Any] | None:
+    value = platform_get(organization_key(organization_id))
+    return value if isinstance(value, dict) else None
+
+
+def get_platform_campaign(organization_id: str, campaign_id: str) -> dict[str, Any] | None:
+    value = platform_get(campaign_key(organization_id, campaign_id))
+    return value if isinstance(value, dict) else None
+
+
+def get_platform_campaign_config(organization_id: str, campaign_id: str) -> dict[str, Any] | None:
+    value = platform_get(campaign_config_key(organization_id, campaign_id))
+    return value if isinstance(value, dict) else None
+
+
+def get_platform_campaign_source(organization_id: str, campaign_id: str) -> dict[str, Any] | None:
+    value = platform_get(campaign_source_key(organization_id, campaign_id))
+    return value if isinstance(value, dict) else None
+
+
+def get_platform_campaign_dataset(organization_id: str, campaign_id: str) -> dict[str, Any] | None:
+    value = platform_get(campaign_dataset_key(organization_id, campaign_id))
+    return value if isinstance(value, dict) else None
+
+
+def list_platform_campaign_summaries() -> list[dict[str, Any]]:
+    ensure_local_platform_seed_from_legacy()
+    summaries: list[dict[str, Any]] = []
+    for _key, raw_campaign in platform_list("campaign:"):
+        if not isinstance(raw_campaign, dict):
+            continue
+        organization_id = normalize_slug(raw_campaign.get("organizationId"), "default-org")
+        campaign_id = normalize_slug(raw_campaign.get("id"), "campaign")
+        organization = get_platform_organization(organization_id) or {}
+        config = get_platform_campaign_config(organization_id, campaign_id) or {}
+        dataset = get_platform_campaign_dataset(organization_id, campaign_id) or {}
+        meta = config.get("meta") if isinstance(config.get("meta"), dict) else {}
+        rows = dataset.get("rows") if isinstance(dataset.get("rows"), list) else []
+        summaries.append(
+            {
+                "organizationId": organization_id,
+                "organizationSlug": normalize_slug(organization.get("slug") or organization_id, organization_id),
+                "organizationName": str(organization.get("name") or organization_id).strip(),
+                "campaignId": campaign_id,
+                "campaignSlug": normalize_slug(raw_campaign.get("slug") or campaign_id, campaign_id),
+                "campaignName": str(raw_campaign.get("name") or campaign_id).strip(),
+                "status": str(raw_campaign.get("status") or "draft").strip().lower() or "draft",
+                "target": int(raw_campaign.get("target") or 0),
+                "currency": str(raw_campaign.get("currency") or "ILS").strip().upper() or "ILS",
+                "startAt": str(raw_campaign.get("startAt") or "").strip(),
+                "endAt": str(raw_campaign.get("endAt") or "").strip(),
+                "updatedAt": str(raw_campaign.get("updatedAt") or meta.get("lastSavedAt") or "").strip(),
+                "updatedBy": normalize_email(raw_campaign.get("updatedBy") or meta.get("lastSavedBy") or ""),
+                "datasetRecordCount": len(rows),
+            }
+        )
+    return summaries
+
+
+def get_accessible_campaign_summaries(auth_context: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not auth_context:
+        return []
+    role = normalize_role(auth_context.get("role"), ROLE_VIEWER)
+    summaries = list_platform_campaign_summaries()
+    if role == ROLE_PLATFORM_ADMIN:
+        return summaries
+
+    organization_slug = normalize_slug(auth_context.get("organizationSlug") or "", "")
+    allowed_campaigns = {
+        normalize_slug(item)
+        for item in auth_context.get("campaignSlugs", [])
+        if str(item or "").strip()
+    }
+
+    filtered: list[dict[str, Any]] = []
+    for item in summaries:
+        if organization_slug and item["organizationSlug"] != organization_slug:
+            continue
+        if role == ROLE_ORGANIZATION_ADMIN:
+            filtered.append(item)
+            continue
+        if not allowed_campaigns:
+            continue
+        if item["campaignId"] in allowed_campaigns or item["campaignSlug"] in allowed_campaigns:
+            filtered.append(item)
+    return filtered
+
+
+def build_campaign_registry_for_accessible(auth_context: dict[str, Any], active_campaign_id: str = "") -> dict[str, Any]:
+    summaries = get_accessible_campaign_summaries(auth_context)
+    campaigns: list[dict[str, Any]] = []
+    for item in summaries:
+        config = get_platform_campaign_config(item["organizationId"], item["campaignId"]) or {
+            "organization": {
+                "id": item["organizationId"],
+                "slug": item["organizationSlug"],
+                "name": item["organizationName"],
+                "status": "active",
+            },
+            "basics": {
+                "id": item["campaignId"],
+                "organizationId": item["organizationId"],
+                "organizationSlug": item["organizationSlug"],
+                "organizationName": item["organizationName"],
+                "slug": item["campaignSlug"],
+                "campaignName": item["campaignName"],
+                "status": item["status"],
+                "target": item["target"],
+                "currency": item["currency"],
+            },
+            "meta": {
+                "lastSavedAt": item["updatedAt"],
+                "lastSavedBy": item["updatedBy"],
+            },
+        }
+        campaigns.append(
+            {
+                "id": item["campaignId"],
+                "name": item["campaignName"],
+                "slug": item["campaignSlug"],
+                "updatedAt": item["updatedAt"],
+                "updatedBy": item["updatedBy"],
+                "config": _clone_json(config),
+            }
+        )
+    resolved_active_campaign_id = active_campaign_id if any(item["id"] == active_campaign_id for item in campaigns) else (campaigns[0]["id"] if campaigns else "")
+    return {
+        "version": 2,
+        "activeCampaignId": resolved_active_campaign_id,
+        "campaigns": campaigns,
+    }
+
+
+def save_platform_campaign_snapshot(snapshot: dict[str, Any], updated_by: str, organization_id: str, campaign_id: str) -> dict[str, Any]:
+    timestamp = isoformat_utc(utc_now())
+    basics = snapshot.get("basics") if isinstance(snapshot.get("basics"), dict) else {}
+    organization = snapshot.get("organization") if isinstance(snapshot.get("organization"), dict) else {}
+    source_payload = snapshot.get("dataSource") if isinstance(snapshot.get("dataSource"), dict) else snapshot.get("source")
+    normalized_source = normalize_source_config(source_payload if isinstance(source_payload, dict) else None, get_platform_campaign_source(organization_id, campaign_id) or {})
+    assert_safe_source_config(normalized_source)
+    normalized_email = normalize_email(updated_by)
+    org_record = {
+        "id": organization_id,
+        "slug": normalize_slug(organization.get("slug") or basics.get("organizationSlug") or organization_id, organization_id),
+        "name": str(organization.get("name") or basics.get("organizationName") or organization_id).strip() or organization_id,
+        "status": str(organization.get("status") or "active").strip().lower() or "active",
+        "createdAt": str((get_platform_organization(organization_id) or {}).get("createdAt") or timestamp).strip() or timestamp,
+        "updatedAt": timestamp,
+    }
+    campaign_record = {
+        "id": campaign_id,
+        "organizationId": organization_id,
+        "slug": normalize_slug(basics.get("slug") or campaign_id, campaign_id),
+        "name": str(basics.get("campaignName") or campaign_id).strip() or campaign_id,
+        "status": str(basics.get("status") or "draft").strip().lower() or "draft",
+        "startAt": str(basics.get("startAt") or "").strip(),
+        "endAt": str(basics.get("endAt") or "").strip(),
+        "target": int(snapshot.get("goals", {}).get("campaignGoal") or basics.get("target") or 0),
+        "currency": str(basics.get("currency") or "ILS").strip().upper() or "ILS",
+        "createdAt": str((get_platform_campaign(organization_id, campaign_id) or {}).get("createdAt") or timestamp).strip() or timestamp,
+        "updatedAt": timestamp,
+        "updatedBy": normalized_email,
+    }
+    normalized_snapshot = _clone_json(snapshot)
+    normalized_snapshot["organization"] = {
+        "id": org_record["id"],
+        "slug": org_record["slug"],
+        "name": org_record["name"],
+        "status": org_record["status"],
+    }
+    normalized_snapshot["basics"] = {
+        **(basics if isinstance(basics, dict) else {}),
+        "id": campaign_record["id"],
+        "organizationId": org_record["id"],
+        "organizationSlug": org_record["slug"],
+        "organizationName": org_record["name"],
+        "slug": campaign_record["slug"],
+        "campaignName": campaign_record["name"],
+        "status": campaign_record["status"],
+        "target": campaign_record["target"],
+        "currency": campaign_record["currency"],
+    }
+    meta = normalized_snapshot.get("meta") if isinstance(normalized_snapshot.get("meta"), dict) else {}
+    normalized_snapshot["meta"] = {
+        **meta,
+        "lastSavedAt": timestamp,
+        "lastSavedBy": normalized_email,
+    }
+    platform_set(organization_key(organization_id), org_record)
+    platform_set(campaign_key(organization_id, campaign_id), campaign_record)
+    platform_set(campaign_config_key(organization_id, campaign_id), normalized_snapshot)
+    platform_set(campaign_source_key(organization_id, campaign_id), normalized_source)
+    existing_dataset = get_platform_campaign_dataset(organization_id, campaign_id)
+    if not existing_dataset:
+        platform_set(
+            campaign_dataset_key(organization_id, campaign_id),
+            {
+                "organizationId": organization_id,
+                "campaignId": campaign_id,
+                "rows": [],
+                "meta": {},
+                "sourceLabel": "",
+                "generatedAt": timestamp,
+                "updatedAt": timestamp,
+            },
+        )
+    return {
+        "organization": org_record,
+        "campaign": campaign_record,
+        "config": normalized_snapshot,
+        "source": normalized_source,
+        "updatedAt": timestamp,
+        "updatedBy": normalized_email,
+    }
+
+
+def ensure_local_platform_seed_from_legacy() -> None:
+    if platform_list("campaign:"):
+        return
+
+    registry = load_campaign_config()
+    campaigns = registry.get("campaigns") if isinstance(registry.get("campaigns"), list) else []
+    active_campaign_id = str(registry.get("activeCampaignId") or "").strip()
+    active_dataset = load_admin_dataset_payload() or {}
+    active_source = load_source_config()
+    did_seed = False
+
+    for index, item in enumerate(campaigns, start=1):
+        if not isinstance(item, dict):
+            continue
+        snapshot = item.get("config") if isinstance(item.get("config"), dict) else {}
+        basics = snapshot.get("basics") if isinstance(snapshot.get("basics"), dict) else {}
+        organization_id = normalize_slug(basics.get("organizationId") or basics.get("organizationSlug") or "default-org", "default-org")
+        campaign_id = normalize_slug(item.get("id") or basics.get("id") or basics.get("slug") or f"campaign-{index}", f"campaign-{index}")
+        saved = save_platform_campaign_snapshot(snapshot, str(item.get("updatedBy") or snapshot.get("meta", {}).get("lastSavedBy") or ""), organization_id, campaign_id)
+        if campaign_id == active_campaign_id and active_dataset:
+            dataset_payload = {
+                "organizationId": organization_id,
+                "campaignId": campaign_id,
+                "rows": active_dataset.get("rows", []),
+                "meta": active_dataset.get("meta", {}),
+                "sourceLabel": active_dataset.get("sourceLabel", ""),
+                "generatedAt": active_dataset.get("generatedAt", saved["updatedAt"]),
+                "updatedAt": saved["updatedAt"],
+            }
+            platform_set(campaign_dataset_key(organization_id, campaign_id), dataset_payload)
+            platform_set(campaign_source_key(organization_id, campaign_id), normalize_source_config(active_source, saved["source"]))
+        did_seed = True
+
+    if not did_seed and active_dataset:
+        timestamp = isoformat_utc(utc_now())
+        platform_set(
+            organization_key("default-org"),
+            {
+                "id": "default-org",
+                "slug": "default-org",
+                "name": "Default Organization",
+                "status": "active",
+                "createdAt": timestamp,
+                "updatedAt": timestamp,
+            },
+        )
+        platform_set(
+            campaign_key("default-org", "campaign-1"),
+            {
+                "id": "campaign-1",
+                "organizationId": "default-org",
+                "slug": "campaign-1",
+                "name": "Campaign 1",
+                "status": "draft",
+                "startAt": "",
+                "endAt": "",
+                "target": 0,
+                "currency": "ILS",
+                "createdAt": timestamp,
+                "updatedAt": timestamp,
+                "updatedBy": "",
+            },
+        )
+        platform_set(
+            campaign_config_key("default-org", "campaign-1"),
+            {
+                "organization": {
+                    "id": "default-org",
+                    "slug": "default-org",
+                    "name": "Default Organization",
+                    "status": "active",
+                },
+                "basics": {
+                    "id": "campaign-1",
+                    "organizationId": "default-org",
+                    "organizationSlug": "default-org",
+                    "organizationName": "Default Organization",
+                    "slug": "campaign-1",
+                    "campaignName": "Campaign 1",
+                    "status": "draft",
+                    "target": 0,
+                    "currency": "ILS",
+                },
+                "meta": {
+                    "lastSavedAt": timestamp,
+                    "lastSavedBy": "",
+                },
+            },
+        )
+        platform_set(
+            campaign_dataset_key("default-org", "campaign-1"),
+            {
+                "organizationId": "default-org",
+                "campaignId": "campaign-1",
+                "rows": active_dataset.get("rows", []),
+                "meta": active_dataset.get("meta", {}),
+                "sourceLabel": active_dataset.get("sourceLabel", ""),
+                "generatedAt": active_dataset.get("generatedAt", timestamp),
+                "updatedAt": timestamp,
+            },
+        )
+        platform_set(campaign_source_key("default-org", "campaign-1"), normalize_source_config(active_source))
+
+
 def get_default_source_config() -> dict[str, Any]:
     return {
         "mode": "file",
@@ -638,6 +1027,7 @@ def save_source_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     ensure_data_dir()
     existing = load_source_config()
     normalized = normalize_source_config(raw_config, existing)
+    assert_safe_source_config(normalized)
     SOURCE_CONFIG_PATH.write_text(json.dumps(normalized, ensure_ascii=False, indent=2), encoding="utf-8")
     return normalized
 
@@ -807,8 +1197,138 @@ def parse_headers_text(text: str) -> dict[str, str]:
     return headers
 
 
+def is_local_source_development_mode() -> bool:
+    return os.getenv("NODE_ENV", "").strip().lower() != "production" and not os.getenv("NETLIFY")
+
+
+def is_blocked_source_hostname(hostname: str) -> bool:
+    normalized = str(hostname or "").strip().lower()
+    return bool(normalized) and (
+        normalized in BLOCKED_SOURCE_HOSTNAMES or any(normalized.endswith(suffix) for suffix in BLOCKED_SOURCE_HOST_SUFFIXES)
+    )
+
+
+def is_blocked_source_ip(address: str) -> bool:
+    normalized = str(address or "").strip().lower()
+    if not normalized:
+        return False
+    if normalized in BLOCKED_SOURCE_METADATA_IPS:
+        return True
+    try:
+        parsed = ipaddress.ip_address(normalized)
+    except ValueError:
+        return False
+    return (
+        parsed.is_private
+        or parsed.is_loopback
+        or parsed.is_link_local
+        or parsed.is_reserved
+        or parsed.is_unspecified
+        or parsed.is_multicast
+    )
+
+
+def validate_external_source_url(raw_url: str) -> Any:
+    try:
+        parsed = urlparse(str(raw_url or "").strip())
+    except ValueError as exc:
+        raise ValueError("כתובת ה-API אינה תקינה.") from exc
+
+    if parsed.scheme not in {"https", "http"}:
+        raise ValueError("מותר להשתמש רק ב-HTTPS, או ב-HTTP מקומי בסביבת פיתוח.")
+    if parsed.scheme == "http" and not is_local_source_development_mode():
+        raise ValueError("בפרודקשן מותר להשתמש רק ב-HTTPS.")
+    if parsed.username or parsed.password:
+        raise ValueError("אין להעביר פרטי גישה כחלק מה-URL.")
+
+    hostname = str(parsed.hostname or "").strip().lower()
+    if not hostname:
+        raise ValueError("כתובת ה-API אינה כוללת host תקין.")
+    if is_blocked_source_hostname(hostname):
+        raise ValueError("הכתובת מצביעה ליעד פנימי שאינו מורשה.")
+    if is_blocked_source_ip(hostname):
+        raise ValueError("הכתובת מצביעה ל-IP פרטי או פנימי שאינו מורשה.")
+
+    try:
+        resolved_records = socket.getaddrinfo(hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        resolved_records = []
+
+    for record in resolved_records:
+        candidate_ip = ""
+        sockaddr = record[4] if len(record) > 4 else ()
+        if isinstance(sockaddr, tuple) and sockaddr:
+            candidate_ip = str(sockaddr[0] or "").strip()
+        if candidate_ip and is_blocked_source_ip(candidate_ip):
+            raise ValueError("הכתובת נפתרת ליעד פנימי או פרטי שאינו מורשה.")
+
+    return parsed
+
+
+def assert_safe_source_config(config: dict[str, Any]) -> None:
+    if str(config.get("mode") or "file").strip().lower() != "api":
+        return
+    api_config = config.get("api") if isinstance(config.get("api"), dict) else {}
+    endpoint = str(api_config.get("endpoint") or "").strip()
+    if not endpoint:
+        return
+    validate_external_source_url(endpoint)
+
+
+class NoRedirectHandler(urllib_request.HTTPRedirectHandler):
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:  # type: ignore[override]
+        return None
+
+
+def read_limited_response_body(stream: Any, max_bytes: int) -> str:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = stream.read(64 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise RuntimeError("תגובת ה-API חורגת ממגבלת הגודל המותרת.")
+        chunks.append(chunk)
+    charset = "utf-8"
+    if hasattr(stream, "headers") and stream.headers:
+        charset = stream.headers.get_content_charset("utf-8")
+    return b"".join(chunks).decode(charset, errors="replace")
+
+
+def safe_fetch_url(raw_url: str, *, method: str, headers: dict[str, str], body: bytes | None) -> dict[str, Any]:
+    current_url = raw_url
+    redirects = 0
+    opener = urllib_request.build_opener(NoRedirectHandler())
+
+    while redirects <= SOURCE_FETCH_MAX_REDIRECTS:
+        parsed = validate_external_source_url(current_url)
+        request = urllib_request.Request(parsed.geturl(), data=body, headers=headers, method=method)
+        try:
+            with opener.open(request, timeout=SOURCE_FETCH_TIMEOUT_SECONDS) as response:
+                return {
+                    "text": read_limited_response_body(response, SOURCE_FETCH_MAX_BYTES),
+                    "finalUrl": parsed.geturl(),
+                }
+        except urllib_error.HTTPError as exc:
+            if exc.code in SOURCE_REDIRECT_STATUS_CODES:
+                location = exc.headers.get("Location") if exc.headers else ""
+                if not location:
+                    raise RuntimeError("ה-API החזיר הפניה ללא כתובת יעד.") from exc
+                current_url = urljoin(parsed.geturl(), location)
+                redirects += 1
+                continue
+            raise RuntimeError(f"המערכת החיצונית החזירה שגיאה {exc.code}.") from exc
+        except urllib_error.URLError as exc:
+            raise RuntimeError("לא ניתן היה להגיע לכתובת ה-API שהוגדרה.") from exc
+
+    raise RuntimeError("נחסמה שרשרת הפניות ארוכה מדי.")
+
+
 def fetch_source_payload(config: dict[str, Any]) -> dict[str, Any]:
     normalized = normalize_source_config(config)
+    assert_safe_source_config(normalized)
     endpoint = str(normalized["api"].get("endpoint") or "").strip()
     if not endpoint:
         raise ValueError("יש להגדיר קודם כתובת API תקפה לפני משיכת נתונים.")
@@ -831,29 +1351,19 @@ def fetch_source_payload(config: dict[str, Any]) -> dict[str, Any]:
         if not any(key.lower() == "content-type" for key in headers):
             headers["Content-Type"] = "application/json" if body_text.strip().startswith("{") else "text/plain; charset=utf-8"
 
-    request = urllib_request.Request(endpoint, data=body_bytes, headers=headers, method=method)
-
     try:
-        with urllib_request.urlopen(request, timeout=30) as response:
-            charset = response.headers.get_content_charset("utf-8")
-            payload_text = response.read().decode(charset, errors="replace")
-            if normalized["api"].get("responseFormat") == "json":
-                payload: Any = json.loads(payload_text)
-            else:
-                payload = payload_text
-    except urllib_error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else ""
-        raise RuntimeError(
-            f"המערכת החיצונית החזירה שגיאה {exc.code}{f': {detail[:180]}' if detail else ''}"
-        ) from exc
-    except urllib_error.URLError as exc:
-        raise RuntimeError(f"לא ניתן היה להגיע לכתובת ה-API שהוגדרה: {exc.reason}") from exc
+        response = safe_fetch_url(endpoint, method=method, headers=headers, body=body_bytes)
+        payload_text = str(response["text"])
+        if normalized["api"].get("responseFormat") == "json":
+            payload: Any = json.loads(payload_text)
+        else:
+            payload = payload_text
     except json.JSONDecodeError as exc:
         raise RuntimeError("התגובה מה-API הוגדרה כ-JSON אך לא התקבלה תגובת JSON תקינה.") from exc
 
     return {
         "mode": normalized["mode"],
-        "sourceLabel": f"API · {endpoint}",
+        "sourceLabel": f"API · {response['finalUrl']}",
         "fetchedAt": datetime.now().isoformat(timespec="seconds"),
         "format": normalized["api"]["responseFormat"],
         "payload": payload,
@@ -875,6 +1385,11 @@ class DashboardServer(ThreadingHTTPServer):
 
 class DashboardRequestHandler(BaseHTTPRequestHandler):
     server_version = "YellowDashboardBackend/1.0"
+    SCOPED_CAMPAIGN_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)$")
+    SCOPED_DATASET_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/dataset$")
+    SCOPED_SOURCE_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source$")
+    SCOPED_SOURCE_REFRESH_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source/refresh$")
+    SCOPED_CAMPAIGN_LIST_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns$")
 
     @property
     def dashboard_server(self) -> DashboardServer:
@@ -919,6 +1434,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if self.try_handle_scoped_request("GET", parsed.path):
+            return
         if parsed.path == "/api/health":
             self.handle_health()
             return
@@ -957,6 +1474,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(HTTPStatus.FORBIDDEN, {"message": "מקור הבקשה אינו מורשה."})
             return
         parsed = urlparse(self.path)
+        if self.try_handle_scoped_request("POST", parsed.path):
+            return
         if parsed.path == "/api/auth/login":
             self.handle_auth_login()
             return
@@ -982,6 +1501,51 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.handle_source_refresh()
             return
         self.respond_json(HTTPStatus.NOT_FOUND, {"message": "הנתיב המבוקש לא נמצא."})
+
+    def try_handle_scoped_request(self, method: str, path: str) -> bool:
+        campaign_list_match = self.SCOPED_CAMPAIGN_LIST_RE.match(path)
+        if method == "GET" and campaign_list_match:
+            self.handle_scoped_campaign_list(normalize_slug(campaign_list_match.group(1), "default-org"))
+            return True
+
+        campaign_match = self.SCOPED_CAMPAIGN_RE.match(path)
+        if campaign_match:
+            organization_id = normalize_slug(campaign_match.group(1), "default-org")
+            campaign_id = normalize_slug(campaign_match.group(2), "campaign")
+            if method == "GET":
+                self.handle_scoped_campaign_config(organization_id, campaign_id)
+                return True
+            if method == "POST":
+                self.handle_scoped_campaign_config_save(organization_id, campaign_id)
+                return True
+
+        dataset_match = self.SCOPED_DATASET_RE.match(path)
+        if method == "GET" and dataset_match:
+            self.handle_scoped_dataset(
+                normalize_slug(dataset_match.group(1), "default-org"),
+                normalize_slug(dataset_match.group(2), "campaign"),
+            )
+            return True
+
+        source_match = self.SCOPED_SOURCE_RE.match(path)
+        if source_match:
+            organization_id = normalize_slug(source_match.group(1), "default-org")
+            campaign_id = normalize_slug(source_match.group(2), "campaign")
+            if method == "GET":
+                self.handle_scoped_source_config(organization_id, campaign_id)
+                return True
+            if method == "POST":
+                self.handle_scoped_source_config_save(organization_id, campaign_id)
+                return True
+
+        source_refresh_match = self.SCOPED_SOURCE_REFRESH_RE.match(path)
+        if method == "POST" and source_refresh_match:
+            self.handle_scoped_source_refresh(
+                normalize_slug(source_refresh_match.group(1), "default-org"),
+                normalize_slug(source_refresh_match.group(2), "campaign"),
+            )
+            return True
+        return False
 
     def read_json_body(self) -> dict[str, Any]:
         content_length = int(self.headers.get("Content-Length", "0") or "0")
@@ -1113,8 +1677,305 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         morsel = cookie.get(SESSION_COOKIE_NAME)
         return morsel.value if morsel else ""
 
+    def get_scope_from_query(self) -> tuple[str, str]:
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query or "")
+        organization_id = normalize_slug((params.get("organizationId") or [""])[0], "")
+        campaign_id = normalize_slug((params.get("campaignId") or [""])[0], "")
+        return organization_id, campaign_id
+
+    def resolve_scoped_access(
+        self,
+        minimum_role: str = ROLE_VIEWER,
+        organization_id: str = "",
+        campaign_id: str = "",
+        allow_default: bool = True,
+        require_write: bool = False,
+    ) -> dict[str, Any] | None:
+        auth_context = self.require_authenticated_admin(minimum_role)
+        if not auth_context:
+            return None
+        if auth_context.get("error"):
+            return auth_context
+
+        query_org_id, query_campaign_id = self.get_scope_from_query()
+        requested_organization_id = normalize_slug(organization_id or query_org_id, "")
+        requested_campaign_id = normalize_slug(campaign_id or query_campaign_id, "")
+        summaries = get_accessible_campaign_summaries(auth_context)
+        has_explicit_scope = bool(requested_organization_id or requested_campaign_id)
+
+        matched_summary = None
+        for item in summaries:
+            campaign_match = (
+                not requested_campaign_id
+                or item["campaignId"] == requested_campaign_id
+                or item["campaignSlug"] == requested_campaign_id
+            )
+            organization_match = (
+                not requested_organization_id
+                or item["organizationId"] == requested_organization_id
+                or item["organizationSlug"] == requested_organization_id
+            )
+            if campaign_match and organization_match:
+                matched_summary = item
+                break
+
+        if not matched_summary and has_explicit_scope:
+            resource_exists = bool(
+                get_platform_campaign(requested_organization_id, requested_campaign_id)
+                or get_platform_organization(requested_organization_id)
+            )
+            return {
+                "error": True,
+                "status": HTTPStatus.FORBIDDEN if resource_exists else HTTPStatus.NOT_FOUND,
+                "message": "אין הרשאה לקמפיין או לארגון המבוקש." if resource_exists else "הקמפיין המבוקש אינו קיים.",
+                "context": auth_context,
+            }
+
+        selected_summary = matched_summary or (summaries[0] if allow_default and summaries else None)
+        if not selected_summary:
+            return {
+                "error": True,
+                "status": HTTPStatus.NOT_FOUND,
+                "message": "לא נמצא קמפיין זמין עבור המשתמש המחובר.",
+                "context": auth_context,
+            }
+
+        if require_write and normalize_role(auth_context.get("role"), ROLE_VIEWER) in {ROLE_VIEWER, ROLE_ANALYST}:
+            return {
+                "error": True,
+                "status": HTTPStatus.FORBIDDEN,
+                "message": "אין הרשאת כתיבה לקמפיין המבוקש.",
+                "context": auth_context,
+            }
+
+        return {
+            "email": auth_context["email"],
+            "role": auth_context["role"],
+            "organizationSlug": auth_context["organizationSlug"],
+            "campaignSlugs": auth_context["campaignSlugs"],
+            "expiresAt": auth_context["expiresAt"],
+            "organizationId": selected_summary["organizationId"],
+            "campaignId": selected_summary["campaignId"],
+            "organization": get_platform_organization(selected_summary["organizationId"]) or {},
+            "campaign": get_platform_campaign(selected_summary["organizationId"], selected_summary["campaignId"]) or {},
+            "accessibleCampaigns": summaries,
+        }
+
+    def handle_scoped_campaign_list(self, organization_id: str) -> None:
+        auth_context = self.resolve_scoped_access(ROLE_VIEWER, organization_id=organization_id, allow_default=False)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את רשימת הקמפיינים."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+        campaigns = [
+            item
+            for item in auth_context.get("accessibleCampaigns", [])
+            if item.get("organizationId") == auth_context["organizationId"]
+        ]
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "organizationId": auth_context["organizationId"],
+                "campaigns": campaigns,
+            },
+        )
+
+    def handle_scoped_dataset(self, organization_id: str, campaign_id: str) -> None:
+        auth_context = self.resolve_scoped_access(ROLE_ANALYST, organization_id=organization_id, campaign_id=campaign_id, allow_default=False)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים."})
+            return
+        if auth_context.get("error"):
+            denied_context = auth_context.get("context", {})
+            self.audit("dataset_forbidden", denied_context.get("email", ""), role=denied_context.get("role", ""))
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+        payload = get_platform_campaign_dataset(auth_context["organizationId"], auth_context["campaignId"])
+        if not payload:
+            self.respond_json(HTTPStatus.NOT_FOUND, {"message": "מאגר הנתונים הניהולי לקמפיין המבוקש אינו זמין כרגע."})
+            return
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "organizationId": auth_context["organizationId"],
+                "campaignId": auth_context["campaignId"],
+                "organization": auth_context["organization"],
+                "campaign": auth_context["campaign"],
+                "rows": payload.get("rows", []),
+                "meta": payload.get("meta", {}),
+                "sourceLabel": payload.get("sourceLabel", "קובץ בסיס מאובטח"),
+                "generatedAt": payload.get("generatedAt", ""),
+            },
+        )
+        self.audit("dataset_view", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"])
+
+    def handle_scoped_source_config(self, organization_id: str, campaign_id: str) -> None:
+        auth_context = self.resolve_scoped_access(ROLE_CAMPAIGN_MANAGER, organization_id=organization_id, campaign_id=campaign_id, allow_default=False)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+        config = get_platform_campaign_source(auth_context["organizationId"], auth_context["campaignId"]) or get_default_source_config()
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "organizationId": auth_context["organizationId"],
+                "campaignId": auth_context["campaignId"],
+                "config": redact_source_config(config),
+                "message": "הגדרות מקור הנתונים נטענו.",
+            },
+        )
+        self.audit("source_config_view", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"])
+
+    def handle_scoped_source_config_save(self, organization_id: str, campaign_id: str) -> None:
+        auth_context = self.resolve_scoped_access(
+            ROLE_CAMPAIGN_MANAGER,
+            organization_id=organization_id,
+            campaign_id=campaign_id,
+            allow_default=False,
+            require_write=True,
+        )
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור חיבור API."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+        payload = self.read_json_body()
+        config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+        existing = get_platform_campaign_source(auth_context["organizationId"], auth_context["campaignId"]) or {}
+        normalized = normalize_source_config(config, existing if isinstance(existing, dict) else None)
+        try:
+            assert_safe_source_config(normalized)
+        except ValueError as exc:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": str(exc)})
+            return
+        platform_set(campaign_source_key(auth_context["organizationId"], auth_context["campaignId"]), normalized)
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "saved": True,
+                "organizationId": auth_context["organizationId"],
+                "campaignId": auth_context["campaignId"],
+                "config": redact_source_config(normalized),
+                "message": "חיבור מקור הנתונים נשמר בשרת המקומי." if normalized.get("mode") == "api" else "מצב מקור הנתונים נשמר על טעינת קובץ.",
+            },
+        )
+        self.audit("source_config_saved", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], mode=normalized.get("mode", "file"))
+
+    def handle_scoped_campaign_config(self, organization_id: str, campaign_id: str) -> None:
+        auth_context = self.resolve_scoped_access(ROLE_CAMPAIGN_MANAGER, organization_id=organization_id, campaign_id=campaign_id, allow_default=False)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הגדרות הקמפיין."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+        registry = build_campaign_registry_for_accessible(auth_context, auth_context["campaignId"])
+        active_entry = next((item for item in registry.get("campaigns", []) if item.get("id") == auth_context["campaignId"]), None)
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "config": registry,
+                "activeCampaign": {
+                    "organizationId": auth_context["organizationId"],
+                    "campaignId": auth_context["campaignId"],
+                },
+                "portfolio": auth_context.get("accessibleCampaigns", []),
+                "updatedAt": active_entry.get("updatedAt", "") if isinstance(active_entry, dict) else "",
+                "updatedBy": active_entry.get("updatedBy", "") if isinstance(active_entry, dict) else "",
+                "message": "הגדרות הקמפיין נטענו מהשרת המקומי.",
+            },
+        )
+        self.audit("campaign_config_view", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"])
+
+    def handle_scoped_campaign_config_save(self, organization_id: str, campaign_id: str) -> None:
+        auth_context = self.resolve_scoped_access(
+            ROLE_CAMPAIGN_MANAGER,
+            organization_id=organization_id,
+            campaign_id=campaign_id,
+            allow_default=False,
+            require_write=True,
+        )
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור את הגדרות הקמפיין."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+        payload = self.read_json_body()
+        registry = normalize_campaign_registry(payload.get("config") if isinstance(payload.get("config"), dict) else {})
+        active_campaign_id = normalize_slug(registry.get("activeCampaignId") or auth_context["campaignId"], auth_context["campaignId"])
+        active_entry = next((item for item in registry.get("campaigns", []) if normalize_slug(item.get("id"), "") == active_campaign_id), None)
+        snapshot = active_entry.get("config") if isinstance(active_entry, dict) and isinstance(active_entry.get("config"), dict) else {}
+        try:
+            saved = save_platform_campaign_snapshot(snapshot if isinstance(snapshot, dict) else {}, auth_context["email"], auth_context["organizationId"], auth_context["campaignId"])
+        except ValueError as exc:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": str(exc)})
+            return
+        next_registry = build_campaign_registry_for_accessible(auth_context, auth_context["campaignId"])
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "saved": True,
+                "config": next_registry,
+                "activeCampaign": {
+                    "organizationId": auth_context["organizationId"],
+                    "campaignId": auth_context["campaignId"],
+                },
+                "updatedAt": saved["updatedAt"],
+                "updatedBy": saved["updatedBy"],
+                "message": "הגדרות הקמפיין נשמרו בשרת המקומי.",
+            },
+        )
+        self.audit("campaign_config_saved", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"])
+
+    def handle_scoped_source_refresh(self, organization_id: str, campaign_id: str) -> None:
+        auth_context = self.resolve_scoped_access(
+            ROLE_CAMPAIGN_MANAGER,
+            organization_id=organization_id,
+            campaign_id=campaign_id,
+            allow_default=False,
+            require_write=True,
+        )
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+        config = get_platform_campaign_source(auth_context["organizationId"], auth_context["campaignId"]) or get_default_source_config()
+        if config.get("mode") != "api":
+            self.respond_json(HTTPStatus.CONFLICT, {"message": "מקור הנתונים הפעיל מוגדר כרגע כקובץ, לא כ-API."})
+            return
+        try:
+            payload = fetch_source_payload(config)
+        except ValueError as exc:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": str(exc)})
+            return
+        except RuntimeError as exc:
+            self.respond_json(HTTPStatus.BAD_GATEWAY, {"message": str(exc)})
+            return
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "organizationId": auth_context["organizationId"],
+                "campaignId": auth_context["campaignId"],
+                **payload,
+                "message": "הנתונים נמשכו בהצלחה מהמערכת החיצונית.",
+            },
+        )
+        self.audit("source_refresh", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], mode=config.get("mode", "file"))
+
     def handle_auth_status(self) -> None:
         auth_context = self.get_auth_context()
+        accessible_campaigns = get_accessible_campaign_summaries(auth_context) if auth_context else []
         self.respond_json(
             HTTPStatus.OK,
             {
@@ -1124,6 +1985,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "role": auth_context["role"] if auth_context else "",
                 "organizationSlug": auth_context["organizationSlug"] if auth_context else "",
                 "campaignSlugs": auth_context["campaignSlugs"] if auth_context else [],
+                "accessibleCampaigns": accessible_campaigns,
                 "sessionExpiresAt": auth_context["expiresAt"] if auth_context else "",
                 "setupSupported": True,
             },
@@ -1253,7 +2115,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         payload = self.read_json_body()
         config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
-        normalized = save_source_config(config)
+        try:
+            normalized = save_source_config(config)
+        except ValueError as exc:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": str(exc)})
+            return
         self.respond_json(
             HTTPStatus.OK,
             {
@@ -1395,7 +2261,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         try:
             payload = fetch_source_payload(config)
-        except (RuntimeError, ValueError) as exc:
+        except ValueError as exc:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": str(exc)})
+            return
+        except RuntimeError as exc:
             self.respond_json(HTTPStatus.BAD_GATEWAY, {"message": str(exc)})
             return
 

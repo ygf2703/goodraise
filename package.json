@@ -6,6 +6,9 @@
   "scripts": {
     "verify:auth": "node scripts/verify_netlify_auth.mjs",
     "test:intelligence": "node --test tests/goodraise-intelligence.test.mjs",
+    "test:multi-campaign": "node --test tests/multi-campaign-isolation.test.mjs",
+    "test:local-backend": "node --test --test-concurrency=1 tests/local-backend-scope.test.mjs",
+    "test:source-security": "node --test tests/source-security.test.mjs",
     "benchmark:intelligence": "node scripts/benchmark_intelligence.mjs"
   },
   "dependencies": {

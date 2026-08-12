@@ -44,5 +44,14 @@ jobs:
       - name: Test intelligence layer
         run: npm run test:intelligence
 
+      - name: Test multi-campaign isolation
+        run: npm run test:multi-campaign
+
+      - name: Test source connector security
+        run: npm run test:source-security
+
+      - name: Test local backend scope
+        run: npm run test:local-backend
+
       - name: Verify repository hygiene
         run: python scripts/verify_repository_hygiene.py

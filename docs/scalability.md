@@ -4,132 +4,107 @@ Updated: 2026-08-12
 
 ## Goal
 
-GoodRaise should support multiple organizations, multiple campaigns, multiple managers, and meaningful donation volumes without requiring a full rewrite.
+GoodRaise must scale across:
+
+- multiple organizations
+- multiple live campaigns at the same time
+- per-campaign datasets
+- per-campaign source connectors
+- per-scope manager access
+
+without forcing a rewrite of the intelligence layer.
 
 ## Current Scalability Posture
 
-### Already in Place
+### Now Implemented
 
-- server-side campaign configuration persistence
-- server-side source configuration persistence
-- protected admin dataset separation from public output
-- reusable intelligence module
-- file mode and API mode as interchangeable data-source contracts
-- role metadata added to manager identity records
+- record-oriented hosted persistence
+- organization/campaign-scoped routes
+- campaign-scoped source configuration
+- campaign-scoped dataset storage
+- explicit campaign context for intelligence
+- automated isolation tests
 
 ### Still Intentionally Lightweight
 
-- no heavy relational multi-tenant database yet
-- no queue system
-- no background analytics workers
 - no distributed cache
+- no background worker fleet
+- no queue system
+- no multi-service architecture
 
-This is deliberate. The target is `8/10`, not premature infrastructure complexity.
+This remains intentional. GoodRaise is aiming for production-credible focus, not premature infrastructure expansion.
 
-## Multi-Tenant Direction
+## Multi-Campaign Scale Direction
 
-The intended hierarchy is:
+The canonical model is now:
 
-- Platform
-- Organization
-- Campaign
-- Team
-- Ambassador
-- Donation
+- many organizations
+- many campaigns per organization
+- many live campaigns simultaneously
+- one selected campaign per UI session
 
-Current implementation status:
+`activeCampaignId` means the session-selected campaign, not a platform-wide singleton.
 
-- role metadata supports future organization and campaign scoping
-- campaign configuration is persisted independently from the browser
-- source configuration is persisted independently from the browser
-- intelligence logic is campaign-agnostic
+## Data-Layer Scale Strategy
 
-## Multi-Campaign Readiness
+GoodRaise now avoids the previous giant shared registry write pattern.
 
-Current repository readiness:
+Benefits:
 
-- campaign builder already stores campaign identity, slug, goals, teams, presets, branding, and ambassadors
-- campaign scope metadata now exists in auth records
-- config and source persistence are already separated from the static shell
+- updating Campaign A does not rewrite Campaign B
+- concurrency risk is lower
+- migration to structured SQL/Postgres later is straightforward because record boundaries already exist
 
-Remaining gap:
+## Browser Loading Strategy
 
-- the runtime still works primarily with one active campaign context at a time
-- a true campaign selector is still a next-phase item
+The browser should not load all donation rows for all campaigns at once.
 
-## Data-Layer Strategy
+Current direction:
 
-Current persistence:
+- load campaign summaries for accessible campaigns
+- load full dataset only for the selected campaign
+- switch datasets on campaign change
+- recompute intelligence only for the selected campaign
 
-- local SQLite for local auth lifecycle
-- local JSON for source/campaign config
-- Netlify Blobs or local JSON fallback for hosted auth/config
+This is the correct shape for future portfolio growth.
 
-Why this is acceptable now:
+## Benchmark Results
 
-- business logic is not tightly coupled to one database technology
-- the intelligence module is runtime-agnostic
-- the source adapter path is already explicit
+### Intelligence
 
-Recommended next replacement path:
+Measured with [scripts/benchmark_intelligence.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\scripts\benchmark_intelligence.mjs):
 
-1. move auth/config records into a structured database
-2. keep endpoint contracts stable
-3. keep intelligence input shape unchanged
+- `1,000` donations: `33.51ms`
+- `10,000` donations: `202.13ms`
+- `100,000` donations: `2067.52ms`
 
-## Large Dataset Testing
+### Portfolio Metadata
 
-Synthetic benchmark executed on 2026-08-12 with `scripts/benchmark_intelligence.mjs`.
+- `10` campaigns: `0.03ms`
+- `100` campaigns: `0.01ms`
+- `1,000` campaigns: `0.12ms`
 
-### Results
+Interpretation:
 
-- `1,000` donations: `34.75ms`
-- `10,000` donations: `219.54ms`
-- `100,000` donations: `2354.03ms`
+- metadata-only portfolio selection is inexpensive
+- intelligence math remains acceptable for current operational usage
+- the next performance pressure point is still record-table rendering and raw data transfer volume
 
-Additional outputs observed:
+## Known Bottlenecks
 
-- stable health-score generation
-- stable forecast generation
-- stable intervention-priority generation
-- stable campaign fingerprint generation
+- the browser shell remains large
+- raw record tables are still client-rendered
+- the local Python backend is not yet aligned with the hosted multi-tenant persistence model
 
-## Bottlenecks Identified
+## Next Scale Steps
 
-- the generated dashboard still carries a large browser shell
-- very large raw datasets still pressure client-side rendering more than the intelligence module itself
-- records table growth will eventually require pagination/query slicing instead of shipping all records
+Recommended order:
 
-## Query / Pagination Direction
-
-The system should continue toward:
-
-- summary-first endpoints
-- filtered record retrieval
-- table pagination
-- optional server-side precomputation for large datasets
-
-This has not been fully implemented yet, but the architecture now points in the right direction.
-
-## Cache Strategy
-
-Current recommendation:
-
-- do not introduce infrastructure cache yet
-- precompute only where analytics become materially expensive
-- invalidate derived intelligence whenever:
-  - source data changes
-  - campaign config changes
-  - source mode changes
+1. keep hosted scoped persistence as the canonical path
+2. add filtered/paginated record retrieval for very large datasets
+3. precompute or cache only if real workloads justify it
+4. move from dev JSON/Blobs fallback to structured database when live organization count grows
 
 ## Scalability Conclusion
 
-GoodRaise is now materially more scalable because:
-
-- intelligence is modular and reusable
-- identity records carry role/scope metadata
-- campaign/source configuration is persisted server-side
-- data-source ingestion is adapter-oriented
-- scale characteristics are benchmarked and documented
-
-What remains is evolutionary work, not a structural reset.
+GoodRaise is now structurally more scalable because the tenancy model, storage model and runtime fetch model are aligned around `organizationId + campaignId`. The main remaining scale work is evolutionary rather than architectural reset.

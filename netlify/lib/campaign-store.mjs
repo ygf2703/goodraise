@@ -1,279 +1,449 @@
-import { getStore } from "@netlify/blobs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { getAuthStatus, jsonResponse } from "./auth-store.mjs";
-
-const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const DEV_STORE_PATH = resolve(ROOT_DIR, "work", "data", "netlify-campaign-config-dev.json");
-const STORE_NAME = "yellow-dashboard-campaign-config";
-const CONFIG_KEY = "campaign-config";
-
-function isoNow() {
-  return new Date().toISOString();
-}
-
-function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function normalizeSlug(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/-{2,}/g, "-")
-    .replace(/^[-_]+|[-_]+$/g, "");
-}
+import { authorize } from "./authorization.mjs";
+import {
+  ROLE_CAMPAIGN_MANAGER,
+  ROLE_PLATFORM_ADMIN,
+  ROLE_VIEWER,
+  isoNow,
+  normalizeRole,
+  normalizeStableId,
+  normalizeSourceConfig,
+} from "./multi-tenant-model.mjs";
+import { jsonResponse, requireManagerAccess, resolveScopedAccess } from "./auth-store.mjs";
+import {
+  appendAuditEvent,
+  buildCampaignContext,
+  ensureMultiTenantMigration,
+  getCampaign,
+  getOrganization,
+  listCampaignSummaries,
+  saveCampaign,
+  saveCampaignConfig,
+  saveCampaignDataset,
+  saveCampaignSource,
+  saveOrganization,
+} from "./campaign-repositories.mjs";
 
 function cloneJson(value) {
-  return JSON.parse(JSON.stringify(value ?? {}));
+  return JSON.parse(JSON.stringify(value ?? null));
 }
 
-function createCampaignId(value, fallbackIndex = 1) {
-  return normalizeSlug(value) || `campaign-${fallbackIndex}`;
+function normalizeSnapshotScope(snapshot = {}, fallback = {}) {
+  const organization = snapshot.organization && typeof snapshot.organization === "object" ? snapshot.organization : {};
+  const basics = snapshot.basics && typeof snapshot.basics === "object" ? snapshot.basics : {};
+  const organizationId = String(
+    fallback.organizationId ||
+      organization.id ||
+      basics.organizationId ||
+      "",
+  ).trim();
+  const campaignId = String(
+    fallback.campaignId ||
+      basics.id ||
+      "",
+  ).trim();
+  return {
+    organizationId,
+    campaignId,
+    organizationName: String(organization.name || basics.organizationName || "").trim(),
+    organizationSlug: String(organization.slug || basics.organizationSlug || "").trim(),
+    campaignName: String(basics.campaignName || "").trim(),
+    campaignSlug: String(basics.slug || "").trim(),
+    status: String(basics.status || "draft").trim().toLowerCase() || "draft",
+    startAt: String(basics.startAt || "").trim() || (basics.startDate ? `${basics.startDate}T${String(basics.startTime || "00:00").trim()}:00` : ""),
+    endAt: String(basics.endAt || "").trim() || (basics.endDate ? `${basics.endDate}T${String(basics.endTime || "23:59").trim()}:00` : ""),
+    target: Number(snapshot?.goals?.campaignGoal || basics.target || 0) || 0,
+    currency: String(basics.currency || "ILS").trim().toUpperCase() || "ILS",
+  };
 }
 
-function normalizeCampaignRegistry(value) {
-  const candidate = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const legacyCandidate =
-    candidate?.config && typeof candidate.config === "object" && !Array.isArray(candidate.config)
-      ? candidate.config
-      : candidate?.campaigns
-        ? null
-        : candidate;
+function extractActiveSnapshot(rawConfig, fallback = {}) {
+  const candidate = rawConfig && typeof rawConfig === "object" ? rawConfig : {};
+  const campaigns = Array.isArray(candidate.campaigns) ? candidate.campaigns : [];
+  const activeCampaignId = String(candidate.activeCampaignId || fallback.campaignId || "").trim();
+  const targetEntry = campaigns.find((item) => String(item?.id || "").trim() === activeCampaignId) || campaigns[0] || null;
+  const snapshot = targetEntry?.config && typeof targetEntry.config === "object" ? cloneJson(targetEntry.config) : cloneJson(candidate);
+  return {
+    candidate,
+    campaigns,
+    activeCampaignId,
+    targetEntry,
+    snapshot,
+  };
+}
 
-  const rawCampaigns = Array.isArray(candidate.campaigns)
-    ? candidate.campaigns
-    : legacyCandidate && Object.keys(legacyCandidate).length
-      ? [
-          {
-            id: candidate.id,
-            name: candidate.name,
-            slug: candidate.slug,
-            updatedAt: candidate.updatedAt,
-            updatedBy: candidate.updatedBy,
-            config: legacyCandidate,
-          },
-        ]
-      : [];
-
-  const campaigns = [];
-  const seenIds = new Set();
-  const seenSlugs = new Set();
-
-  rawCampaigns.forEach((item, index) => {
-    const entry = item && typeof item === "object" ? item : {};
-    const snapshotSource = entry?.config && typeof entry.config === "object" ? entry.config : entry;
-    const snapshot = cloneJson(snapshotSource);
-    const basics = snapshot?.basics && typeof snapshot.basics === "object" ? snapshot.basics : {};
-    let slug = normalizeSlug(entry.slug || basics.slug || basics.campaignName || `campaign-${index + 1}`) || `campaign-${index + 1}`;
-    const slugBase = slug;
-    let slugSuffix = 2;
-    while (seenSlugs.has(slug)) {
-      slug = `${slugBase}-${slugSuffix}`;
-      slugSuffix += 1;
-    }
-    seenSlugs.add(slug);
-
-    let id = createCampaignId(entry.id || slug, index + 1);
-    const idBase = id;
-    let idSuffix = 2;
-    while (seenIds.has(id)) {
-      id = `${idBase}-${idSuffix}`;
-      idSuffix += 1;
-    }
-    seenIds.add(id);
-
-    const name = String(entry.name || basics.campaignName || `Campaign ${index + 1}`).trim() || `Campaign ${index + 1}`;
-    const meta = snapshot?.meta && typeof snapshot.meta === "object" ? snapshot.meta : {};
-    const updatedAt = String(entry.updatedAt || meta.lastSavedAt || "").trim();
-    const updatedBy = normalizeEmail(entry.updatedBy || meta.lastSavedBy || "");
-
-    snapshot.basics = {
-      ...basics,
-      slug,
-      campaignName: name,
+function buildRegistryFromContexts(contexts, activeCampaignId) {
+  const campaigns = contexts.map((context) => {
+    const config = cloneJson(context.config || {});
+    config.organization = {
+      id: context.organization.id,
+      slug: context.organization.slug,
+      name: context.organization.name,
+      status: context.organization.status,
     };
-    snapshot.meta = {
-      ...meta,
-      lastSavedAt: updatedAt,
-      lastSavedBy: updatedBy,
+    config.basics = {
+      ...(config.basics || {}),
+      id: context.campaign.id,
+      organizationId: context.organization.id,
+      organizationSlug: context.organization.slug,
+      organizationName: context.organization.name,
+      slug: context.campaign.slug,
+      campaignName: context.campaign.name,
+      status: context.campaign.status,
+      target: context.campaign.target,
+      currency: context.campaign.currency,
     };
-
-    campaigns.push({
-      id,
-      name,
-      slug,
-      updatedAt,
-      updatedBy,
-      config: snapshot,
-    });
+    config.meta = {
+      ...(config.meta || {}),
+      lastSavedAt: config.meta?.lastSavedAt || context.campaign.updatedAt || "",
+      lastSavedBy: config.meta?.lastSavedBy || "",
+    };
+    return {
+      id: context.campaign.id,
+      name: context.campaign.name,
+      slug: context.campaign.slug,
+      updatedAt: config.meta.lastSavedAt || context.campaign.updatedAt || "",
+      updatedBy: config.meta.lastSavedBy || "",
+      config,
+    };
   });
 
-  if (!campaigns.length) {
-    campaigns.push({
-      id: "campaign-1",
-      name: "Campaign 1",
-      slug: "campaign-1",
-      updatedAt: "",
-      updatedBy: "",
-      config: {
-        basics: {
-          campaignName: "Campaign 1",
-          slug: "campaign-1",
-        },
-        meta: {
-          lastSavedAt: "",
-          lastSavedBy: "",
-        },
-      },
-    });
-  }
-
-  const activeCampaignId = campaigns.some((item) => item.id === candidate.activeCampaignId)
-    ? candidate.activeCampaignId
-    : campaigns[0].id;
-
   return {
-    version: 1,
-    activeCampaignId,
+    version: 2,
+    activeCampaignId: campaigns.some((item) => item.id === activeCampaignId) ? activeCampaignId : campaigns[0]?.id || "",
     campaigns,
   };
 }
 
-async function readDevStore() {
-  try {
-    const content = await readFile(DEV_STORE_PATH, "utf8");
-    const parsed = JSON.parse(content);
-    if (parsed && typeof parsed === "object" && parsed.items && typeof parsed.items === "object") {
-      return parsed;
+async function listAccessibleCampaignSummariesForAuth(auth) {
+  const summaries = await listCampaignSummaries();
+  const contexts = [];
+  for (const summary of summaries) {
+    const organization = await getOrganization(summary.organizationId);
+    const campaign = await getCampaign(summary.organizationId, summary.campaignId);
+    if (!organization || !campaign) {
+      continue;
     }
-  } catch {
-    return { items: {} };
-  }
-
-  return { items: {} };
-}
-
-async function writeDevStore(store) {
-  await mkdir(dirname(DEV_STORE_PATH), { recursive: true });
-  await writeFile(DEV_STORE_PATH, JSON.stringify(store, null, 2), "utf8");
-}
-
-function createFileStore() {
-  return {
-    async getJSON(key) {
-      const store = await readDevStore();
-      return store.items[key] ?? null;
-    },
-    async setJSON(key, value) {
-      const store = await readDevStore();
-      store.items[key] = value;
-      await writeDevStore(store);
-    },
-  };
-}
-
-function createBlobStore() {
-  const store = getStore(STORE_NAME);
-  return {
-    async getJSON(key) {
-      return (await store.get(key, { type: "json" })) ?? null;
-    },
-    async setJSON(key, value) {
-      await store.setJSON(key, value);
-    },
-  };
-}
-
-function isNetlifyRuntime() {
-  return Boolean(
-    process.env.NETLIFY_LOCAL ||
-      process.env.NETLIFY ||
-      process.env.SITE_ID ||
-      process.env.URL ||
-      process.env.SITE_NAME,
-  );
-}
-
-function getPersistence() {
-  return isNetlifyRuntime() ? createBlobStore() : createFileStore();
-}
-
-async function ensureAuthenticatedAdmin(request) {
-  const auth = await getAuthStatus(request);
-  if (!auth?.authenticated || !auth?.email) {
-    return {
-      error: jsonResponse(401, {
-        message: "נדרשת התחברות מנהל כדי לטעון או לשמור את הגדרות הקמפיין.",
-      }),
-    };
-  }
-
-  return { email: auth.email };
-}
-
-async function saveStoredCampaignConfig(rawConfig, updatedBy) {
-  const store = getPersistence();
-  const normalized = normalizeCampaignRegistry(rawConfig);
-  const timestamp = isoNow();
-  const normalizedEmail = normalizeEmail(updatedBy);
-  normalized.campaigns = normalized.campaigns.map((item) => {
-    if (item.id !== normalized.activeCampaignId) {
-      return item;
-    }
-    return {
-      ...item,
-      updatedAt: timestamp,
-      updatedBy: normalizedEmail,
-      config: {
-        ...item.config,
-        meta: {
-          ...(item.config?.meta || {}),
-          lastSavedAt: timestamp,
-          lastSavedBy: normalizedEmail,
-        },
+    const authorization = authorize(
+      {
+        ...auth,
+        authenticated: Boolean(auth?.authenticated ?? auth?.email),
       },
-    };
-  });
-  const payload = {
-    config: normalized,
-    updatedAt: timestamp,
-    updatedBy: normalizedEmail,
-  };
-  await store.setJSON(CONFIG_KEY, payload);
-  return payload;
+      "campaign_view",
+      organization,
+      campaign,
+    );
+    if (authorization.ok) {
+      contexts.push(summary);
+    }
+  }
+  return contexts;
 }
 
-export async function getAdminCampaignConfig(request) {
-  const auth = await ensureAuthenticatedAdmin(request);
-  if (auth.error) {
-    return auth.error;
+async function buildAccessibleRegistry(access, preferredCampaignId = "") {
+  const summaries = access.accessibleCampaigns || await listAccessibleCampaignSummariesForAuth(access.auth);
+  const contexts = [];
+  for (const summary of summaries) {
+    const context = await buildCampaignContext(summary.organizationId, summary.campaignId);
+    if (context) {
+      contexts.push(context);
+    }
+  }
+  return buildRegistryFromContexts(contexts, preferredCampaignId || access.campaign?.id || "");
+}
+
+async function requireOrganizationAccess(request, organizationId, action, unauthorizedMessage) {
+  await ensureMultiTenantMigration();
+  const baseAccess = await requireManagerAccess(request, ROLE_VIEWER, unauthorizedMessage);
+  if (baseAccess.error) {
+    return baseAccess;
   }
 
-  const store = getPersistence();
-  const stored = await store.getJSON(CONFIG_KEY);
+  const organization = await getOrganization(organizationId);
+  if (!organization) {
+    return {
+      auth: baseAccess.auth,
+      error: jsonResponse(404, { message: "הארגון המבוקש אינו קיים." }),
+    };
+  }
+
+  const authorization = authorize(
+    {
+      ...baseAccess.auth,
+      authenticated: true,
+    },
+    action,
+    organization,
+    null,
+  );
+  if (!authorization.ok) {
+    return {
+      auth: baseAccess.auth,
+      error: jsonResponse(authorization.status, { message: authorization.message }),
+    };
+  }
+
+  return {
+    auth: baseAccess.auth,
+    organization,
+  };
+}
+
+async function createOrUpdateScopedCampaign({ auth, organization, campaignId, snapshot, existingCampaign = null }) {
+  const normalizedScope = normalizeSnapshotScope(snapshot, {
+    organizationId: organization.id,
+    campaignId,
+  });
+  const effectiveCampaignId = normalizeStableId(campaignId || normalizedScope.campaignId || normalizedScope.campaignSlug || "campaign");
+  const now = isoNow();
+
+  snapshot.organization = {
+    ...(snapshot.organization || {}),
+    id: organization.id,
+    slug: normalizedScope.organizationSlug || organization.slug,
+    name: normalizedScope.organizationName || organization.name,
+    status: organization.status,
+  };
+  snapshot.basics = {
+    ...(snapshot.basics || {}),
+    id: effectiveCampaignId,
+    organizationId: organization.id,
+    organizationSlug: normalizedScope.organizationSlug || organization.slug,
+    organizationName: normalizedScope.organizationName || organization.name,
+    slug: normalizedScope.campaignSlug || existingCampaign?.slug || effectiveCampaignId,
+    campaignName: normalizedScope.campaignName || existingCampaign?.name || effectiveCampaignId,
+    status: normalizedScope.status || existingCampaign?.status || "draft",
+    target: normalizedScope.target || existingCampaign?.target || 0,
+    currency: normalizedScope.currency || existingCampaign?.currency || "ILS",
+  };
+
+  await saveOrganization({
+    id: organization.id,
+    slug: snapshot.organization.slug,
+    name: snapshot.organization.name,
+    status: snapshot.organization.status || organization.status,
+    createdAt: organization.createdAt,
+    updatedAt: now,
+  });
+
+  const savedCampaign = await saveCampaign({
+    id: effectiveCampaignId,
+    organizationId: organization.id,
+    slug: snapshot.basics.slug,
+    name: snapshot.basics.campaignName,
+    status: snapshot.basics.status,
+    startAt: normalizedScope.startAt || existingCampaign?.startAt || "",
+    endAt: normalizedScope.endAt || existingCampaign?.endAt || "",
+    target: snapshot.basics.target,
+    currency: snapshot.basics.currency,
+    createdAt: existingCampaign?.createdAt || now,
+    updatedAt: now,
+  });
+
+  const savedConfig = await saveCampaignConfig(organization.id, savedCampaign.id, snapshot, auth.email);
+  await saveCampaignSource(organization.id, savedCampaign.id, normalizeSourceConfig(snapshot.dataSource || snapshot.source || {}));
+  await saveCampaignDataset(organization.id, savedCampaign.id, {
+    organizationId: organization.id,
+    campaignId: savedCampaign.id,
+    rows: [],
+    meta: {},
+    sourceLabel: "",
+    generatedAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    campaign: savedCampaign,
+    config: savedConfig,
+  };
+}
+
+export async function getOrganizationCampaignList(request, organizationId) {
+  const access = await requireOrganizationAccess(
+    request,
+    organizationId,
+    "campaign_list",
+    "נדרשת התחברות מנהל כדי לטעון את רשימת הקמפיינים.",
+  );
+  if (access.error) {
+    return access.error;
+  }
+
+  const accessibleCampaigns = await listAccessibleCampaignSummariesForAuth({
+    ...access.auth,
+    authenticated: true,
+  });
   return jsonResponse(200, {
-    config: normalizeCampaignRegistry(stored?.config || stored || {}),
-    updatedAt: stored?.updatedAt || "",
-    updatedBy: stored?.updatedBy || "",
+    organizationId: access.organization.id,
+    campaigns: accessibleCampaigns.filter((item) => item.organizationId === access.organization.id),
+  });
+}
+
+export async function createOrganizationCampaign(request, organizationId, rawConfig = {}) {
+  const access = await requireOrganizationAccess(
+    request,
+    organizationId,
+    "campaign_create",
+    "נדרשת התחברות מנהל כדי ליצור קמפיין חדש.",
+  );
+  if (access.error) {
+    return access.error;
+  }
+
+  const { targetEntry, snapshot } = extractActiveSnapshot(rawConfig, { organizationId });
+  const requestedCampaignId = normalizeStableId(targetEntry?.id || snapshot?.basics?.id || snapshot?.basics?.slug || "campaign");
+  const existingCampaign = await getCampaign(access.organization.id, requestedCampaignId);
+  if (existingCampaign) {
+    return jsonResponse(409, { message: "כבר קיים קמפיין עם המזהה המבוקש בארגון זה." });
+  }
+
+  const saved = await createOrUpdateScopedCampaign({
+    auth: access.auth,
+    organization: access.organization,
+    campaignId: requestedCampaignId,
+    snapshot,
+    existingCampaign: null,
+  });
+
+  await appendAuditEvent({
+    user: access.auth.email,
+    role: access.auth.role,
+    organizationId: access.organization.id,
+    campaignId: saved.campaign.id,
+    action: "campaign_created",
+    outcome: "success",
+  });
+
+  const accessibleCampaigns = await listAccessibleCampaignSummariesForAuth({
+    ...access.auth,
+    authenticated: true,
+  });
+  const registry = await buildAccessibleRegistry(
+    {
+      auth: access.auth,
+      accessibleCampaigns,
+      campaign: saved.campaign,
+    },
+    saved.campaign.id,
+  );
+
+  return jsonResponse(201, {
+    config: registry,
+    activeCampaign: {
+      organizationId: access.organization.id,
+      campaignId: saved.campaign.id,
+    },
+    updatedAt: saved.config.meta?.lastSavedAt || saved.campaign.updatedAt || "",
+    updatedBy: saved.config.meta?.lastSavedBy || access.auth.email,
+    saved: true,
+    created: true,
+    message: "הקמפיין נוצר ונשמר בשרת.",
+  });
+}
+
+export async function getAdminCampaignConfig(request, scope = {}) {
+  await ensureMultiTenantMigration();
+  const access = await resolveScopedAccess(request, {
+    action: "campaign_view",
+    organizationId: scope.organizationId,
+    campaignId: scope.campaignId,
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי לטעון את הגדרות הקמפיין.",
+  });
+  if (access.error) {
+    return access.error;
+  }
+
+  const registry = await buildAccessibleRegistry(access, access.campaign.id);
+  return jsonResponse(200, {
+    config: registry,
+    activeCampaign: {
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+    },
+    portfolio: access.accessibleCampaigns,
+    updatedAt: access.campaign.updatedAt || "",
+    updatedBy: registry.campaigns.find((item) => item.id === access.campaign.id)?.updatedBy || "",
     message: "הגדרות הקמפיין נטענו מהשרת.",
   });
 }
 
-export async function saveAdminCampaignConfig(request, rawConfig) {
-  const auth = await ensureAuthenticatedAdmin(request);
-  if (auth.error) {
-    return auth.error;
+function extractRequestedScope(rawConfig, fallback = {}) {
+  const { targetEntry, snapshot } = extractActiveSnapshot(rawConfig, fallback);
+  return normalizeSnapshotScope(snapshot, {
+    organizationId: fallback.organizationId,
+    campaignId: targetEntry?.id || fallback.campaignId,
+  });
+}
+
+export async function saveAdminCampaignConfig(request, rawConfig, scope = {}) {
+  await ensureMultiTenantMigration();
+  const requestedScope = extractRequestedScope(rawConfig, scope);
+  const requestedOrganizationId = requestedScope.organizationId || scope.organizationId;
+  const requestedCampaignId = requestedScope.campaignId || scope.campaignId;
+  const existingCampaign =
+    requestedOrganizationId && requestedCampaignId
+      ? await getCampaign(requestedOrganizationId, requestedCampaignId)
+      : null;
+
+  if (!existingCampaign && requestedOrganizationId && requestedCampaignId) {
+    return createOrganizationCampaign(request, requestedOrganizationId, rawConfig);
   }
 
-  const saved = await saveStoredCampaignConfig(rawConfig, auth.email);
+  const access = await resolveScopedAccess(request, {
+    action: "campaign_update",
+    organizationId: requestedOrganizationId,
+    campaignId: requestedCampaignId,
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי לשמור את הגדרות הקמפיין.",
+  });
+  if (access.error) {
+    return access.error;
+  }
+  if (!access.auth || !access.campaign) {
+    return jsonResponse(403, { message: "אין הרשאה מספקת לשמירת הקמפיין." });
+  }
+  if (["viewer", "analyst"].includes(normalizeRole(access.auth.role, ROLE_VIEWER))) {
+    return jsonResponse(403, { message: "אין הרשאת כתיבה לקמפיין המבוקש." });
+  }
+
+  const { candidate, campaigns } = extractActiveSnapshot(rawConfig, {
+    organizationId: access.organization.id,
+    campaignId: access.campaign.id,
+  });
+  const activeCampaignId = String(candidate.activeCampaignId || access.campaign.id).trim();
+  const targetEntry = campaigns.find((item) => String(item?.id || "").trim() === activeCampaignId) || campaigns[0] || null;
+  const snapshot = targetEntry?.config && typeof targetEntry.config === "object" ? cloneJson(targetEntry.config) : cloneJson(candidate);
+  const saved = await createOrUpdateScopedCampaign({
+    auth: access.auth,
+    organization: access.organization,
+    campaignId: access.campaign.id,
+    snapshot,
+    existingCampaign: access.campaign,
+  });
+
+  await appendAuditEvent({
+    user: access.auth.email,
+    role: access.auth.role,
+    organizationId: access.organization.id,
+    campaignId: access.campaign.id,
+    action: "campaign_update",
+    outcome: "success",
+  });
+
+  const registry = await buildAccessibleRegistry(
+    {
+      ...access,
+      campaign: saved.campaign,
+    },
+    saved.campaign.id,
+  );
+
   return jsonResponse(200, {
-    config: saved.config,
-    updatedAt: saved.updatedAt,
-    updatedBy: saved.updatedBy,
+    config: registry,
+    activeCampaign: {
+      organizationId: access.organization.id,
+      campaignId: saved.campaign.id,
+    },
+    updatedAt: saved.config.meta?.lastSavedAt || saved.campaign.updatedAt || "",
+    updatedBy: saved.config.meta?.lastSavedBy || access.auth.email,
     saved: true,
     message: "הגדרות הקמפיין נשמרו בשרת.",
   });
