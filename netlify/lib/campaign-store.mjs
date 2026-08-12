@@ -14,11 +14,133 @@ function isoNow() {
   return new Date().toISOString();
 }
 
-function normalizeCampaignConfig(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return {};
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeSlug(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value ?? {}));
+}
+
+function createCampaignId(value, fallbackIndex = 1) {
+  return normalizeSlug(value) || `campaign-${fallbackIndex}`;
+}
+
+function normalizeCampaignRegistry(value) {
+  const candidate = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const legacyCandidate =
+    candidate?.config && typeof candidate.config === "object" && !Array.isArray(candidate.config)
+      ? candidate.config
+      : candidate?.campaigns
+        ? null
+        : candidate;
+
+  const rawCampaigns = Array.isArray(candidate.campaigns)
+    ? candidate.campaigns
+    : legacyCandidate && Object.keys(legacyCandidate).length
+      ? [
+          {
+            id: candidate.id,
+            name: candidate.name,
+            slug: candidate.slug,
+            updatedAt: candidate.updatedAt,
+            updatedBy: candidate.updatedBy,
+            config: legacyCandidate,
+          },
+        ]
+      : [];
+
+  const campaigns = [];
+  const seenIds = new Set();
+  const seenSlugs = new Set();
+
+  rawCampaigns.forEach((item, index) => {
+    const entry = item && typeof item === "object" ? item : {};
+    const snapshotSource = entry?.config && typeof entry.config === "object" ? entry.config : entry;
+    const snapshot = cloneJson(snapshotSource);
+    const basics = snapshot?.basics && typeof snapshot.basics === "object" ? snapshot.basics : {};
+    let slug = normalizeSlug(entry.slug || basics.slug || basics.campaignName || `campaign-${index + 1}`) || `campaign-${index + 1}`;
+    const slugBase = slug;
+    let slugSuffix = 2;
+    while (seenSlugs.has(slug)) {
+      slug = `${slugBase}-${slugSuffix}`;
+      slugSuffix += 1;
+    }
+    seenSlugs.add(slug);
+
+    let id = createCampaignId(entry.id || slug, index + 1);
+    const idBase = id;
+    let idSuffix = 2;
+    while (seenIds.has(id)) {
+      id = `${idBase}-${idSuffix}`;
+      idSuffix += 1;
+    }
+    seenIds.add(id);
+
+    const name = String(entry.name || basics.campaignName || `Campaign ${index + 1}`).trim() || `Campaign ${index + 1}`;
+    const meta = snapshot?.meta && typeof snapshot.meta === "object" ? snapshot.meta : {};
+    const updatedAt = String(entry.updatedAt || meta.lastSavedAt || "").trim();
+    const updatedBy = normalizeEmail(entry.updatedBy || meta.lastSavedBy || "");
+
+    snapshot.basics = {
+      ...basics,
+      slug,
+      campaignName: name,
+    };
+    snapshot.meta = {
+      ...meta,
+      lastSavedAt: updatedAt,
+      lastSavedBy: updatedBy,
+    };
+
+    campaigns.push({
+      id,
+      name,
+      slug,
+      updatedAt,
+      updatedBy,
+      config: snapshot,
+    });
+  });
+
+  if (!campaigns.length) {
+    campaigns.push({
+      id: "campaign-1",
+      name: "Campaign 1",
+      slug: "campaign-1",
+      updatedAt: "",
+      updatedBy: "",
+      config: {
+        basics: {
+          campaignName: "Campaign 1",
+          slug: "campaign-1",
+        },
+        meta: {
+          lastSavedAt: "",
+          lastSavedBy: "",
+        },
+      },
+    });
   }
-  return JSON.parse(JSON.stringify(value));
+
+  const activeCampaignId = campaigns.some((item) => item.id === candidate.activeCampaignId)
+    ? candidate.activeCampaignId
+    : campaigns[0].id;
+
+  return {
+    version: 1,
+    activeCampaignId,
+    campaigns,
+  };
 }
 
 async function readDevStore() {
@@ -95,11 +217,31 @@ async function ensureAuthenticatedAdmin(request) {
 
 async function saveStoredCampaignConfig(rawConfig, updatedBy) {
   const store = getPersistence();
-  const normalized = normalizeCampaignConfig(rawConfig);
+  const normalized = normalizeCampaignRegistry(rawConfig);
+  const timestamp = isoNow();
+  const normalizedEmail = normalizeEmail(updatedBy);
+  normalized.campaigns = normalized.campaigns.map((item) => {
+    if (item.id !== normalized.activeCampaignId) {
+      return item;
+    }
+    return {
+      ...item,
+      updatedAt: timestamp,
+      updatedBy: normalizedEmail,
+      config: {
+        ...item.config,
+        meta: {
+          ...(item.config?.meta || {}),
+          lastSavedAt: timestamp,
+          lastSavedBy: normalizedEmail,
+        },
+      },
+    };
+  });
   const payload = {
     config: normalized,
-    updatedAt: isoNow(),
-    updatedBy: String(updatedBy || "").trim().toLowerCase(),
+    updatedAt: timestamp,
+    updatedBy: normalizedEmail,
   };
   await store.setJSON(CONFIG_KEY, payload);
   return payload;
@@ -114,7 +256,7 @@ export async function getAdminCampaignConfig(request) {
   const store = getPersistence();
   const stored = await store.getJSON(CONFIG_KEY);
   return jsonResponse(200, {
-    config: normalizeCampaignConfig(stored?.config || stored || {}),
+    config: normalizeCampaignRegistry(stored?.config || stored || {}),
     updatedAt: stored?.updatedAt || "",
     updatedBy: stored?.updatedBy || "",
     message: "הגדרות הקמפיין נטענו מהשרת.",

@@ -642,27 +642,152 @@ def save_source_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _clone_json(value: Any) -> Any:
+    return json.loads(json.dumps(value))
+
+
+def _campaign_entry_id(slug: str, fallback_index: int = 1) -> str:
+    normalized_slug = normalize_slug(slug or "")
+    return normalized_slug or f"campaign-{fallback_index}"
+
+
+def normalize_campaign_registry(config: Any) -> dict[str, Any]:
+    candidate = config if isinstance(config, dict) else {}
+    legacy_candidate: dict[str, Any] = {}
+    if isinstance(candidate.get("config"), dict) and not isinstance(candidate.get("campaigns"), list):
+        legacy_candidate = candidate["config"]
+    elif candidate and not isinstance(candidate.get("campaigns"), list):
+        legacy_candidate = candidate
+
+    raw_campaigns = candidate.get("campaigns") if isinstance(candidate.get("campaigns"), list) else None
+    if raw_campaigns is None and legacy_candidate:
+        raw_campaigns = [
+            {
+                "id": candidate.get("id"),
+                "name": candidate.get("name"),
+                "slug": candidate.get("slug"),
+                "updatedAt": candidate.get("updatedAt"),
+                "updatedBy": candidate.get("updatedBy"),
+                "config": legacy_candidate,
+            }
+        ]
+
+    campaigns: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_slugs: set[str] = set()
+    for index, item in enumerate(raw_campaigns or [], start=1):
+        entry = item if isinstance(item, dict) else {}
+        snapshot = entry.get("config") if isinstance(entry.get("config"), dict) else entry
+        snapshot = _clone_json(snapshot if isinstance(snapshot, dict) else {})
+        basics = snapshot.get("basics") if isinstance(snapshot.get("basics"), dict) else {}
+        slug = normalize_slug(entry.get("slug") or basics.get("slug") or basics.get("campaignName") or f"campaign-{index}")
+        if not slug:
+            slug = f"campaign-{index}"
+        base_slug = slug
+        suffix = 2
+        while slug in seen_slugs:
+            slug = f"{base_slug}-{suffix}"
+            suffix += 1
+        seen_slugs.add(slug)
+        campaign_name = str(entry.get("name") or basics.get("campaignName") or f"Campaign {index}").strip() or f"Campaign {index}"
+        campaign_id = _campaign_entry_id(entry.get("id") or slug, index)
+        base_id = campaign_id
+        suffix = 2
+        while campaign_id in seen_ids:
+            campaign_id = f"{base_id}-{suffix}"
+            suffix += 1
+        seen_ids.add(campaign_id)
+        snapshot["basics"] = {
+            **(basics if isinstance(basics, dict) else {}),
+            "slug": slug,
+            "campaignName": campaign_name,
+        }
+        meta = snapshot.get("meta") if isinstance(snapshot.get("meta"), dict) else {}
+        updated_at = str(entry.get("updatedAt") or meta.get("lastSavedAt") or "").strip()
+        updated_by = normalize_email(entry.get("updatedBy") or meta.get("lastSavedBy") or "")
+        snapshot["meta"] = {
+            **meta,
+            "lastSavedAt": updated_at,
+            "lastSavedBy": updated_by,
+        }
+        campaigns.append(
+            {
+                "id": campaign_id,
+                "name": campaign_name,
+                "slug": slug,
+                "updatedAt": updated_at,
+                "updatedBy": updated_by,
+                "config": snapshot,
+            }
+        )
+
+    if not campaigns:
+        campaigns = [
+            {
+                "id": "campaign-1",
+                "name": "Campaign 1",
+                "slug": "campaign-1",
+                "updatedAt": "",
+                "updatedBy": "",
+                "config": {
+                    "basics": {
+                        "campaignName": "Campaign 1",
+                        "slug": "campaign-1",
+                    },
+                    "meta": {
+                        "lastSavedAt": "",
+                        "lastSavedBy": "",
+                    },
+                },
+            }
+        ]
+
+    active_campaign_id = str(candidate.get("activeCampaignId") or "").strip()
+    if active_campaign_id not in {item["id"] for item in campaigns}:
+        active_campaign_id = campaigns[0]["id"]
+
+    return {
+        "version": 1,
+        "activeCampaignId": active_campaign_id,
+        "campaigns": campaigns,
+    }
+
+
 def load_campaign_config() -> dict[str, Any]:
     if not CAMPAIGN_CONFIG_PATH.exists():
-        return {}
+        return normalize_campaign_registry({})
     try:
         payload = json.loads(CAMPAIGN_CONFIG_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        return {}
+        return normalize_campaign_registry({})
     if isinstance(payload, dict) and isinstance(payload.get("config"), dict):
-        return json.loads(json.dumps(payload.get("config")))
-    if isinstance(payload, dict):
-        return json.loads(json.dumps(payload))
-    return {}
+        return normalize_campaign_registry(payload.get("config"))
+    return normalize_campaign_registry(payload)
 
 
 def save_campaign_config(config: dict[str, Any], updated_by: str) -> dict[str, Any]:
     ensure_data_dir()
-    normalized = json.loads(json.dumps(config if isinstance(config, dict) else {}))
+    normalized = normalize_campaign_registry(config)
+    timestamp = isoformat_utc(utc_now())
+    normalized_email = normalize_email(updated_by)
+    active_campaign_id = normalized.get("activeCampaignId")
+    for item in normalized.get("campaigns", []):
+        if item.get("id") == active_campaign_id:
+            item["updatedAt"] = timestamp
+            item["updatedBy"] = normalized_email
+            snapshot = item.get("config") if isinstance(item.get("config"), dict) else {}
+            meta = snapshot.get("meta") if isinstance(snapshot.get("meta"), dict) else {}
+            snapshot["meta"] = {
+                **meta,
+                "lastSavedAt": timestamp,
+                "lastSavedBy": normalized_email,
+            }
+            item["config"] = snapshot
+            break
     payload = {
         "config": normalized,
-        "updatedAt": isoformat_utc(utc_now()),
-        "updatedBy": normalize_email(updated_by),
+        "updatedAt": timestamp,
+        "updatedBy": normalized_email,
     }
     CAMPAIGN_CONFIG_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return payload

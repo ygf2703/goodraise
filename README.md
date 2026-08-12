@@ -35,7 +35,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Fixed dual-brand header with manager status and page navigation
 - Public project page with branded hero, flexible story content, configurable image or video, preset donation amounts, donor details, and handoff to an external payment provider
 - Manager-side campaign designer for local styling control over colors, typography, hero media, CTAs, and preset donation cards
-- Guided multi-step `Campaign Builder` with campaign basics, branding, donation setup, ambassadors, teams, goals, permissions, review, draft autosave, and duplicate-campaign flow
+- Guided multi-step `Campaign Builder` with campaign basics, branding, donation setup, ambassadors, teams, goals, permissions, review, draft autosave, multi-campaign registry, active-campaign switching, and duplicate-campaign flow
 - Ambassador directory upload (`full_name`, `email`, `phone`, `nickname`) with personal GoodRaise-style links in the format `https://goodraise.netlify.app/{projectSlug}/{nickname}`
 - Public prize page with podium, prize tiers, and live competition summary
 - Public campaign snapshot hero with immediate KPI-style status cards
@@ -268,7 +268,6 @@ Useful local verification commands:
 
 - Complete hosted password reset and recovery flow
 - Extend hosted RBAC enforcement across all protected config stores
-- Add explicit multi-campaign selector and organization-scoped management UI
 - Move long-term persistence from transitional file/blob storage to a structured database layer
 - Add external monitoring and operational alerting
 - Add deeper donor analysis and year-over-year normalized benchmarking

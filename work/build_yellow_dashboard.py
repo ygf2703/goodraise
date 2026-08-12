@@ -3581,6 +3581,7 @@ def build_fragment(
               const GOAL_STORAGE_KEY = "yellow-dashboard.goals";
               const CAMPAIGN_PAGE_SETTINGS_KEY = "yellow-dashboard.campaign-page-settings";
               const CAMPAIGN_BUILDER_CONFIG_KEY = "yellow-dashboard.campaign-builder-config";
+              const CAMPAIGN_REGISTRY_STORAGE_KEY = "yellow-dashboard.campaign-registry";
               const AMBASSADOR_DIRECTORY_KEY = "yellow-dashboard.ambassador-directory";
               const LAST_ADMIN_EMAIL_KEY = "yellow-dashboard.last-admin-email";
               const XLSX_MODULE_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
@@ -3705,7 +3706,20 @@ def build_fragment(
                 tableToggle: root.querySelector("#table-toggle"),
               };
 
-              const initialCampaignPageSettings = normalizeCampaignPageSettings(readStoredCampaignPageSettings() || INITIAL_CAMPAIGN_PAGE_SETTINGS);
+              const initialCampaignRegistry = readStoredCampaignRegistry();
+              const initialActiveCampaignEntry = getCampaignRegistryActiveEntry(initialCampaignRegistry);
+              const initialCampaignPageSettings = buildCampaignPageSettingsFromSnapshot(
+                initialActiveCampaignEntry?.config,
+                readStoredCampaignPageSettings() || INITIAL_CAMPAIGN_PAGE_SETTINGS
+              );
+              const initialCampaignGoals = buildGoalsFromCampaignSnapshot(initialActiveCampaignEntry?.config, readStoredGoals());
+              const initialCampaignPrizeModel = buildPrizeModelFromCampaignSnapshot(initialActiveCampaignEntry?.config, readStoredPrizeModel() || INITIAL_PRIZES);
+              const initialCampaignSourceConfig = buildSourceConfigFromCampaignSnapshot(initialActiveCampaignEntry?.config, getDefaultSourceConfig());
+              const initialCampaignBuilderConfig = buildCampaignBuilderConfigFromSnapshot(initialActiveCampaignEntry?.config, readStoredCampaignBuilderConfig());
+              const initialCampaignAmbassadorDirectory = buildAmbassadorDirectoryFromCampaignSnapshot(
+                initialActiveCampaignEntry?.config,
+                readStoredAmbassadorDirectory()
+              );
 
               const state = {
                 rows: cloneSerializable(INITIAL_ROWS),
@@ -3720,12 +3734,14 @@ def build_fragment(
                   base: null,
                   compare: null,
                 },
-                goals: readStoredGoals(),
-                prizeModel: readStoredPrizeModel() || INITIAL_PRIZES,
-                sourceConfig: getDefaultSourceConfig(),
+                goals: initialCampaignGoals,
+                prizeModel: initialCampaignPrizeModel,
+                sourceConfig: initialCampaignSourceConfig,
                 campaignPage: initialCampaignPageSettings,
-                campaignBuilder: readStoredCampaignBuilderConfig(),
-                ambassadorDirectory: readStoredAmbassadorDirectory(),
+                campaignBuilder: initialCampaignBuilderConfig,
+                ambassadorDirectory: initialCampaignAmbassadorDirectory,
+                campaignRegistry: initialCampaignRegistry,
+                activeCampaignId: initialCampaignRegistry.activeCampaignId,
                 session: null,
                 auth: {
                   backendAvailable: false,
@@ -4352,14 +4368,12 @@ def build_fragment(
               }
 
               function createCampaignBuilderDefaults() {
-                const storedGoals = readStoredGoals();
-                const storedPrizes = readStoredPrizeModel() || INITIAL_PRIZES;
                 return {
                   basics: {
                     campaignName: String(INITIAL_CAMPAIGN_PAGE_SETTINGS.title || "").trim(),
                     organizationName: "אחים לסמל",
                     slug: normalizeUrlSlug(INITIAL_CAMPAIGN_PAGE_SETTINGS.projectSlug || "campaign"),
-                    target: Number(storedGoals.total || 0),
+                    target: 0,
                     currency: "ILS",
                     startDate: String(INITIAL_META.defaultFrom || "").trim(),
                     startTime: "00:00",
@@ -4392,7 +4406,7 @@ def build_fragment(
                   goals: {
                     ambassadorGoal: 0,
                     teamGoal: 0,
-                    tierRuleNote: String(storedPrizes?.tierRuleNote || "").trim(),
+                    tierRuleNote: String(INITIAL_PRIZES?.tierRuleNote || "").trim(),
                   },
                   templates: {
                     type: "annual-recurring",
@@ -4409,6 +4423,296 @@ def build_fragment(
                     lastSavedBy: "",
                   },
                 };
+              }
+
+              function buildCampaignSnapshotFromStateParts(parts = {}) {
+                const builder = normalizeCampaignBuilderConfig(parts.builderConfig);
+                const campaignPage = normalizeCampaignPageSettings(parts.campaignPage || INITIAL_CAMPAIGN_PAGE_SETTINGS);
+                const goals = {
+                  total: Number(parts.goals?.total || builder.basics.target || 0),
+                  daily: Number(parts.goals?.daily || 0),
+                };
+                const prizeModel = normalizePrizeModel(cloneSerializable(parts.prizeModel || INITIAL_PRIZES));
+                const sourceConfig = normalizeSourceConfig(parts.sourceConfig || getDefaultSourceConfig());
+                const ambassadorDirectory = normalizeAmbassadorDirectory(parts.ambassadorDirectory || []);
+                return {
+                  basics: {
+                    ...builder.basics,
+                    slug: normalizeUrlSlug(builder.basics.slug || campaignPage.projectSlug || "campaign"),
+                    target: Number(goals.total || builder.basics.target || 0),
+                  },
+                  branding: {
+                    eyebrow: campaignPage.eyebrow,
+                    projectDatesLabel: campaignPage.projectDatesLabel,
+                    title: campaignPage.title,
+                    subtitle: campaignPage.subtitle,
+                    storyMarkdown: campaignPage.storyMarkdown,
+                    primaryCtaLabel: campaignPage.primaryCtaLabel,
+                    secondaryCtaLabel: campaignPage.secondaryCtaLabel,
+                    mediaType: campaignPage.mediaType,
+                    mediaUrl: campaignPage.mediaUrl,
+                    mediaAlt: campaignPage.mediaAlt,
+                    fontFamily: campaignPage.fontFamily,
+                    theme: cloneSerializable(campaignPage.theme),
+                  },
+                  donation: {
+                    externalDonationUrl: campaignPage.externalDonationUrl,
+                    trustNote: campaignPage.trustNote,
+                    successHint: campaignPage.successHint,
+                    showRecurring: campaignPage.showRecurring !== false,
+                    minimumDonation: Number(campaignPage.amountCards?.[0]?.value || 0),
+                    recommendedAmount: Number(campaignPage.amountCards?.[2]?.value || campaignPage.amountCards?.[0]?.value || 0),
+                    presets: cloneSerializable(campaignPage.amountCards || []),
+                  },
+                  ambassadors: {
+                    ...cloneSerializable(builder.ambassadors),
+                    records: cloneSerializable(ambassadorDirectory),
+                  },
+                  teams: cloneSerializable(builder.teams),
+                  goals: {
+                    ...cloneSerializable(builder.goals),
+                    campaignGoal: Number(goals.total || 0),
+                    dailyGoal: Number(goals.daily || 0),
+                    placePrizes: cloneSerializable(prizeModel.placePrizes || []),
+                    tierPrizes: cloneSerializable(prizeModel.tierPrizes || []),
+                    tierRuleNote: String(prizeModel.tierRuleNote || builder.goals?.tierRuleNote || "").trim(),
+                  },
+                  dataSource: cloneSerializable(sourceConfig),
+                  permissions: cloneSerializable(builder.permissions),
+                  templates: cloneSerializable(builder.templates),
+                  review: cloneSerializable(builder.review),
+                  ui: cloneSerializable(builder.ui),
+                  meta: cloneSerializable(builder.meta),
+                };
+              }
+
+              function buildCampaignBuilderConfigFromSnapshot(snapshot, fallback = null) {
+                if (!snapshot || typeof snapshot !== "object") {
+                  return normalizeCampaignBuilderConfig(fallback);
+                }
+                return normalizeCampaignBuilderConfig(snapshot);
+              }
+
+              function buildCampaignPageSettingsFromSnapshot(snapshot, fallback = null) {
+                const base = normalizeCampaignPageSettings(fallback || INITIAL_CAMPAIGN_PAGE_SETTINGS);
+                if (!snapshot || typeof snapshot !== "object") {
+                  return base;
+                }
+                const builder = normalizeCampaignBuilderConfig(snapshot);
+                const branding = snapshot.branding && typeof snapshot.branding === "object" ? snapshot.branding : {};
+                const donation = snapshot.donation && typeof snapshot.donation === "object" ? snapshot.donation : {};
+                return normalizeCampaignPageSettings({
+                  ...base,
+                  projectSlug: builder.basics.slug || base.projectSlug,
+                  projectDatesLabel: buildProjectWindowLabelFromBasics(builder.basics) || branding.projectDatesLabel || base.projectDatesLabel,
+                  eyebrow: branding.eyebrow || base.eyebrow,
+                  title: branding.title || builder.basics.campaignName || base.title,
+                  subtitle: branding.subtitle || base.subtitle,
+                  storyMarkdown: branding.storyMarkdown || base.storyMarkdown,
+                  primaryCtaLabel: branding.primaryCtaLabel || base.primaryCtaLabel,
+                  secondaryCtaLabel: branding.secondaryCtaLabel || base.secondaryCtaLabel,
+                  externalDonationUrl: donation.externalDonationUrl || base.externalDonationUrl,
+                  trustNote: donation.trustNote || base.trustNote,
+                  successHint: donation.successHint || base.successHint,
+                  mediaType: branding.mediaType || base.mediaType,
+                  mediaUrl: branding.mediaUrl || base.mediaUrl,
+                  mediaAlt: branding.mediaAlt || base.mediaAlt,
+                  fontFamily: branding.fontFamily || base.fontFamily,
+                  theme: branding.theme || base.theme,
+                  amountCards: donation.presets || base.amountCards,
+                  showRecurring: donation.showRecurring !== false,
+                });
+              }
+
+              function buildGoalsFromCampaignSnapshot(snapshot, fallback = null) {
+                const base = {
+                  total: Number(fallback?.total || 0),
+                  daily: Number(fallback?.daily || 0),
+                };
+                if (!snapshot || typeof snapshot !== "object") {
+                  return base;
+                }
+                const builder = normalizeCampaignBuilderConfig(snapshot);
+                const goals = snapshot.goals && typeof snapshot.goals === "object" ? snapshot.goals : {};
+                return {
+                  total: Number(goals.campaignGoal || builder.basics.target || base.total || 0),
+                  daily: Number(goals.dailyGoal || base.daily || 0),
+                };
+              }
+
+              function buildPrizeModelFromCampaignSnapshot(snapshot, fallback = null) {
+                const base = normalizePrizeModel(cloneSerializable(fallback || INITIAL_PRIZES));
+                if (!snapshot || typeof snapshot !== "object") {
+                  return base;
+                }
+                const goals = snapshot.goals && typeof snapshot.goals === "object" ? snapshot.goals : {};
+                return normalizePrizeModel({
+                  placePrizes: cloneSerializable(goals.placePrizes || base.placePrizes || []),
+                  tierPrizes: cloneSerializable(goals.tierPrizes || base.tierPrizes || []),
+                  tierRuleNote: String(goals.tierRuleNote || base.tierRuleNote || "").trim(),
+                });
+              }
+
+              function buildSourceConfigFromCampaignSnapshot(snapshot, fallback = null) {
+                if (!snapshot || typeof snapshot !== "object" || !snapshot.dataSource) {
+                  return normalizeSourceConfig(fallback || getDefaultSourceConfig());
+                }
+                return normalizeSourceConfig(snapshot.dataSource);
+              }
+
+              function buildAmbassadorDirectoryFromCampaignSnapshot(snapshot, fallback = null) {
+                if (!snapshot || typeof snapshot !== "object" || !Array.isArray(snapshot.ambassadors?.records)) {
+                  return normalizeAmbassadorDirectory(fallback || []);
+                }
+                return normalizeAmbassadorDirectory(snapshot.ambassadors.records);
+              }
+
+              function createDefaultCampaignSnapshot() {
+                return buildCampaignSnapshotFromStateParts({
+                  builderConfig: normalizeCampaignBuilderConfig(null),
+                  campaignPage: normalizeCampaignPageSettings(cloneSerializable(INITIAL_CAMPAIGN_PAGE_SETTINGS)),
+                  goals: { total: 0, daily: 0 },
+                  prizeModel: cloneSerializable(INITIAL_PRIZES),
+                  sourceConfig: getDefaultSourceConfig(),
+                  ambassadorDirectory: [],
+                });
+              }
+
+              function createCampaignRegistryEntry(config, overrides = {}) {
+                const snapshot = buildCampaignSnapshotFromStateParts({
+                  builderConfig: buildCampaignBuilderConfigFromSnapshot(config),
+                  campaignPage: buildCampaignPageSettingsFromSnapshot(config, INITIAL_CAMPAIGN_PAGE_SETTINGS),
+                  goals: buildGoalsFromCampaignSnapshot(config),
+                  prizeModel: buildPrizeModelFromCampaignSnapshot(config),
+                  sourceConfig: buildSourceConfigFromCampaignSnapshot(config),
+                  ambassadorDirectory: buildAmbassadorDirectoryFromCampaignSnapshot(config),
+                });
+                const timestamp = new Date().toISOString();
+                const campaignName = String(overrides.name || snapshot.basics.campaignName || "Campaign").trim() || "Campaign";
+                const slug = normalizeUrlSlug(overrides.slug || snapshot.basics.slug || campaignName || "campaign") || "campaign";
+                const idSeed = String(overrides.id || `${slug}-${Date.now()}`).trim();
+                return {
+                  id: normalizeUrlSlug(idSeed) || `campaign-${Date.now()}`,
+                  name: campaignName,
+                  slug,
+                  updatedAt: String(overrides.updatedAt || snapshot.meta?.lastSavedAt || timestamp).trim(),
+                  updatedBy: normalizeSearchToken(overrides.updatedBy || snapshot.meta?.lastSavedBy || ""),
+                  config: snapshot,
+                };
+              }
+
+              function normalizeCampaignRegistry(value) {
+                const raw = value && typeof value === "object" ? value : {};
+                const legacySnapshotCandidate =
+                  raw?.config && typeof raw.config === "object" && !Array.isArray(raw.config)
+                    ? raw.config
+                    : raw?.campaigns
+                      ? null
+                      : raw;
+                const campaignCandidates = Array.isArray(raw.campaigns)
+                  ? raw.campaigns
+                  : legacySnapshotCandidate && Object.keys(legacySnapshotCandidate).length
+                    ? [
+                        {
+                          id: raw.id,
+                          name: raw.name,
+                          slug: raw.slug,
+                          updatedAt: raw.updatedAt,
+                          updatedBy: raw.updatedBy,
+                          config: legacySnapshotCandidate,
+                        },
+                      ]
+                    : [];
+                const usedIds = new Set();
+                const campaigns = campaignCandidates
+                  .map((item, index) => {
+                    const entry = createCampaignRegistryEntry(item?.config || item, {
+                      id: item?.id || `campaign-${index + 1}`,
+                      name: item?.name,
+                      slug: item?.slug,
+                      updatedAt: item?.updatedAt,
+                      updatedBy: item?.updatedBy,
+                    });
+                    let nextId = entry.id;
+                    let suffix = 2;
+                    while (!nextId || usedIds.has(nextId)) {
+                      nextId = `${entry.id || "campaign"}-${suffix}`;
+                      suffix += 1;
+                    }
+                    usedIds.add(nextId);
+                    return {
+                      ...entry,
+                      id: nextId,
+                    };
+                  })
+                  .filter((item) => item?.id && item?.config);
+                const seededCampaigns = campaigns.length ? campaigns : [createCampaignRegistryEntry(createDefaultCampaignSnapshot())];
+                const slugSet = new Set();
+                seededCampaigns.forEach((item, index) => {
+                  let nextSlug = normalizeUrlSlug(item.slug || item.name || `campaign-${index + 1}`) || `campaign-${index + 1}`;
+                  let suffix = 2;
+                  while (slugSet.has(nextSlug)) {
+                    nextSlug = `${normalizeUrlSlug(item.slug || item.name || "campaign") || "campaign"}-${suffix}`;
+                    suffix += 1;
+                  }
+                  slugSet.add(nextSlug);
+                  item.slug = nextSlug;
+                  item.name = item.name || `Campaign ${index + 1}`;
+                  item.config = buildCampaignSnapshotFromStateParts({
+                    builderConfig: buildCampaignBuilderConfigFromSnapshot(item.config),
+                    campaignPage: buildCampaignPageSettingsFromSnapshot(item.config, INITIAL_CAMPAIGN_PAGE_SETTINGS),
+                    goals: buildGoalsFromCampaignSnapshot(item.config),
+                    prizeModel: buildPrizeModelFromCampaignSnapshot(item.config),
+                    sourceConfig: buildSourceConfigFromCampaignSnapshot(item.config),
+                    ambassadorDirectory: buildAmbassadorDirectoryFromCampaignSnapshot(item.config),
+                  });
+                  item.config.basics.slug = item.slug;
+                  item.config.basics.campaignName = item.name;
+                  item.config.meta.lastSavedAt = String(item.updatedAt || item.config.meta?.lastSavedAt || "").trim();
+                  item.config.meta.lastSavedBy = normalizeSearchToken(item.updatedBy || item.config.meta?.lastSavedBy || "");
+                });
+                const activeCampaignId = seededCampaigns.some((item) => item.id === raw.activeCampaignId)
+                  ? raw.activeCampaignId
+                  : seededCampaigns[0].id;
+                return {
+                  version: 1,
+                  activeCampaignId,
+                  campaigns: seededCampaigns,
+                };
+              }
+
+              function readStoredCampaignRegistry() {
+                try {
+                  const raw = window.localStorage.getItem(CAMPAIGN_REGISTRY_STORAGE_KEY);
+                  if (raw) {
+                    return normalizeCampaignRegistry(JSON.parse(raw));
+                  }
+                } catch (_error) {
+                  return normalizeCampaignRegistry(null);
+                }
+                const legacySnapshot = buildCampaignSnapshotFromStateParts({
+                  builderConfig: readStoredCampaignBuilderConfig(),
+                  campaignPage: readStoredCampaignPageSettings() || INITIAL_CAMPAIGN_PAGE_SETTINGS,
+                  goals: readStoredGoals(),
+                  prizeModel: readStoredPrizeModel() || INITIAL_PRIZES,
+                  sourceConfig: getDefaultSourceConfig(),
+                  ambassadorDirectory: readStoredAmbassadorDirectory(),
+                });
+                return normalizeCampaignRegistry(legacySnapshot);
+              }
+
+              function storeCampaignRegistry(registry) {
+                try {
+                  window.localStorage.setItem(CAMPAIGN_REGISTRY_STORAGE_KEY, JSON.stringify(normalizeCampaignRegistry(registry)));
+                  return true;
+                } catch (_error) {
+                  return false;
+                }
+              }
+
+              function getCampaignRegistryActiveEntry(registry = state?.campaignRegistry) {
+                const normalized = normalizeCampaignRegistry(registry);
+                return normalized.campaigns.find((item) => item.id === normalized.activeCampaignId) || normalized.campaigns[0] || null;
               }
 
               function normalizeCampaignBuilderConfig(value) {
@@ -4513,56 +4817,14 @@ def build_fragment(
               }
 
               function getCampaignBuilderSnapshot() {
-                const builder = normalizeCampaignBuilderConfig(state.campaignBuilder);
-                const prizeModel = cloneSerializable(state.prizeModel || INITIAL_PRIZES);
-                return {
-                  basics: {
-                    ...builder.basics,
-                    slug: getCampaignProjectSlug(),
-                    target: Number(state.goals.total || builder.basics.target || 0),
-                  },
-                  branding: {
-                    eyebrow: state.campaignPage.eyebrow,
-                    projectDatesLabel: state.campaignPage.projectDatesLabel,
-                    title: state.campaignPage.title,
-                    subtitle: state.campaignPage.subtitle,
-                    storyMarkdown: state.campaignPage.storyMarkdown,
-                    primaryCtaLabel: state.campaignPage.primaryCtaLabel,
-                    secondaryCtaLabel: state.campaignPage.secondaryCtaLabel,
-                    mediaType: state.campaignPage.mediaType,
-                    mediaUrl: state.campaignPage.mediaUrl,
-                    mediaAlt: state.campaignPage.mediaAlt,
-                    fontFamily: state.campaignPage.fontFamily,
-                    theme: cloneSerializable(state.campaignPage.theme),
-                  },
-                  donation: {
-                    externalDonationUrl: state.campaignPage.externalDonationUrl,
-                    trustNote: state.campaignPage.trustNote,
-                    successHint: state.campaignPage.successHint,
-                    showRecurring: state.campaignPage.showRecurring !== false,
-                    minimumDonation: Number(state.campaignPage.amountCards?.[0]?.value || 0),
-                    recommendedAmount: Number(state.campaignPage.amountCards?.[2]?.value || state.campaignPage.amountCards?.[0]?.value || 0),
-                    presets: cloneSerializable(state.campaignPage.amountCards || []),
-                  },
-                  ambassadors: {
-                    ...cloneSerializable(builder.ambassadors),
-                    records: cloneSerializable(state.ambassadorDirectory || []),
-                  },
-                  teams: cloneSerializable(builder.teams),
-                  goals: {
-                    ...cloneSerializable(builder.goals),
-                    campaignGoal: Number(state.goals.total || 0),
-                    dailyGoal: Number(state.goals.daily || 0),
-                    placePrizes: cloneSerializable(prizeModel.placePrizes || []),
-                    tierPrizes: cloneSerializable(prizeModel.tierPrizes || []),
-                  },
-                  dataSource: cloneSerializable(state.sourceConfig),
-                  permissions: cloneSerializable(builder.permissions),
-                  templates: cloneSerializable(builder.templates),
-                  review: cloneSerializable(builder.review),
-                  ui: cloneSerializable(builder.ui),
-                  meta: cloneSerializable(builder.meta),
-                };
+                return buildCampaignSnapshotFromStateParts({
+                  builderConfig: state.campaignBuilder,
+                  campaignPage: state.campaignPage,
+                  goals: state.goals,
+                  prizeModel: state.prizeModel,
+                  sourceConfig: state.sourceConfig,
+                  ambassadorDirectory: state.ambassadorDirectory,
+                });
               }
 
               function applyCampaignBuilderConfig(config, options = {}) {
@@ -4597,13 +4859,11 @@ def build_fragment(
                   total: Number(goals.campaignGoal || normalized.basics.target || 0),
                   daily: Number(goals.dailyGoal || 0),
                 };
-                if (goals.placePrizes || goals.tierPrizes) {
-                  state.prizeModel = {
-                    placePrizes: cloneSerializable(goals.placePrizes || state.prizeModel?.placePrizes || []),
-                    tierPrizes: cloneSerializable(goals.tierPrizes || state.prizeModel?.tierPrizes || []),
-                    tierRuleNote: String(goals.tierRuleNote || state.prizeModel?.tierRuleNote || "").trim(),
-                  };
-                }
+                state.prizeModel = normalizePrizeModel({
+                  placePrizes: cloneSerializable(goals.placePrizes || state.prizeModel?.placePrizes || []),
+                  tierPrizes: cloneSerializable(goals.tierPrizes || state.prizeModel?.tierPrizes || []),
+                  tierRuleNote: String(goals.tierRuleNote || state.prizeModel?.tierRuleNote || "").trim(),
+                });
                 if (!options.preserveSourceConfig && raw.dataSource) {
                   state.sourceConfig = normalizeSourceConfig(raw.dataSource);
                 }
@@ -4611,6 +4871,124 @@ def build_fragment(
                   state.ambassadorDirectory = normalizeAmbassadorDirectory(raw.ambassadors.records);
                 }
                 state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
+              }
+
+              function persistActiveCampaignLegacyState() {
+                return [
+                  storeCampaignBuilderConfig(state.campaignBuilder),
+                  storeCampaignPageSettings(state.campaignPage),
+                  storeGoals(state.goals),
+                  storePrizeModel(state.prizeModel),
+                  storeAmbassadorDirectory(state.ambassadorDirectory),
+                ].every(Boolean);
+              }
+
+              function syncCampaignRegistryFromState(options = {}) {
+                const normalized = normalizeCampaignRegistry(state.campaignRegistry);
+                const activeId = String(options.campaignId || state.activeCampaignId || normalized.activeCampaignId || "").trim();
+                const snapshot = getCampaignBuilderSnapshot();
+                const campaigns = normalized.campaigns.map((item) => {
+                  if (item.id !== activeId) {
+                    return item;
+                  }
+                  const nextEntry = createCampaignRegistryEntry(snapshot, {
+                    id: item.id,
+                    name: snapshot.basics.campaignName || item.name,
+                    slug: snapshot.basics.slug || item.slug,
+                    updatedAt: options.updatedAt || snapshot.meta?.lastSavedAt || item.updatedAt,
+                    updatedBy: options.updatedBy || snapshot.meta?.lastSavedBy || item.updatedBy,
+                  });
+                  nextEntry.config.meta.lastSavedAt = String(nextEntry.updatedAt || "").trim();
+                  nextEntry.config.meta.lastSavedBy = normalizeSearchToken(nextEntry.updatedBy || "");
+                  return nextEntry;
+                });
+                const nextRegistry = normalizeCampaignRegistry({
+                  ...normalized,
+                  activeCampaignId: activeId || normalized.activeCampaignId,
+                  campaigns,
+                });
+                state.campaignRegistry = nextRegistry;
+                state.activeCampaignId = nextRegistry.activeCampaignId;
+                if (options.persistRegistry !== false) {
+                  storeCampaignRegistry(nextRegistry);
+                }
+                if (options.persistLegacy !== false) {
+                  persistActiveCampaignLegacyState();
+                }
+                return nextRegistry;
+              }
+
+              function switchActiveCampaign(campaignId, options = {}) {
+                const currentRegistry = options.skipCurrentSync ? normalizeCampaignRegistry(state.campaignRegistry) : syncCampaignRegistryFromState({ persistRegistry: false });
+                const nextRegistry = normalizeCampaignRegistry({
+                  ...currentRegistry,
+                  activeCampaignId: campaignId,
+                });
+                const targetEntry = getCampaignRegistryActiveEntry(nextRegistry);
+                if (!targetEntry) {
+                  return false;
+                }
+                state.campaignRegistry = nextRegistry;
+                state.activeCampaignId = targetEntry.id;
+                applyCampaignBuilderConfig(targetEntry.config, { preserveSourceConfig: false });
+                persistActiveCampaignLegacyState();
+                storeCampaignRegistry(state.campaignRegistry);
+                if (options.message) {
+                  setCampaignBuilderStatus(options.message, "success");
+                }
+                return true;
+              }
+
+              function getUniqueCampaignName(baseName, registry = state.campaignRegistry) {
+                const normalized = normalizeCampaignRegistry(registry);
+                const preferred = String(baseName || "Campaign").trim() || "Campaign";
+                const used = new Set(normalized.campaigns.map((item) => String(item.name || "").trim()));
+                if (!used.has(preferred)) {
+                  return preferred;
+                }
+                let index = 2;
+                while (used.has(`${preferred} ${index}`)) {
+                  index += 1;
+                }
+                return `${preferred} ${index}`;
+              }
+
+              function getUniqueCampaignSlug(baseSlug, registry = state.campaignRegistry) {
+                const normalized = normalizeCampaignRegistry(registry);
+                const preferred = normalizeUrlSlug(baseSlug || "campaign") || "campaign";
+                const used = new Set(normalized.campaigns.map((item) => normalizeUrlSlug(item.slug || "")));
+                if (!used.has(preferred)) {
+                  return preferred;
+                }
+                let index = 2;
+                while (used.has(`${preferred}-${index}`)) {
+                  index += 1;
+                }
+                return `${preferred}-${index}`;
+              }
+
+              function createNewCampaignDraft() {
+                const currentRegistry = syncCampaignRegistryFromState({ persistRegistry: false });
+                const snapshot = createDefaultCampaignSnapshot();
+                const name = getUniqueCampaignName("קמפיין חדש", currentRegistry);
+                const slug = getUniqueCampaignSlug("new-campaign", currentRegistry);
+                snapshot.basics.campaignName = name;
+                snapshot.basics.slug = slug;
+                snapshot.branding.title = name;
+                snapshot.branding.projectDatesLabel = buildProjectWindowLabelFromBasics(snapshot.basics);
+                const entry = createCampaignRegistryEntry(snapshot, { name, slug });
+                const nextRegistry = normalizeCampaignRegistry({
+                  ...currentRegistry,
+                  activeCampaignId: entry.id,
+                  campaigns: [...currentRegistry.campaigns, entry],
+                });
+                state.campaignRegistry = nextRegistry;
+                state.activeCampaignId = entry.id;
+                applyCampaignBuilderConfig(entry.config, { preserveSourceConfig: false });
+                persistActiveCampaignLegacyState();
+                storeCampaignRegistry(nextRegistry);
+                setCampaignBuilderStatus(`נוצר קמפיין חדש: ${name}.`, "success");
+                return entry;
               }
 
               function formatCampaignSavedAt(isoText) {
@@ -4738,9 +5116,11 @@ def build_fragment(
               }
 
               function duplicateCampaignBuilderDraft() {
+                const currentRegistry = syncCampaignRegistryFromState({ persistRegistry: false });
                 const snapshot = getCampaignBuilderSnapshot();
-                const copySlug = normalizeUrlSlug(`${snapshot.basics.slug || "campaign"}-copy`);
-                snapshot.basics.campaignName = `${snapshot.basics.campaignName || "Campaign"} (Copy)`;
+                const copyName = getUniqueCampaignName(`${snapshot.basics.campaignName || "Campaign"} Copy`, currentRegistry);
+                const copySlug = getUniqueCampaignSlug(`${snapshot.basics.slug || "campaign"}-copy`, currentRegistry);
+                snapshot.basics.campaignName = copyName;
                 snapshot.basics.slug = copySlug;
                 snapshot.basics.status = "draft";
                 snapshot.templates = {
@@ -4756,13 +5136,19 @@ def build_fragment(
                   lastSavedAt: "",
                   lastSavedBy: "",
                 };
-                applyCampaignBuilderConfig(snapshot);
-                persistCampaignPageSettings(state.campaignPage, "נוצרה טיוטת קמפיין משוכפלת.");
-                storeGoals(state.goals);
-                storePrizeModel(state.prizeModel);
-                storeAmbassadorDirectory(state.ambassadorDirectory);
-                storeCampaignBuilderConfig(state.campaignBuilder);
-                setCampaignBuilderStatus(`נוצרה טיוטת שכפול חדשה עבור ${snapshot.basics.campaignName}.`, "success");
+                snapshot.branding.title = copyName;
+                const entry = createCampaignRegistryEntry(snapshot, { name: copyName, slug: copySlug });
+                const nextRegistry = normalizeCampaignRegistry({
+                  ...currentRegistry,
+                  activeCampaignId: entry.id,
+                  campaigns: [...currentRegistry.campaigns, entry],
+                });
+                state.campaignRegistry = nextRegistry;
+                state.activeCampaignId = entry.id;
+                applyCampaignBuilderConfig(entry.config, { preserveSourceConfig: false });
+                persistActiveCampaignLegacyState();
+                storeCampaignRegistry(nextRegistry);
+                setCampaignBuilderStatus(`נוצר קמפיין משוכפל חדש עבור ${copyName}.`, "success");
                 renderCampaignDesigner(true);
                 renderProjectPage();
               }
@@ -4786,41 +5172,54 @@ def build_fragment(
 
               async function saveCampaignBuilderConfig(options = {}) {
                 const snapshot = getCampaignBuilderSnapshot();
-                const persistedLocal = [
-                  storeCampaignBuilderConfig(state.campaignBuilder),
-                  storeCampaignPageSettings(state.campaignPage),
-                  storeGoals(state.goals),
-                  storePrizeModel(state.prizeModel),
-                  storeAmbassadorDirectory(state.ambassadorDirectory),
-                ].every(Boolean);
+                const localRegistry = syncCampaignRegistryFromState({ persistRegistry: false, persistLegacy: false });
+                const persistedLocal = [storeCampaignRegistry(localRegistry), persistActiveCampaignLegacyState()].every(Boolean);
                 if (!persistedLocal && !options.silent) {
                   setCampaignBuilderStatus("חלק מהטיוטה לא נשמר מקומית בדפדפן.", "warning");
                 }
                 if (!canUseBackendAuth() || !AUTH_CONFIG.campaignConfigEndpoint || !isManagerAuthenticated()) {
                   state.campaignBuilder.meta.lastSavedAt = new Date().toISOString();
                   state.campaignBuilder.meta.lastSavedBy = state.session?.email || "";
-                  storeCampaignBuilderConfig(state.campaignBuilder);
+                  syncCampaignRegistryFromState({
+                    updatedAt: state.campaignBuilder.meta.lastSavedAt,
+                    updatedBy: state.campaignBuilder.meta.lastSavedBy,
+                  });
                   setCampaignBuilderStatus(`טיוטת קמפיין נשמרה מקומית · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                   return snapshot;
                 }
                 const { response, payload } = await authRequest(AUTH_CONFIG.campaignConfigEndpoint, {
                   method: "POST",
-                  body: { config: snapshot },
+                  body: { config: localRegistry },
                 });
                 if (!response.ok) {
                   throw new Error(payload?.message || "שמירת טיוטת הקמפיין בשרת נכשלה.");
                 }
                 state.campaignBuilder.meta.lastSavedAt = payload?.updatedAt || new Date().toISOString();
                 state.campaignBuilder.meta.lastSavedBy = payload?.updatedBy || state.session?.email || "";
-                storeCampaignBuilderConfig(state.campaignBuilder);
+                state.campaignRegistry = normalizeCampaignRegistry(payload?.config || localRegistry);
+                state.activeCampaignId = state.campaignRegistry.activeCampaignId;
+                syncCampaignRegistryFromState({
+                  updatedAt: state.campaignBuilder.meta.lastSavedAt,
+                  updatedBy: state.campaignBuilder.meta.lastSavedBy,
+                });
                 setCampaignBuilderStatus(`נשמר בשרת · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
-                return payload?.config || snapshot;
+                return getCampaignRegistryActiveEntry(state.campaignRegistry)?.config || snapshot;
               }
 
               async function hydrateCampaignBuilderConfig() {
-                const localConfig = readStoredCampaignBuilderConfig();
-                state.campaignBuilder = normalizeCampaignBuilderConfig(localConfig);
-                applyCampaignBuilderConfig(getCampaignBuilderSnapshot(), { preserveSourceConfig: true });
+                const localRegistry = readStoredCampaignRegistry();
+                state.campaignRegistry = localRegistry;
+                state.activeCampaignId = localRegistry.activeCampaignId;
+                const localEntry = getCampaignRegistryActiveEntry(localRegistry);
+                if (localEntry?.config) {
+                  applyCampaignBuilderConfig(localEntry.config, { preserveSourceConfig: false });
+                } else {
+                  const localConfig = readStoredCampaignBuilderConfig();
+                  state.campaignBuilder = normalizeCampaignBuilderConfig(localConfig);
+                  applyCampaignBuilderConfig(getCampaignBuilderSnapshot(), { preserveSourceConfig: false });
+                }
+                persistActiveCampaignLegacyState();
+                storeCampaignRegistry(state.campaignRegistry);
                 if (!canUseBackendAuth() || !AUTH_CONFIG.campaignConfigEndpoint || !isManagerAuthenticated()) {
                   state.auth.campaignConfigLoaded = false;
                   return state.campaignBuilder;
@@ -4828,11 +5227,19 @@ def build_fragment(
                 try {
                   const { response, payload } = await authRequest(AUTH_CONFIG.campaignConfigEndpoint);
                   if (response.ok && payload?.config) {
-                    applyCampaignBuilderConfig(payload.config, { preserveSourceConfig: true });
+                    state.campaignRegistry = normalizeCampaignRegistry(payload.config);
+                    state.activeCampaignId = state.campaignRegistry.activeCampaignId;
+                    const activeEntry = getCampaignRegistryActiveEntry(state.campaignRegistry);
+                    if (activeEntry?.config) {
+                      applyCampaignBuilderConfig(activeEntry.config, { preserveSourceConfig: false });
+                    }
                     state.auth.campaignConfigLoaded = true;
                     state.campaignBuilder.meta.lastSavedAt = String(payload.updatedAt || "").trim();
                     state.campaignBuilder.meta.lastSavedBy = normalizeSearchToken(payload.updatedBy || "");
-                    storeCampaignBuilderConfig(state.campaignBuilder);
+                    syncCampaignRegistryFromState({
+                      updatedAt: state.campaignBuilder.meta.lastSavedAt,
+                      updatedBy: state.campaignBuilder.meta.lastSavedBy,
+                    });
                     setCampaignBuilderStatus(`נטען מהשרת · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                     return state.campaignBuilder;
                   }
@@ -7954,6 +8361,9 @@ def build_fragment(
                 const builder = normalizeCampaignBuilderConfig(state.campaignBuilder);
                 state.campaignBuilder = builder;
                 const snapshot = getCampaignBuilderSnapshot();
+                const campaignRegistry = normalizeCampaignRegistry(state.campaignRegistry);
+                state.campaignRegistry = campaignRegistry;
+                const activeCampaignEntry = getCampaignRegistryActiveEntry(campaignRegistry);
                 const preflight = buildCampaignPreflight(snapshot);
                 const statusState = getCampaignSettingsStatus();
                 const builderStatus = getCampaignBuilderStatus();
@@ -7961,6 +8371,13 @@ def build_fragment(
                 const directoryRows = state.ambassadorDirectory || [];
                 const currentStep = Math.max(1, Math.min(9, Number(state.ui.campaignBuilderStep || 1)));
                 state.ui.campaignBuilderStep = currentStep;
+                const campaignRegistryOptions = campaignRegistry.campaigns
+                  .map((item) => {
+                    const label = item.id === state.activeCampaignId ? snapshot.basics.campaignName || item.name : item.name;
+                    const slug = item.id === state.activeCampaignId ? snapshot.basics.slug || item.slug : item.slug;
+                    return `<option value="${escapeAttribute(item.id)}"${item.id === state.activeCampaignId ? " selected" : ""}>${escapeHtml(label || "ללא שם")} · /${escapeHtml(slug || "campaign")}</option>`;
+                  })
+                  .join("");
                 const steps = [
                   "פרטי קמפיין",
                   "מיתוג וסיפור",
@@ -8444,12 +8861,29 @@ def build_fragment(
                 elements.campaignDesignerPanel.innerHTML = `
                   <div class="campaign-settings-panel">
                     <div class="settings-panel-note">Campaign Builder שומר את כל שכבת ההקמה של הקמפיין: פרטים עסקיים, מיתוג, תרומות, שגרירים, פרסים והרשאות. הזרימה מיועדת לעבודה חוזרת של ארגונים ולא להגדרה חד-פעמית בלבד.</div>
+                    <div class="campaign-settings-grid">
+                      <label class="form-label">
+                        קמפיין פעיל
+                        <select class="form-select" data-campaign-registry="active-id">
+                          ${campaignRegistryOptions}
+                        </select>
+                      </label>
+                      <section class="analysis-card">
+                        <h4>מאגר קמפיינים</h4>
+                        <ul>
+                          <li>${escapeHtml(formatNumber(campaignRegistry.campaigns.length))} קמפיינים שמורים</li>
+                          <li>${escapeHtml(activeCampaignEntry?.slug || snapshot.basics.slug || "-")} /slug</li>
+                          <li>${escapeHtml(activeCampaignEntry?.updatedAt ? `עודכן ${formatCampaignSavedAt(activeCampaignEntry.updatedAt)}` : "טרם נשמר בשרת")}</li>
+                        </ul>
+                      </section>
+                    </div>
                     <div class="settings-actions">
                       <div class="settings-status" data-builder-status${builderStatus.tone !== "neutral" ? ` data-tone="${escapeAttribute(builderStatus.tone)}"` : ""}>${escapeHtml(builderStatus.message)}</div>
                       <div class="project-hero-actions">
+                        <button class="button-ghost" type="button" data-builder-action="create-campaign">קמפיין חדש</button>
                         <button class="button-secondary" type="button" data-builder-action="save-now">שמירת טיוטה</button>
-                        <button class="button-ghost" type="button" data-builder-action="duplicate-campaign">Duplicate Campaign</button>
-                        <button class="button-ghost" type="button" data-project-action="open-project-preview">Preview</button>
+                        <button class="button-ghost" type="button" data-builder-action="duplicate-campaign">שכפול קמפיין</button>
+                        <button class="button-ghost" type="button" data-project-action="open-project-preview">תצוגה מקדימה</button>
                       </div>
                     </div>
                     <div class="data-toolbar metric-toolbar" aria-label="שלבי ה־Campaign Builder">
@@ -8914,6 +9348,16 @@ def build_fragment(
                       return;
                     }
 
+                    if (event.target?.dataset?.campaignRegistry === "active-id") {
+                      const nextCampaignId = String(event.target.value || "").trim();
+                      if (nextCampaignId && nextCampaignId !== state.activeCampaignId) {
+                        switchActiveCampaign(nextCampaignId, { message: "הקמפיין הפעיל הוחלף." });
+                        renderCampaignDesigner(true);
+                        renderProjectPage();
+                      }
+                      return;
+                    }
+
                     if (event.target?.hasAttribute("data-builder-template")) {
                       applyCampaignTemplate(event.target.value);
                       renderCampaignDesigner(true);
@@ -9025,8 +9469,13 @@ def build_fragment(
                     if (action === "reset-campaign-settings") {
                       state.campaignPage = normalizeCampaignPageSettings(cloneSerializable(INITIAL_CAMPAIGN_PAGE_SETTINGS));
                       state.campaignBuilder = normalizeCampaignBuilderConfig(null);
-                      persistCampaignPageSettings(state.campaignPage, "הגדרות דף הפרויקט אופסו לברירת המחדל.");
-                      storeCampaignBuilderConfig(state.campaignBuilder);
+                      state.goals = { total: 0, daily: 0 };
+                      state.prizeModel = normalizePrizeModel(cloneSerializable(INITIAL_PRIZES));
+                      state.ambassadorDirectory = [];
+                      state.sourceConfig = getDefaultSourceConfig();
+                      persistActiveCampaignLegacyState();
+                      syncCampaignRegistryFromState();
+                      setCampaignSettingsStatus("הגדרות דף הפרויקט אופסו לברירת המחדל.", "success");
                       state.donation = getDefaultDonationState(state.campaignPage);
                       renderCampaignDesigner(true);
                       renderProjectPage();
@@ -9068,6 +9517,12 @@ def build_fragment(
                       return;
                     }
                     const action = builderActionElement.dataset.builderAction;
+                    if (action === "create-campaign") {
+                      createNewCampaignDraft();
+                      renderCampaignDesigner(true);
+                      renderProjectPage();
+                      return;
+                    }
                     if (action === "next-step") {
                       state.ui.campaignBuilderStep = Math.min(9, Number(state.ui.campaignBuilderStep || 1) + 1);
                       renderCampaignDesigner(true);
