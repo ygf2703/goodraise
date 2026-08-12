@@ -254,6 +254,8 @@ def load_markdown_text(path: Path) -> str:
 def build_default_campaign_page_settings() -> dict:
     return {
         "projectDatesLabel": "23.08.2026–01.09.2026",
+        "platformBaseUrl": "https://goodraise.netlify.app",
+        "projectSlug": "osim_tov_betzahov26",
         "eyebrow": "ראש השנה 2026 · אחים לסמל · קרן מכבי",
         "title": "עושים טוב בצהוב",
         "subtitle": "14 שנים של ערבות הדדית, גיוס קהילתי ואריזת אלפי מארזי חג למשפחות, חיילים בודדים, שורדי שואה ומבוגרים עריריים.",
@@ -395,6 +397,8 @@ def build_auth_config() -> dict:
             "logoutEndpoint": f"{prefix}/logout",
             "resetEndpoint": "",
             "datasetEndpoint": f"{base_url}/api/admin/dataset" if base_url else "/api/admin/dataset",
+            "sourceConfigEndpoint": f"{base_url}/api/admin/source-config" if base_url else "/api/admin/source-config",
+            "sourceRefreshEndpoint": f"{base_url}/api/admin/source-refresh" if base_url else "/api/admin/source-refresh",
         }
 
     return {
@@ -406,6 +410,8 @@ def build_auth_config() -> dict:
         "logoutEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGOUT_ENDPOINT", "http://127.0.0.1:8767/api/auth/logout"),
         "resetEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_RESET_ENDPOINT", "http://127.0.0.1:8767/api/auth/reset-local"),
         "datasetEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_DATASET_ENDPOINT", "http://127.0.0.1:8767/api/admin/dataset"),
+        "sourceConfigEndpoint": os.getenv("YELLOW_DASHBOARD_SOURCE_CONFIG_ENDPOINT", "http://127.0.0.1:8767/api/admin/source-config"),
+        "sourceRefreshEndpoint": os.getenv("YELLOW_DASHBOARD_SOURCE_REFRESH_ENDPOINT", "http://127.0.0.1:8767/api/admin/source-refresh"),
     }
 
 
@@ -3218,6 +3224,82 @@ def build_fragment(
 
                             <section class="control-group">
                               <div class="control-group-header">
+                                <h4>מקור נתונים</h4>
+                                <p>בחירה בין העלאת קובץ ידנית לבין חיבור ל-API של מערכת הגיוס לצורך משיכה שוטפת לאורך הקמפיין</p>
+                              </div>
+                              <div class="filters-grid filters-grid--three">
+                                <label class="form-label">
+                                  מקור פעיל
+                                  <select id="source-mode" class="form-select">
+                                    <option value="file">קובץ CSV / Excel</option>
+                                    <option value="api">API של מערכת הגיוס</option>
+                                  </select>
+                                </label>
+                                <label class="form-label">
+                                  שיטת בקשה
+                                  <select id="source-api-method" class="form-select">
+                                    <option value="GET">GET</option>
+                                    <option value="POST">POST</option>
+                                  </select>
+                                </label>
+                                <label class="form-label">
+                                  פורמט תגובה
+                                  <select id="source-api-format" class="form-select">
+                                    <option value="csv">CSV</option>
+                                    <option value="json">JSON</option>
+                                  </select>
+                                </label>
+                              </div>
+                              <div id="source-api-fields">
+                                <div class="filters-grid">
+                                  <label class="form-label">
+                                    כתובת endpoint
+                                    <input id="source-api-endpoint" class="form-control" type="url" placeholder="https://api.example.org/campaign/export" dir="ltr" />
+                                  </label>
+                                  <label class="form-label">
+                                    נתיב לרשומות ב-JSON
+                                    <input id="source-api-records-path" class="form-control" type="text" placeholder="data.records" dir="ltr" />
+                                  </label>
+                                  <label class="form-label">
+                                    אימות
+                                    <select id="source-api-auth-type" class="form-select">
+                                      <option value="none">ללא אימות</option>
+                                      <option value="bearer">Bearer Token</option>
+                                    </select>
+                                  </label>
+                                  <label class="form-label">
+                                    רענון אוטומטי בדקות
+                                    <input id="source-api-auto-refresh" class="form-control" type="number" min="0" step="1" placeholder="5" />
+                                  </label>
+                                  <label class="form-label">
+                                    Bearer Token
+                                    <input id="source-api-bearer-token" class="form-control" type="password" autocomplete="off" placeholder="השאר/י ריק כדי לשמור את הערך הקיים" dir="ltr" />
+                                  </label>
+                                </div>
+                                <div class="filters-grid">
+                                  <label class="form-label">
+                                    Headers נוספים
+                                    <textarea id="source-api-headers" class="form-control settings-textarea" placeholder="X-Client-Id: 12345&#10;X-Campaign: osim26" dir="ltr"></textarea>
+                                  </label>
+                                  <label class="form-label">
+                                    Body לבקשת POST
+                                    <textarea id="source-api-body" class="form-control settings-textarea" placeholder='{"campaign":"osim_tov_betzahov26"}' dir="ltr"></textarea>
+                                  </label>
+                                </div>
+                                <label class="form-label">
+                                  מיפוי שדות JSON לשדות הדשבורד
+                                  <textarea id="source-api-field-map" class="form-control settings-textarea" dir="ltr"></textarea>
+                                </label>
+                              </div>
+                              <div class="control-actions control-actions--inline">
+                                <button id="save-source-config" class="button-secondary action-button secondary" type="button">שמירת חיבור מקור</button>
+                                <button id="refresh-source-api" class="button-primary action-button" type="button">משיכת נתונים מהמערכת</button>
+                              </div>
+                              <div id="source-config-status" class="status-note text-small" aria-live="polite">כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה.</div>
+                            </section>
+
+                            <section class="control-group">
+                              <div class="control-group-header">
                                 <h4>זמן</h4>
                                 <p>יום פרויקט, תאריך מדויק, טווח תאריכים ושעות</p>
                               </div>
@@ -3292,6 +3374,19 @@ def build_fragment(
                                   יעד יומי
                                   <input id="goal-daily" class="form-control" type="number" min="0" step="100" placeholder="למשל 150000" />
                                 </label>
+                              </div>
+                            </section>
+
+                            <section class="control-group">
+                              <div class="control-group-header">
+                                <h4>איפוס נתוני עבודה</h4>
+                                <p>ניקוי מהיר של נתוני הניתוח כדי לטעון קבצים חדשים מבלי לפגוע בעיצוב הקמפיין ובהגדרות המנהלים</p>
+                              </div>
+                              <div class="status-note text-small">
+                                האיפוס מחזיר את קובץ הבסיס, קובץ ההשוואה, רשימת השגרירים וטבלת הפרסים למצב ברירת המחדל המקומי, ומנקה את שדות ההעלאה הפעילים.
+                              </div>
+                              <div class="control-actions control-actions--inline">
+                                <button id="reset-working-data" class="button-secondary action-button secondary" type="button">איפוס נתוני עבודה</button>
                               </div>
                             </section>
                           </div>
@@ -3472,6 +3567,7 @@ def build_fragment(
               const PRIZE_STORAGE_KEY = "yellow-dashboard.prize-model";
               const GOAL_STORAGE_KEY = "yellow-dashboard.goals";
               const CAMPAIGN_PAGE_SETTINGS_KEY = "yellow-dashboard.campaign-page-settings";
+              const AMBASSADOR_DIRECTORY_KEY = "yellow-dashboard.ambassador-directory";
               const LAST_ADMIN_EMAIL_KEY = "yellow-dashboard.last-admin-email";
               const XLSX_MODULE_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
               const root = document.getElementById("yellow-dashboard-root");
@@ -3529,6 +3625,21 @@ def build_fragment(
                 compareUpload: root.querySelector("#compare-upload"),
                 prizeUpload: root.querySelector("#prize-upload"),
                 importStatus: root.querySelector("#import-status"),
+                sourceMode: root.querySelector("#source-mode"),
+                sourceApiEndpoint: root.querySelector("#source-api-endpoint"),
+                sourceApiMethod: root.querySelector("#source-api-method"),
+                sourceApiFormat: root.querySelector("#source-api-format"),
+                sourceApiRecordsPath: root.querySelector("#source-api-records-path"),
+                sourceApiAuthType: root.querySelector("#source-api-auth-type"),
+                sourceApiAutoRefresh: root.querySelector("#source-api-auto-refresh"),
+                sourceApiBearerToken: root.querySelector("#source-api-bearer-token"),
+                sourceApiHeaders: root.querySelector("#source-api-headers"),
+                sourceApiBody: root.querySelector("#source-api-body"),
+                sourceApiFieldMap: root.querySelector("#source-api-field-map"),
+                sourceApiFields: root.querySelector("#source-api-fields"),
+                saveSourceConfig: root.querySelector("#save-source-config"),
+                refreshSourceApi: root.querySelector("#refresh-source-api"),
+                sourceConfigStatus: root.querySelector("#source-config-status"),
                 goalTotal: root.querySelector("#goal-total"),
                 goalDaily: root.querySelector("#goal-daily"),
                 dailyMetric: root.querySelector("#daily-metric-select"),
@@ -3537,6 +3648,7 @@ def build_fragment(
                 exportFiltered: root.querySelector("#export-filtered"),
                 clearCompare: root.querySelector("#clear-compare"),
                 clearFilters: root.querySelector("#clear-filters"),
+                resetWorkingData: root.querySelector("#reset-working-data"),
                 ambassador: root.querySelector("#ambassador-filter"),
                 projectDay: root.querySelector("#project-day-filter"),
                 dateExact: root.querySelector("#date-exact"),
@@ -3595,7 +3707,9 @@ def build_fragment(
                 },
                 goals: readStoredGoals(),
                 prizeModel: readStoredPrizeModel() || INITIAL_PRIZES,
+                sourceConfig: getDefaultSourceConfig(),
                 campaignPage: initialCampaignPageSettings,
+                ambassadorDirectory: readStoredAmbassadorDirectory(),
                 session: null,
                 auth: {
                   backendAvailable: false,
@@ -3617,10 +3731,21 @@ def build_fragment(
                     message: "ההגדרות נשמרות מקומית בדפדפן זה בלבד.",
                     tone: "neutral",
                   },
+                  ambassadorDirectoryStatus: {
+                    message: "עדיין לא נטען קובץ שגרירים. אפשר להעלות CSV כדי לייצר לינקים אישיים.",
+                    tone: "neutral",
+                  },
+                  sourceConfigStatus: {
+                    message: "כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה.",
+                    tone: "neutral",
+                  },
                 },
               };
 
               const weekdayFormatter = new Intl.DateTimeFormat("he-IL", { weekday: "short" });
+              if (state.ambassadorDirectory.length) {
+                setAmbassadorDirectoryStatus(`${state.ambassadorDirectory.length} שגרירים נטענו מהאחסון המקומי עם לינקים אישיים פעילים.`, "success");
+              }
               const dateFormatter = new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" });
               const dateShortFormatter = new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit" });
               const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
@@ -3639,6 +3764,104 @@ def build_fragment(
 
               function cloneSerializable(value) {
                 return JSON.parse(JSON.stringify(value));
+              }
+
+              function getDefaultSourceFieldMap() {
+                return {
+                  id: "id",
+                  created_at: "created_at",
+                  full_name: "full_name",
+                  email: "email",
+                  "Ambassador name": "Ambassador name",
+                  total: "total",
+                  city: "city",
+                  charged_success: "charged_success",
+                  charge_result: "charge_result",
+                };
+              }
+
+              function getDefaultSourceConfig() {
+                return {
+                  mode: "file",
+                  api: {
+                    endpoint: "",
+                    method: "GET",
+                    responseFormat: "csv",
+                    recordsPath: "",
+                    authType: "none",
+                    bearerToken: "",
+                    hasBearerToken: false,
+                    autoRefreshMinutes: 5,
+                    headersText: "",
+                    bodyText: "",
+                    fieldMapText: JSON.stringify(getDefaultSourceFieldMap(), null, 2),
+                  },
+                };
+              }
+
+              function normalizePositiveInteger(value, fallback) {
+                const numeric = Number.parseInt(String(value ?? "").trim(), 10);
+                return Number.isFinite(numeric) && numeric >= 0 ? numeric : fallback;
+              }
+
+              function parseJsonObjectText(text, fallbackValue = {}) {
+                const raw = String(text || "").trim();
+                if (!raw) {
+                  return cloneSerializable(fallbackValue);
+                }
+                const parsed = JSON.parse(raw);
+                if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                  throw new Error("יש להזין אובייקט JSON תקין במיפוי השדות.");
+                }
+                return parsed;
+              }
+
+              function normalizeSourceConfig(value) {
+                const defaults = getDefaultSourceConfig();
+                const candidate = value && typeof value === "object" ? value : {};
+                const apiCandidate = candidate.api && typeof candidate.api === "object" ? candidate.api : {};
+                let fieldMapText = defaults.api.fieldMapText;
+                try {
+                  fieldMapText = JSON.stringify(parseJsonObjectText(apiCandidate.fieldMapText, getDefaultSourceFieldMap()), null, 2);
+                } catch (_error) {
+                  fieldMapText = defaults.api.fieldMapText;
+                }
+                const bearerToken = String(apiCandidate.bearerToken || "").trim();
+                return {
+                  mode: candidate.mode === "api" ? "api" : "file",
+                  api: {
+                    endpoint: String(apiCandidate.endpoint || "").trim(),
+                    method: String(apiCandidate.method || defaults.api.method).trim().toUpperCase() === "POST" ? "POST" : "GET",
+                    responseFormat: String(apiCandidate.responseFormat || defaults.api.responseFormat).trim().toLowerCase() === "json" ? "json" : "csv",
+                    recordsPath: String(apiCandidate.recordsPath || "").trim(),
+                    authType: String(apiCandidate.authType || defaults.api.authType).trim().toLowerCase() === "bearer" ? "bearer" : "none",
+                    bearerToken,
+                    hasBearerToken: Boolean(apiCandidate.hasBearerToken || bearerToken),
+                    autoRefreshMinutes: normalizePositiveInteger(apiCandidate.autoRefreshMinutes, defaults.api.autoRefreshMinutes),
+                    headersText: String(apiCandidate.headersText || "").replaceAll("\\r\\n", "\\n").trim(),
+                    bodyText: String(apiCandidate.bodyText || "").replaceAll("\\r\\n", "\\n").trim(),
+                    fieldMapText,
+                  },
+                };
+              }
+
+              function setSourceConfigStatus(message, tone = "neutral") {
+                state.ui.sourceConfigStatus = {
+                  message: String(message || "כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה."),
+                  tone: String(tone || "neutral"),
+                };
+                if (!elements.sourceConfigStatus) {
+                  return;
+                }
+                elements.sourceConfigStatus.textContent = state.ui.sourceConfigStatus.message;
+                elements.sourceConfigStatus.className = `status-note text-small${tone && tone !== "neutral" ? ` is-${tone}` : ""}`;
+              }
+
+              function getSourceConfigStatus() {
+                return state.ui.sourceConfigStatus || {
+                  message: "כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה.",
+                  tone: "neutral",
+                };
               }
 
               function buildBaseValidationSnapshot(rows, label) {
@@ -3669,6 +3892,33 @@ def build_fragment(
                 state.validation.compare = null;
                 state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
                 state.auth.adminDatasetLoaded = false;
+              }
+
+              function restoreWorkingData() {
+                restorePublicDataset();
+                state.prizeModel = normalizePrizeModel(cloneSerializable(INITIAL_PRIZES));
+                storePrizeModel(state.prizeModel);
+                state.ambassadorDirectory = [];
+                storeAmbassadorDirectory([]);
+                setAmbassadorDirectoryStatus("רשימת השגרירים נוקתה. אפשר להעלות CSV חדש בכל עת.", "neutral");
+                state.filters = getDefaultFilters(state.meta);
+                state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
+                applyAmbassadorContextFromUrl();
+                if (elements.upload) {
+                  elements.upload.value = "";
+                }
+                if (elements.compareUpload) {
+                  elements.compareUpload.value = "";
+                }
+                if (elements.prizeUpload) {
+                  elements.prizeUpload.value = "";
+                }
+                const ambassadorUpload = elements.campaignDesignerPanel?.querySelector("#ambassador-directory-upload");
+                if (ambassadorUpload) {
+                  ambassadorUpload.value = "";
+                }
+                resetFilterOptions();
+                setImportMessage("נתוני העבודה אופסו. אפשר להעלות עכשיו קובץ עסקאות, קובץ השוואה, קובץ פרסים או קובץ שגרירים חדשים.", "success");
               }
 
               function getDefaultFilters(meta) {
@@ -3786,6 +4036,203 @@ def build_fragment(
                 }
               }
 
+              function normalizeUrlSlug(value) {
+                return String(value || "")
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_-]+/g, "-")
+                  .replace(/-{2,}/g, "-")
+                  .replace(/^[-_]+|[-_]+$/g, "");
+              }
+
+              function normalizeAmbassadorDirectory(records) {
+                if (!Array.isArray(records)) {
+                  return [];
+                }
+                const seen = new Set();
+                return records
+                  .map((record) => {
+                    const fullName = String(record?.fullName || record?.name || "").trim();
+                    const email = String(record?.email || "").trim().toLowerCase();
+                    const phone = String(record?.phone || "").trim();
+                    const nickname = normalizeUrlSlug(record?.nickname || record?.slug || "");
+                    if (!fullName || !nickname) {
+                      return null;
+                    }
+                    return {
+                      fullName,
+                      email,
+                      phone,
+                      nickname,
+                    };
+                  })
+                  .filter(Boolean)
+                  .filter((record) => {
+                    if (seen.has(record.nickname)) {
+                      return false;
+                    }
+                    seen.add(record.nickname);
+                    return true;
+                  });
+              }
+
+              function readStoredAmbassadorDirectory() {
+                try {
+                  const raw = window.localStorage.getItem(AMBASSADOR_DIRECTORY_KEY);
+                  return raw ? normalizeAmbassadorDirectory(JSON.parse(raw)) : [];
+                } catch (_error) {
+                  return [];
+                }
+              }
+
+              function storeAmbassadorDirectory(records) {
+                try {
+                  window.localStorage.setItem(AMBASSADOR_DIRECTORY_KEY, JSON.stringify(normalizeAmbassadorDirectory(records)));
+                  return true;
+                } catch (_error) {
+                  return false;
+                }
+              }
+
+              function setAmbassadorDirectoryStatus(message, tone = "neutral") {
+                state.ui.ambassadorDirectoryStatus = {
+                  message: String(message || "עדיין לא נטען קובץ שגרירים. אפשר להעלות CSV כדי לייצר לינקים אישיים."),
+                  tone: String(tone || "neutral"),
+                };
+                const status = elements.campaignDesignerPanel?.querySelector("[data-ambassador-status]");
+                if (!status) {
+                  return;
+                }
+                status.textContent = state.ui.ambassadorDirectoryStatus.message;
+                if (state.ui.ambassadorDirectoryStatus.tone === "neutral") {
+                  status.removeAttribute("data-tone");
+                } else {
+                  status.dataset.tone = state.ui.ambassadorDirectoryStatus.tone;
+                }
+              }
+
+              function getAmbassadorDirectoryStatus() {
+                return state.ui.ambassadorDirectoryStatus || {
+                  message: "עדיין לא נטען קובץ שגרירים. אפשר להעלות CSV כדי לייצר לינקים אישיים.",
+                  tone: "neutral",
+                };
+              }
+
+              function getCampaignProjectSlug() {
+                return normalizeUrlSlug(state.campaignPage?.projectSlug || INITIAL_CAMPAIGN_PAGE_SETTINGS.projectSlug || "campaign");
+              }
+
+              function getCampaignPlatformBaseUrl() {
+                const fallback = String(INITIAL_CAMPAIGN_PAGE_SETTINGS.platformBaseUrl || window.location.origin || "").trim();
+                const candidate = String(state.campaignPage?.platformBaseUrl || fallback).trim();
+                try {
+                  return new URL(candidate, window.location.origin).toString().replace(/\\/+$/, "");
+                } catch (_error) {
+                  return String(window.location.origin || "").replace(/\\/+$/, "");
+                }
+              }
+
+              function buildAmbassadorPersonalUrl(record) {
+                const baseUrl = getCampaignPlatformBaseUrl();
+                const projectSlug = getCampaignProjectSlug();
+                return `${baseUrl}/${projectSlug}/${normalizeUrlSlug(record?.nickname || "")}`;
+              }
+
+              function parseAmbassadorDirectoryCsv(text) {
+                const rawRows = csvMatrixToRecords(parseCsv(text));
+                const pickValue = (row, keys) => {
+                  for (const key of keys) {
+                    if (row[key] !== undefined && row[key] !== null && String(row[key]).trim()) {
+                      return String(row[key]).trim();
+                    }
+                  }
+                  return "";
+                };
+
+                const missingRows = [];
+                const duplicateNicknames = [];
+                const records = [];
+                const seenNicknames = new Set();
+
+                rawRows.forEach((row, index) => {
+                  const fullName = pickValue(row, ["full_name", "Full Name", "name", "Name", "שם מלא"]);
+                  const email = pickValue(row, ["email", "Email", "מייל", "דואל"]);
+                  const phone = pickValue(row, ["phone", "Phone", "טלפון", "mobile"]);
+                  const nickname = normalizeUrlSlug(pickValue(row, ["nickname", "Nickname", "alias", "slug", "כינוי"]));
+                  if (!fullName || !nickname) {
+                    missingRows.push(index + 2);
+                    return;
+                  }
+                  if (seenNicknames.has(nickname)) {
+                    duplicateNicknames.push(nickname);
+                    return;
+                  }
+                  seenNicknames.add(nickname);
+                  records.push({ fullName, email, phone, nickname });
+                });
+
+                return {
+                  records: normalizeAmbassadorDirectory(records),
+                  missingRows,
+                  duplicateNicknames,
+                  totalRows: rawRows.length,
+                };
+              }
+
+              function exportAmbassadorLinks(records) {
+                const headers = ["full_name", "email", "phone", "nickname", "personal_url"];
+                const lines = [headers.join(",")];
+                records.forEach((record) => {
+                  const values = [
+                    record.fullName,
+                    record.email,
+                    record.phone,
+                    record.nickname,
+                    buildAmbassadorPersonalUrl(record),
+                  ].map((value) => `"${String(value || "").replaceAll('"', '""')}"`);
+                  lines.push(values.join(","));
+                });
+                const blob = new Blob(["\\uFEFF" + lines.join("\\n")], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `${getCampaignProjectSlug()}-ambassador-links.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+              }
+
+              function getAmbassadorRecordByFullName(fullName) {
+                const normalizedName = normalizeSearchToken(fullName);
+                return state.ambassadorDirectory.find((record) => normalizeSearchToken(record.fullName) === normalizedName) || null;
+              }
+
+              function applyAmbassadorContextFromUrl() {
+                const url = new URL(window.location.href);
+                const segments = url.pathname.split("/").filter(Boolean);
+                const routeProjectSlug = normalizeUrlSlug(url.searchParams.get("project") || segments[0] || "");
+                const routeAmbassadorSlug = normalizeUrlSlug(url.searchParams.get("ambassador") || url.searchParams.get("nickname") || segments[1] || "");
+                if (!routeAmbassadorSlug) {
+                  return;
+                }
+                const currentProjectSlug = getCampaignProjectSlug();
+                if (routeProjectSlug && currentProjectSlug && routeProjectSlug !== currentProjectSlug) {
+                  return;
+                }
+                const directoryMatch = state.ambassadorDirectory.find((record) => record.nickname === routeAmbassadorSlug);
+                if (directoryMatch) {
+                  state.donation.ambassador = directoryMatch.fullName;
+                  return;
+                }
+                const fallbackMatch = buildLeaderboard(state.rows)
+                  .map((entry) => entry.ambassador)
+                  .find((ambassador) => normalizeUrlSlug(ambassador) === routeAmbassadorSlug);
+                if (fallbackMatch) {
+                  state.donation.ambassador = fallbackMatch;
+                }
+              }
+
               function storeCampaignPageSettings(settings) {
                 try {
                   window.localStorage.setItem(CAMPAIGN_PAGE_SETTINGS_KEY, JSON.stringify(settings));
@@ -3891,6 +4338,8 @@ def build_fragment(
                 const candidate = value && typeof value === "object" ? value : {};
                 return {
                   projectDatesLabel: String(candidate.projectDatesLabel || defaults.projectDatesLabel || "").trim(),
+                  platformBaseUrl: String(candidate.platformBaseUrl || defaults.platformBaseUrl || "").trim(),
+                  projectSlug: normalizeUrlSlug(candidate.projectSlug || defaults.projectSlug || "campaign"),
                   eyebrow: String(candidate.eyebrow || defaults.eyebrow || "").trim(),
                   title: String(candidate.title || defaults.title || "").trim(),
                   subtitle: String(candidate.subtitle || defaults.subtitle || "").trim(),
@@ -3994,6 +4443,7 @@ def build_fragment(
               function clearSessionState() {
                 state.session = null;
                 setSetupMode(false);
+                clearSourceRefreshTimer();
                 restorePublicDataset();
               }
 
@@ -4024,6 +4474,7 @@ def build_fragment(
                 clearSessionState();
                 if (!canUseBackendAuth()) {
                   state.auth.backendAvailable = false;
+                  renderSourceConfigControls();
                   return;
                 }
                 try {
@@ -4031,11 +4482,13 @@ def build_fragment(
                   state.auth.backendAvailable = response.ok;
                   if (response.ok && payload?.authenticated && payload?.email) {
                     setAuthenticatedSession(payload.email);
-                    await loadAdminDataset();
+                    await loadProtectedManagerData();
+                    syncSourceAutoRefresh();
                   }
                 } catch (_error) {
                   state.auth.backendAvailable = false;
                 }
+                renderSourceConfigControls();
               }
 
               async function loadAdminDataset() {
@@ -4058,6 +4511,264 @@ def build_fragment(
                 state.filters = getDefaultFilters(state.meta);
                 resetFilterOptions();
                 return true;
+              }
+
+              function renderSourceConfigControls() {
+                if (!elements.sourceMode) {
+                  return;
+                }
+                const config = normalizeSourceConfig(state.sourceConfig);
+                state.sourceConfig = config;
+                elements.sourceMode.value = config.mode;
+                elements.sourceApiEndpoint.value = config.api.endpoint;
+                elements.sourceApiMethod.value = config.api.method;
+                elements.sourceApiFormat.value = config.api.responseFormat;
+                elements.sourceApiRecordsPath.value = config.api.recordsPath;
+                elements.sourceApiAuthType.value = config.api.authType;
+                elements.sourceApiAutoRefresh.value = String(config.api.autoRefreshMinutes ?? 5);
+                elements.sourceApiBearerToken.value = "";
+                elements.sourceApiBearerToken.placeholder = config.api.hasBearerToken
+                  ? "קיים token שמור בשרת. הזן/י ערך חדש רק אם רוצים להחליף."
+                  : "השאר/י ריק כדי לעבוד ללא token";
+                elements.sourceApiHeaders.value = config.api.headersText;
+                elements.sourceApiBody.value = config.api.bodyText;
+                elements.sourceApiFieldMap.value = config.api.fieldMapText;
+                if (elements.sourceApiFields) {
+                  elements.sourceApiFields.hidden = config.mode !== "api";
+                }
+                if (elements.refreshSourceApi) {
+                  elements.refreshSourceApi.disabled = config.mode !== "api";
+                }
+                const status = getSourceConfigStatus();
+                setSourceConfigStatus(status.message, status.tone);
+              }
+
+              async function hydrateSourceConfig() {
+                state.sourceConfig = normalizeSourceConfig(state.sourceConfig);
+                if (!canUseBackendAuth() || !AUTH_CONFIG.sourceConfigEndpoint || !isManagerAuthenticated()) {
+                  renderSourceConfigControls();
+                  return state.sourceConfig;
+                }
+                try {
+                  const { response, payload } = await authRequest(AUTH_CONFIG.sourceConfigEndpoint);
+                  if (response.ok && payload?.config) {
+                    state.sourceConfig = normalizeSourceConfig(payload.config);
+                    setSourceConfigStatus(
+                      state.sourceConfig.mode === "api"
+                        ? "חיבור ה-API נטען מהשרת ומוכן למשיכה או לרענון אוטומטי."
+                        : "מקור הנתונים הפעיל נשאר על טעינת קובץ ידנית.",
+                      "success"
+                    );
+                  } else {
+                    setSourceConfigStatus(payload?.message || "לא ניתן היה לטעון את הגדרות מקור הנתונים מהשרת.", "warning");
+                  }
+                } catch (_error) {
+                  setSourceConfigStatus("השרת זמין לחיבור מנהלים, אך הגדרות מקור הנתונים לא נטענו כרגע.", "warning");
+                }
+                renderSourceConfigControls();
+                return state.sourceConfig;
+              }
+
+              function collectSourceConfigFromControls() {
+                const nextConfig = normalizeSourceConfig({
+                  mode: elements.sourceMode?.value || state.sourceConfig.mode,
+                  api: {
+                    endpoint: elements.sourceApiEndpoint?.value || "",
+                    method: elements.sourceApiMethod?.value || "GET",
+                    responseFormat: elements.sourceApiFormat?.value || "csv",
+                    recordsPath: elements.sourceApiRecordsPath?.value || "",
+                    authType: elements.sourceApiAuthType?.value || "none",
+                    bearerToken: elements.sourceApiBearerToken?.value || "",
+                    hasBearerToken: state.sourceConfig.api.hasBearerToken,
+                    autoRefreshMinutes: elements.sourceApiAutoRefresh?.value || state.sourceConfig.api.autoRefreshMinutes,
+                    headersText: elements.sourceApiHeaders?.value || "",
+                    bodyText: elements.sourceApiBody?.value || "",
+                    fieldMapText: elements.sourceApiFieldMap?.value || "",
+                  },
+                });
+                parseJsonObjectText(nextConfig.api.fieldMapText, getDefaultSourceFieldMap());
+                return nextConfig;
+              }
+
+              async function saveSourceConfigFromControls(options = {}) {
+                if (!canUseBackendAuth() || !AUTH_CONFIG.sourceConfigEndpoint || !isManagerAuthenticated()) {
+                  throw new Error("שמירת חיבור API זמינה רק למנהלים מחוברים דרך שרת הניהול.");
+                }
+                const nextConfig = collectSourceConfigFromControls();
+                const { response, payload } = await authRequest(AUTH_CONFIG.sourceConfigEndpoint, {
+                  method: "POST",
+                  body: { config: nextConfig },
+                });
+                if (!response.ok) {
+                  throw new Error(payload?.message || "שמירת הגדרות מקור הנתונים נכשלה.");
+                }
+                state.sourceConfig = normalizeSourceConfig(payload?.config || nextConfig);
+                renderSourceConfigControls();
+                syncSourceAutoRefresh();
+                if (!options.silent) {
+                  setSourceConfigStatus(payload?.message || "חיבור מקור הנתונים נשמר בהצלחה.", "success");
+                }
+                return state.sourceConfig;
+              }
+
+              function readPathValue(record, path) {
+                return String(path || "")
+                  .split(".")
+                  .map((segment) => segment.trim())
+                  .filter(Boolean)
+                  .reduce((current, segment) => {
+                    if (current == null) {
+                      return undefined;
+                    }
+                    if (Array.isArray(current) && /^\\d+$/.test(segment)) {
+                      return current[Number(segment)];
+                    }
+                    return current?.[segment];
+                  }, record);
+              }
+
+              function extractApiRecords(payload, recordsPath) {
+                if (Array.isArray(payload)) {
+                  return payload;
+                }
+                if (recordsPath) {
+                  const resolved = readPathValue(payload, recordsPath);
+                  if (Array.isArray(resolved)) {
+                    return resolved;
+                  }
+                }
+                if (Array.isArray(payload?.rows)) {
+                  return payload.rows;
+                }
+                if (Array.isArray(payload?.data)) {
+                  return payload.data;
+                }
+                if (Array.isArray(payload?.items)) {
+                  return payload.items;
+                }
+                throw new Error("תגובת ה-API לא כוללת מערך רשומות. יש לעדכן את recordsPath או את מבנה התגובה.");
+              }
+
+              function mapJsonRecordsToRawRows(records, fieldMapText) {
+                const fieldMap = parseJsonObjectText(fieldMapText, getDefaultSourceFieldMap());
+                return records.map((record) =>
+                  Object.fromEntries(
+                    Object.entries(fieldMap).map(([targetField, sourcePath]) => [
+                      targetField,
+                      readPathValue(record, sourcePath) ?? "",
+                    ])
+                  )
+                );
+              }
+
+              function ingestApiRefreshPayload(payload) {
+                const sourceLabel = payload?.sourceLabel || "API source";
+                const format = String(payload?.format || state.sourceConfig.api.responseFormat || "csv").toLowerCase();
+                if (format === "csv") {
+                  return ingestCsvText(String(payload?.payload || ""), sourceLabel);
+                }
+                const records = extractApiRecords(payload?.payload, payload?.recordsPath || state.sourceConfig.api.recordsPath);
+                const rawRows = mapJsonRecordsToRawRows(records, payload?.fieldMapText || state.sourceConfig.api.fieldMapText);
+                const validation = validateRawRows(rawRows, sourceLabel);
+                const normalized = normalizeUploadRows(validation.validRows);
+                const meta = ensureMeta(normalized);
+                return {
+                  rawRows,
+                  validation,
+                  normalized,
+                  meta,
+                };
+              }
+
+              let sourceRefreshTimerId = 0;
+              let sourceRefreshInFlight = false;
+
+              function clearSourceRefreshTimer() {
+                if (sourceRefreshTimerId) {
+                  window.clearInterval(sourceRefreshTimerId);
+                  sourceRefreshTimerId = 0;
+                }
+              }
+
+              async function refreshSourceDataFromApi(options = {}) {
+                if (!canUseBackendAuth() || !AUTH_CONFIG.sourceRefreshEndpoint || !isManagerAuthenticated()) {
+                  throw new Error("משיכת נתונים מה-API זמינה רק למנהלים מחוברים דרך שרת הניהול.");
+                }
+                if (sourceRefreshInFlight) {
+                  return false;
+                }
+                sourceRefreshInFlight = true;
+                try {
+                  const { response, payload } = await authRequest(AUTH_CONFIG.sourceRefreshEndpoint, { method: "POST" });
+                  if (!response.ok) {
+                    throw new Error(payload?.message || "משיכת הנתונים מהמערכת החיצונית נכשלה.");
+                  }
+                  const ingested = ingestApiRefreshPayload(payload);
+                  state.validation.base = ingested.validation;
+                  if (hasBlockingValidation(ingested.validation)) {
+                    throw new Error("ה-API החזיר נתונים, אך הם לא עומדים במבנה הנדרש לדשבורד.");
+                  }
+                  state.meta = ingested.meta;
+                  state.rows = enrichRows(ingested.normalized, ingested.meta);
+                  state.sourceLabel = payload?.sourceLabel || "API source";
+                  state.filters = getDefaultFilters(ingested.meta);
+                  state.auth.adminDatasetLoaded = true;
+                  resetFilterOptions();
+                  setSourceConfigStatus(
+                    `הנתונים נמשכו מה-API בהצלחה${payload?.fetchedAt ? ` · עדכון אחרון ${formatDateTime(payload.fetchedAt)}` : ""}.`,
+                    "success"
+                  );
+                  if (!options.silent) {
+                    setImportMessage(`הנתונים נמשכו בהצלחה ממערכת המקור במקום טעינת קובץ ידנית.`, "success");
+                  }
+                  if (options.render !== false) {
+                    renderAll();
+                  }
+                  return true;
+                } finally {
+                  sourceRefreshInFlight = false;
+                }
+              }
+
+              function syncSourceAutoRefresh() {
+                clearSourceRefreshTimer();
+                const config = normalizeSourceConfig(state.sourceConfig);
+                state.sourceConfig = config;
+                if (!isManagerAuthenticated() || config.mode !== "api") {
+                  return;
+                }
+                const refreshMinutes = Number(config.api.autoRefreshMinutes || 0);
+                if (!Number.isFinite(refreshMinutes) || refreshMinutes < 1) {
+                  return;
+                }
+                sourceRefreshTimerId = window.setInterval(async () => {
+                  try {
+                    await refreshSourceDataFromApi({ silent: true });
+                  } catch (error) {
+                    setSourceConfigStatus(`הרענון האוטומטי מה-API נכשל: ${error?.message || "שגיאה לא ידועה"}`, "warning");
+                  }
+                }, refreshMinutes * 60 * 1000);
+              }
+
+              async function loadProtectedManagerData() {
+                await hydrateSourceConfig();
+                if (state.sourceConfig.mode === "api") {
+                  try {
+                    return await refreshSourceDataFromApi({ silent: true, render: false });
+                  } catch (error) {
+                    try {
+                      await loadAdminDataset();
+                      setImportMessage(
+                        `${error?.message || "משיכת הנתונים מה-API נכשלה."} נטען בינתיים מאגר הבסיס המוגן.`,
+                        "warning"
+                      );
+                      return true;
+                    } catch (_datasetError) {
+                      throw error;
+                    }
+                  }
+                }
+                return loadAdminDataset();
               }
 
               function setLoginMessage(message, tone = "") {
@@ -6615,7 +7326,12 @@ def build_fragment(
                 }
                 if (state.donation.ambassador && state.donation.ambassador !== "general") {
                   url.searchParams.set("ambassador", state.donation.ambassador);
+                  const ambassadorRecord = getAmbassadorRecordByFullName(state.donation.ambassador);
+                  if (ambassadorRecord?.nickname) {
+                    url.searchParams.set("ambassador_nickname", ambassadorRecord.nickname);
+                  }
                 }
+                url.searchParams.set("project_slug", getCampaignProjectSlug());
                 if (state.donation.dedication) {
                   url.searchParams.set("dedication", state.donation.dedication);
                 }
@@ -6633,6 +7349,40 @@ def build_fragment(
 
                 const settings = state.campaignPage;
                 const statusState = getCampaignSettingsStatus();
+                const directoryStatus = getAmbassadorDirectoryStatus();
+                const directoryRows = state.ambassadorDirectory || [];
+                const ambassadorRowsMarkup = directoryRows.length
+                  ? `
+                      <div class="table-wrap ambassador-links-table-wrap">
+                        <table class="records-table ambassador-links-table">
+                          <thead>
+                            <tr>
+                              <th>שגריר/ה</th>
+                              <th>כינוי</th>
+                              <th>מייל</th>
+                              <th>טלפון</th>
+                              <th>לינק אישי</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${directoryRows
+                              .map(
+                                (record) => `
+                                  <tr>
+                                    <td>${escapeHtml(record.fullName)}</td>
+                                    <td dir="ltr">${escapeHtml(record.nickname)}</td>
+                                    <td dir="ltr">${escapeHtml(record.email || "-")}</td>
+                                    <td dir="ltr">${escapeHtml(record.phone || "-")}</td>
+                                    <td dir="ltr"><a href="${escapeAttribute(buildAmbassadorPersonalUrl(record))}" target="_blank" rel="noopener noreferrer">${escapeHtml(buildAmbassadorPersonalUrl(record))}</a></td>
+                                  </tr>
+                                `
+                              )
+                              .join("")}
+                          </tbody>
+                        </table>
+                      </div>
+                    `
+                  : `<div class="empty-state">אחרי העלאת קובץ שגרירים, כאן תופיע רשימת הלינקים האישיים ל־GoodRaise.</div>`;
                 const mediaPreviewMarkup = settings.mediaUrl
                   ? settings.mediaType === "video"
                     ? `<video src="${escapeAttribute(settings.mediaUrl)}" controls playsinline></video>`
@@ -6649,6 +7399,14 @@ def build_fragment(
                       <label class="form-label">
                         טווח תאריכי פרויקט
                         <input class="form-control" type="text" value="${escapeAttribute(settings.projectDatesLabel)}" data-campaign-setting="projectDatesLabel" />
+                      </label>
+                      <label class="form-label">
+                        כתובת בסיס לפלטפורמה
+                        <input class="form-control" type="url" value="${escapeAttribute(settings.platformBaseUrl)}" data-campaign-setting="platformBaseUrl" dir="ltr" />
+                      </label>
+                      <label class="form-label">
+                        מזהה פרויקט ב־URL
+                        <input class="form-control" type="text" value="${escapeAttribute(settings.projectSlug)}" data-campaign-setting="projectSlug" dir="ltr" />
                       </label>
                       <label class="form-label">
                         כותרת ראשית
@@ -6751,6 +7509,30 @@ def build_fragment(
                       הודעת אמון ליד ה-CTA
                       <textarea class="form-control" data-campaign-setting="trustNote">${escapeHtml(settings.trustNote)}</textarea>
                     </label>
+                    <section class="control-group">
+                      <div class="control-group-header">
+                        <h4>קישורי שגרירים אישיים</h4>
+                        <p>CSV עם השדות <code>full_name</code>, <code>email</code>, <code>phone</code>, <code>nickname</code> ייצור לינק אישי בפורמט GoodRaise לכל שגריר/ה.</p>
+                      </div>
+                      <div class="filters-grid">
+                        <label class="form-label">
+                          קובץ שגרירים
+                          <input id="ambassador-directory-upload" class="form-control" type="file" accept=".csv,text/csv" />
+                        </label>
+                        <label class="form-label">
+                          תבנית לינק
+                          <input class="form-control" type="text" value="${escapeAttribute(`${getCampaignPlatformBaseUrl()}/${getCampaignProjectSlug()}/{nickname}`)}" readonly dir="ltr" />
+                        </label>
+                      </div>
+                      <div class="settings-actions">
+                        <div class="settings-status" data-ambassador-status${directoryStatus.tone !== "neutral" ? ` data-tone="${escapeAttribute(directoryStatus.tone)}"` : ""}>${escapeHtml(directoryStatus.message)}</div>
+                        <div class="project-hero-actions">
+                          <button class="button-secondary" type="button" data-project-action="export-ambassador-links">ייצוא CSV של לינקים</button>
+                          <button class="button-ghost" type="button" data-project-action="clear-ambassador-directory">ניקוי רשימת שגרירים</button>
+                        </div>
+                      </div>
+                      ${ambassadorRowsMarkup}
+                    </section>
                     <div class="settings-actions">
                       <div class="settings-status" data-settings-status${statusState.tone !== "neutral" ? ` data-tone="${escapeAttribute(statusState.tone)}"` : ""}>${escapeHtml(statusState.message)}</div>
                       <div class="project-hero-actions">
@@ -6781,7 +7563,12 @@ def build_fragment(
                 const selectedAmountLabel = selectedAmountCard?.label || "תרומה פעילה";
                 const selectedAmountDescription = selectedAmountCard?.description || "הסכום שתבחרו יועבר לספק התשלום החיצוני ויצורף לפרטי התרומה שתזינו כאן.";
                 const storyMarkup = renderSimpleMarkdown(settings.storyMarkdown);
-                const ambassadors = leaderboard.map((item) => item.ambassador).filter(Boolean);
+                const ambassadors = [
+                  ...new Set([
+                    ...state.ambassadorDirectory.map((item) => item.fullName).filter(Boolean),
+                    ...leaderboard.map((item) => item.ambassador).filter(Boolean),
+                  ]),
+                ];
                 const ambassadorOptions = [
                   `<option value="general"${state.donation.ambassador === "general" ? " selected" : ""}>תרומה כללית לפרויקט</option>`,
                   ...ambassadors.map((ambassador) => `<option value="${escapeAttribute(ambassador)}"${state.donation.ambassador === ambassador ? " selected" : ""}>${escapeHtml(ambassador)}</option>`),
@@ -7130,6 +7917,9 @@ def build_fragment(
                       state.campaignPage = normalizeCampaignPageSettings(state.campaignPage);
                       persistCampaignPageSettings(state.campaignPage);
                       state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
+                      if (["platformBaseUrl", "projectSlug"].includes(settingPath)) {
+                        renderCampaignDesigner(true);
+                      }
                       renderProjectPage();
                       return;
                     }
@@ -7159,6 +7949,40 @@ def build_fragment(
                         renderCampaignDesigner(true);
                       };
                       reader.readAsDataURL(file);
+                      return;
+                    }
+
+                    if (event.target.id === "ambassador-directory-upload") {
+                      const [file] = event.target.files || [];
+                      if (!file) {
+                        return;
+                      }
+                      try {
+                        const parsed = parseAmbassadorDirectoryCsv(await file.text());
+                        if (!parsed.records.length) {
+                          setAmbassadorDirectoryStatus("לא זוהו שגרירים תקינים בקובץ. נדרשים לפחות full_name ו-nickname לכל שורה.", "error");
+                          renderCampaignDesigner(true);
+                          return;
+                        }
+                        state.ambassadorDirectory = parsed.records;
+                        storeAmbassadorDirectory(state.ambassadorDirectory);
+                        const notes = [];
+                        notes.push(`${formatNumber(parsed.records.length)} שגרירים נשמרו עם לינקים אישיים.`);
+                        if (parsed.missingRows.length) {
+                          notes.push(`${formatNumber(parsed.missingRows.length)} שורות נדלגו בגלל שם או כינוי חסרים.`);
+                        }
+                        if (parsed.duplicateNicknames.length) {
+                          notes.push(`${formatNumber(parsed.duplicateNicknames.length)} כפילויות כינוי נוטרלו.`);
+                        }
+                        setAmbassadorDirectoryStatus(notes.join(" "), parsed.missingRows.length || parsed.duplicateNicknames.length ? "warning" : "success");
+                        applyAmbassadorContextFromUrl();
+                        state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
+                        renderCampaignDesigner(true);
+                        renderProjectPage();
+                      } catch (_error) {
+                        setAmbassadorDirectoryStatus("טעינת קובץ השגרירים נכשלה. ודא/י שמדובר ב-CSV תקין עם full_name ו-nickname.", "error");
+                        renderCampaignDesigner(true);
+                      }
                     }
                   });
 
@@ -7177,6 +8001,28 @@ def build_fragment(
                       state.campaignPage = normalizeCampaignPageSettings(cloneSerializable(INITIAL_CAMPAIGN_PAGE_SETTINGS));
                       persistCampaignPageSettings(state.campaignPage, "הגדרות דף הפרויקט אופסו לברירת המחדל.");
                       state.donation = getDefaultDonationState(state.campaignPage);
+                      renderCampaignDesigner(true);
+                      renderProjectPage();
+                      return;
+                    }
+                    if (action === "export-ambassador-links") {
+                      if (!state.ambassadorDirectory.length) {
+                        setAmbassadorDirectoryStatus("אין עדיין שגרירים לייצוא. יש להעלות קודם קובץ CSV.", "warning");
+                        renderCampaignDesigner(true);
+                        return;
+                      }
+                      exportAmbassadorLinks(state.ambassadorDirectory);
+                      setAmbassadorDirectoryStatus("קובץ הלינקים האישיים יוצא בהצלחה.", "success");
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+                    if (action === "clear-ambassador-directory") {
+                      state.ambassadorDirectory = [];
+                      storeAmbassadorDirectory([]);
+                      setAmbassadorDirectoryStatus("רשימת השגרירים המקומית נוקתה.", "warning");
+                      if (state.donation.ambassador !== "general") {
+                        state.donation.ambassador = "general";
+                      }
                       renderCampaignDesigner(true);
                       renderProjectPage();
                     }
@@ -7205,6 +8051,7 @@ def build_fragment(
                   setLoginMessage("");
                   setImportMessage(getDefaultPrizeStatusMessage());
                   resetFilterOptions();
+                  renderSourceConfigControls();
                   setPage("project");
                   renderAll();
                 });
@@ -7248,7 +8095,8 @@ def build_fragment(
                     if (response.ok && payload?.authenticated && payload?.email) {
                       setAuthenticatedSession(payload.email);
                       try {
-                        await loadAdminDataset();
+                        await loadProtectedManagerData();
+                        syncSourceAutoRefresh();
                       } catch (datasetError) {
                         setImportMessage(datasetError?.message || "הכניסה הצליחה, אך טעינת הנתונים המוגנים נכשלה. אפשר להעלות קובץ עסקאות ידנית.", "warning");
                       }
@@ -7258,6 +8106,7 @@ def build_fragment(
                         elements.loginPasswordConfirm.value = "";
                       }
                       setLoginMessage(payload.message || "הכניסה הצליחה. הדשבורד הניהולי נפתח.", "success");
+                      renderSourceConfigControls();
                       setPage("admin");
                       setAdminTab("insights");
                       renderAll();
@@ -7343,6 +8192,58 @@ def build_fragment(
                 });
 
                 [
+                  elements.sourceMode,
+                  elements.sourceApiEndpoint,
+                  elements.sourceApiMethod,
+                  elements.sourceApiFormat,
+                  elements.sourceApiRecordsPath,
+                  elements.sourceApiAuthType,
+                  elements.sourceApiAutoRefresh,
+                  elements.sourceApiBearerToken,
+                  elements.sourceApiHeaders,
+                  elements.sourceApiBody,
+                  elements.sourceApiFieldMap,
+                ]
+                  .filter(Boolean)
+                  .forEach((element) => {
+                    const eventName = element.tagName === "SELECT" ? "change" : "input";
+                    element.addEventListener(eventName, () => {
+                      try {
+                        state.sourceConfig = collectSourceConfigFromControls();
+                      } catch (_error) {
+                        state.sourceConfig = normalizeSourceConfig(state.sourceConfig);
+                      }
+                      if (elements.sourceApiFields) {
+                        elements.sourceApiFields.hidden = state.sourceConfig.mode !== "api";
+                      }
+                      if (elements.refreshSourceApi) {
+                        elements.refreshSourceApi.disabled = state.sourceConfig.mode !== "api";
+                      }
+                    });
+                  });
+
+                if (elements.saveSourceConfig) {
+                  elements.saveSourceConfig.addEventListener("click", async () => {
+                    try {
+                      await saveSourceConfigFromControls();
+                    } catch (error) {
+                      setSourceConfigStatus(error?.message || "שמירת חיבור ה-API נכשלה.", "error");
+                    }
+                  });
+                }
+
+                if (elements.refreshSourceApi) {
+                  elements.refreshSourceApi.addEventListener("click", async () => {
+                    try {
+                      await saveSourceConfigFromControls({ silent: true });
+                      await refreshSourceDataFromApi();
+                    } catch (error) {
+                      setSourceConfigStatus(error?.message || "משיכת הנתונים מהמערכת החיצונית נכשלה.", "error");
+                    }
+                  });
+                }
+
+                [
                   elements.ambassador,
                   elements.projectDay,
                   elements.dateExact,
@@ -7407,6 +8308,11 @@ def build_fragment(
                 elements.clearFilters.addEventListener("click", () => {
                   state.filters = getDefaultFilters(state.meta);
                   resetFilterOptions();
+                  renderAll();
+                });
+
+                elements.resetWorkingData.addEventListener("click", () => {
+                  restoreWorkingData();
                   renderAll();
                 });
 
@@ -7518,11 +8424,13 @@ def build_fragment(
                 elements.loginEmail.value = readStoredAdminEmail();
               }
               setSetupMode(false);
+              applyAmbassadorContextFromUrl();
               await hydrateAuthSession();
               setPage(state.session ? "admin" : "project");
               setAdminTab(state.ui.adminTab);
               setLoginMessage("");
               setImportMessage(getDefaultPrizeStatusMessage());
+              renderSourceConfigControls();
               bindEvents();
               renderAll();
             })();
@@ -7571,7 +8479,7 @@ def build_browser_document(fragment: str) -> str:
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <meta name="robots" content="noindex,nofollow" />
             <meta name="color-scheme" content="light" />
-            <title>Osim Tov BeTzahov Dashboard</title>
+            <title>GoodRaise Dashboard</title>
             <style>
               html, body {{
                 margin: 0;

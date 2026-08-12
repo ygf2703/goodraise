@@ -6,6 +6,11 @@ import {
   logoutManager,
   setupManagerPassword,
 } from "../lib/auth-store.mjs";
+import {
+  getAdminSourceConfig,
+  refreshAdminSource,
+  saveAdminSourceConfig,
+} from "../lib/source-store.mjs";
 
 const JSON_METHODS = new Set(["POST"]);
 
@@ -50,6 +55,19 @@ export default async (request) => {
     return getAdminDataset(request);
   }
 
+  if (url.pathname === "/api/admin/source-config" && request.method === "GET") {
+    return getAdminSourceConfig(request);
+  }
+
+  if (url.pathname === "/api/admin/source-config" && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return saveAdminSourceConfig(request, payload.config || {});
+  }
+
+  if (url.pathname === "/api/admin/source-refresh" && request.method === "POST") {
+    return refreshAdminSource(request);
+  }
+
   if (url.pathname === "/api/auth/login" && request.method === "POST") {
     const payload = await readRequestPayload(request);
     return loginManager({
@@ -80,6 +98,8 @@ export const config = {
   path: [
     "/api/health",
     "/api/admin/dataset",
+    "/api/admin/source-config",
+    "/api/admin/source-refresh",
     "/api/auth/status",
     "/api/auth/login",
     "/api/auth/setup",

@@ -13,6 +13,8 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from urllib.parse import urlparse
 
 
@@ -23,6 +25,7 @@ DATA_DIR = WORK_DIR / "data"
 OUTPUTS_DIR = ROOT_DIR / "outputs"
 NETLIFY_DATA_DIR = ROOT_DIR / "netlify" / "data"
 ADMIN_DATASET_PATH = NETLIFY_DATA_DIR / "admin-dataset.json"
+SOURCE_CONFIG_PATH = DATA_DIR / "dashboard-source-config.json"
 ACCESS_CONTROL_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_ACCESS_CONTROL_JSON", str(CONFIG_DIR / "dashboard-access.local.json"))
 ).resolve()
@@ -63,6 +66,18 @@ SECURITY_HEADERS = (
     ("Cross-Origin-Resource-Policy", "same-origin"),
     ("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
 )
+
+DEFAULT_SOURCE_FIELD_MAP = {
+    "id": "id",
+    "created_at": "created_at",
+    "full_name": "full_name",
+    "email": "email",
+    "Ambassador name": "Ambassador name",
+    "total": "total",
+    "city": "city",
+    "charged_success": "charged_success",
+    "charge_result": "charge_result",
+}
 
 
 def normalize_email(value: str) -> str:
@@ -312,6 +327,182 @@ def load_admin_dataset_payload() -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def get_default_source_config() -> dict[str, Any]:
+    return {
+        "mode": "file",
+        "api": {
+            "endpoint": "",
+            "method": "GET",
+            "responseFormat": "csv",
+            "recordsPath": "",
+            "authType": "none",
+            "bearerToken": "",
+            "hasBearerToken": False,
+            "autoRefreshMinutes": 5,
+            "headersText": "",
+            "bodyText": "",
+            "fieldMapText": json.dumps(DEFAULT_SOURCE_FIELD_MAP, ensure_ascii=False, indent=2),
+        },
+    }
+
+
+def normalize_positive_int(value: Any, fallback: int) -> int:
+    try:
+        numeric = int(str(value or "").strip())
+    except (TypeError, ValueError):
+        return fallback
+    return numeric if numeric >= 0 else fallback
+
+
+def normalize_multiline_text(value: Any) -> str:
+    return str(value or "").replace("\r\n", "\n").strip()
+
+
+def normalize_field_map_text(value: Any) -> str:
+    raw_text = str(value or "").strip()
+    if not raw_text:
+        return json.dumps(DEFAULT_SOURCE_FIELD_MAP, ensure_ascii=False, indent=2)
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return json.dumps(DEFAULT_SOURCE_FIELD_MAP, ensure_ascii=False, indent=2)
+    if not isinstance(parsed, dict):
+        return json.dumps(DEFAULT_SOURCE_FIELD_MAP, ensure_ascii=False, indent=2)
+    return json.dumps(parsed, ensure_ascii=False, indent=2)
+
+
+def normalize_source_config(raw_config: dict[str, Any] | None, existing_config: dict[str, Any] | None = None) -> dict[str, Any]:
+    defaults = get_default_source_config()
+    candidate = raw_config if isinstance(raw_config, dict) else {}
+    existing_api = (
+        existing_config.get("api")
+        if isinstance(existing_config, dict) and isinstance(existing_config.get("api"), dict)
+        else defaults["api"]
+    )
+    api_candidate = candidate.get("api") if isinstance(candidate.get("api"), dict) else {}
+    incoming_token = str(api_candidate.get("bearerToken") or "").strip()
+    clear_bearer_token = bool(api_candidate.get("clearBearerToken"))
+    preserved_token = "" if clear_bearer_token else (incoming_token or str(existing_api.get("bearerToken") or "").strip())
+
+    return {
+        "mode": "api" if candidate.get("mode") == "api" else "file",
+        "api": {
+            "endpoint": str(api_candidate.get("endpoint") or "").strip(),
+            "method": "POST" if str(api_candidate.get("method") or defaults["api"]["method"]).strip().upper() == "POST" else "GET",
+            "responseFormat": "json"
+            if str(api_candidate.get("responseFormat") or defaults["api"]["responseFormat"]).strip().lower() == "json"
+            else "csv",
+            "recordsPath": str(api_candidate.get("recordsPath") or "").strip(),
+            "authType": "bearer"
+            if str(api_candidate.get("authType") or defaults["api"]["authType"]).strip().lower() == "bearer"
+            else "none",
+            "bearerToken": preserved_token,
+            "hasBearerToken": bool(preserved_token),
+            "autoRefreshMinutes": normalize_positive_int(
+                api_candidate.get("autoRefreshMinutes"), int(defaults["api"]["autoRefreshMinutes"])
+            ),
+            "headersText": normalize_multiline_text(api_candidate.get("headersText")),
+            "bodyText": normalize_multiline_text(api_candidate.get("bodyText")),
+            "fieldMapText": normalize_field_map_text(api_candidate.get("fieldMapText")),
+        },
+    }
+
+
+def redact_source_config(config: dict[str, Any]) -> dict[str, Any]:
+    normalized = normalize_source_config(config)
+    normalized["api"]["bearerToken"] = ""
+    normalized["api"]["hasBearerToken"] = bool(config.get("api", {}).get("bearerToken")) if isinstance(config.get("api"), dict) else False
+    return normalized
+
+
+def load_source_config() -> dict[str, Any]:
+    if not SOURCE_CONFIG_PATH.exists():
+        return get_default_source_config()
+    try:
+        payload = json.loads(SOURCE_CONFIG_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return get_default_source_config()
+    return normalize_source_config(payload if isinstance(payload, dict) else None)
+
+
+def save_source_config(raw_config: dict[str, Any]) -> dict[str, Any]:
+    ensure_data_dir()
+    existing = load_source_config()
+    normalized = normalize_source_config(raw_config, existing)
+    SOURCE_CONFIG_PATH.write_text(json.dumps(normalized, ensure_ascii=False, indent=2), encoding="utf-8")
+    return normalized
+
+
+def parse_headers_text(text: str) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for raw_line in normalize_multiline_text(text).split("\n"):
+        line = raw_line.strip()
+        if not line or ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+        if key and value:
+            headers[key] = value
+    return headers
+
+
+def fetch_source_payload(config: dict[str, Any]) -> dict[str, Any]:
+    normalized = normalize_source_config(config)
+    endpoint = str(normalized["api"].get("endpoint") or "").strip()
+    if not endpoint:
+        raise ValueError("יש להגדיר קודם כתובת API תקפה לפני משיכת נתונים.")
+
+    headers = parse_headers_text(str(normalized["api"].get("headersText") or ""))
+    if normalized["api"].get("responseFormat") == "json":
+        headers.setdefault("Accept", "application/json, text/plain, */*")
+    else:
+        headers.setdefault("Accept", "text/csv, text/plain, */*")
+
+    bearer_token = str(normalized["api"].get("bearerToken") or "").strip()
+    if normalized["api"].get("authType") == "bearer" and bearer_token:
+        headers["Authorization"] = f"Bearer {bearer_token}"
+
+    method = str(normalized["api"].get("method") or "GET").upper()
+    body_text = str(normalized["api"].get("bodyText") or "")
+    body_bytes = None
+    if method == "POST" and body_text:
+        body_bytes = body_text.encode("utf-8")
+        if not any(key.lower() == "content-type" for key in headers):
+            headers["Content-Type"] = "application/json" if body_text.strip().startswith("{") else "text/plain; charset=utf-8"
+
+    request = urllib_request.Request(endpoint, data=body_bytes, headers=headers, method=method)
+
+    try:
+        with urllib_request.urlopen(request, timeout=30) as response:
+            charset = response.headers.get_content_charset("utf-8")
+            payload_text = response.read().decode(charset, errors="replace")
+            if normalized["api"].get("responseFormat") == "json":
+                payload: Any = json.loads(payload_text)
+            else:
+                payload = payload_text
+    except urllib_error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace") if hasattr(exc, "read") else ""
+        raise RuntimeError(
+            f"המערכת החיצונית החזירה שגיאה {exc.code}{f': {detail[:180]}' if detail else ''}"
+        ) from exc
+    except urllib_error.URLError as exc:
+        raise RuntimeError(f"לא ניתן היה להגיע לכתובת ה-API שהוגדרה: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("התגובה מה-API הוגדרה כ-JSON אך לא התקבלה תגובת JSON תקינה.") from exc
+
+    return {
+        "mode": normalized["mode"],
+        "sourceLabel": f"API · {endpoint}",
+        "fetchedAt": datetime.now().isoformat(timespec="seconds"),
+        "format": normalized["api"]["responseFormat"],
+        "payload": payload,
+        "recordsPath": normalized["api"]["recordsPath"],
+        "fieldMapText": normalized["api"]["fieldMapText"],
+        "autoRefreshMinutes": normalized["api"]["autoRefreshMinutes"],
+    }
+
+
 class DashboardServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
@@ -377,7 +568,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/admin/dataset":
             self.handle_admin_dataset()
             return
-        if parsed.path in {"/", "/index.html", "/yellow-project-dashboard-browser.html"}:
+        if parsed.path == "/api/admin/source-config":
+            self.handle_source_config_get()
+            return
+        path_parts = [part for part in parsed.path.split("/") if part]
+        is_project_route = len(path_parts) in {1, 2} and path_parts and path_parts[0] not in {
+            "api",
+            "admin",
+            "rules",
+            "privacy",
+            "yellow-project-dashboard.html",
+            "yellow-project-dashboard-browser.html",
+            "index.html",
+        }
+        if parsed.path in {"/", "/index.html", "/yellow-project-dashboard-browser.html"} or is_project_route:
             self.serve_file(self.dashboard_server.browser_output, "text/html; charset=utf-8")
             return
         if parsed.path == "/yellow-project-dashboard.html":
@@ -401,6 +605,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/auth/reset-local":
             self.handle_auth_reset_local()
+            return
+        if parsed.path == "/api/admin/source-config":
+            self.handle_source_config_save()
+            return
+        if parsed.path == "/api/admin/source-refresh":
+            self.handle_source_refresh()
             return
         self.respond_json(HTTPStatus.NOT_FOUND, {"message": "הנתיב המבוקש לא נמצא."})
 
@@ -505,6 +715,74 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "meta": payload.get("meta", {}),
                 "sourceLabel": payload.get("sourceLabel", "קובץ בסיס מאובטח"),
                 "generatedAt": payload.get("generatedAt", ""),
+            },
+        )
+
+    def require_authenticated_admin(self) -> str | None:
+        token = self.get_session_token()
+        if not token:
+            return None
+        with get_connection() as connection:
+            ensure_schema(connection)
+            seed_admins(connection)
+            return get_authenticated_email(connection, token)
+
+    def handle_source_config_get(self) -> None:
+        authenticated_email = self.require_authenticated_admin()
+        if not authenticated_email:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים."})
+            return
+
+        config = load_source_config()
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "config": redact_source_config(config),
+                "message": "הגדרות מקור הנתונים נטענו.",
+            },
+        )
+
+    def handle_source_config_save(self) -> None:
+        authenticated_email = self.require_authenticated_admin()
+        if not authenticated_email:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור חיבור API."})
+            return
+
+        payload = self.read_json_body()
+        config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+        normalized = save_source_config(config)
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "saved": True,
+                "config": redact_source_config(normalized),
+                "message": "חיבור מקור הנתונים נשמר בשרת המקומי." if normalized.get("mode") == "api" else "מצב מקור הנתונים נשמר על טעינת קובץ.",
+            },
+        )
+
+    def handle_source_refresh(self) -> None:
+        authenticated_email = self.require_authenticated_admin()
+        if not authenticated_email:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור."})
+            return
+
+        config = load_source_config()
+        if config.get("mode") != "api":
+            self.respond_json(HTTPStatus.CONFLICT, {"message": "מקור הנתונים הפעיל מוגדר כרגע כקובץ, לא כ-API."})
+            return
+
+        try:
+            payload = fetch_source_payload(config)
+        except (RuntimeError, ValueError) as exc:
+            self.respond_json(HTTPStatus.BAD_GATEWAY, {"message": str(exc)})
+            return
+
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                **payload,
+                "message": "הנתונים נמשכו בהצלחה מהמערכת החיצונית.",
             },
         )
 

@@ -39,3 +39,15 @@
   to = "/index.html"
   status = 200
   force = true
+
+[[redirects]]
+  from = "/:project"
+  to = "/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/:project/:ambassador"
+  to = "/index.html"
+  status = 200
+  force = true

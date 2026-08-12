@@ -1,4 +1,4 @@
-# Osim Tov BeTzahov
+# GoodRaise
 
 Interactive dashboard for campaign management, donation analysis, ambassador tracking, prize visibility, file-to-file comparison, and manager access through either a local backend or a Netlify deployment path.
 
@@ -26,6 +26,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Fixed dual-brand header with manager status and page navigation
 - Public project page with branded hero, flexible story content, configurable image or video, preset donation amounts, donor details, and handoff to an external payment provider
 - Manager-side campaign designer for local styling control over colors, typography, hero media, CTAs, and preset donation cards
+- Ambassador directory upload (`full_name`, `email`, `phone`, `nickname`) with personal GoodRaise-style links in the format `https://goodraise.netlify.app/{projectSlug}/{nickname}`
 - Public prize page with podium, prize tiers, and live competition summary
 - Public campaign snapshot hero with immediate KPI-style status cards
 - Daily winners / "Olim LaDeshe" section across the 10 campaign days
@@ -33,6 +34,9 @@ The app receives campaign export files and turns them into an active dashboard t
 - SaaS-style manager login screen with first-password setup and real session-based auth
 - Safe-import behavior: invalid uploads do not replace the active dataset
 - File upload for base campaign CSV
+- Source-mode switch between manual file upload and a backend-managed external API connection
+- Secure admin-side API connector with saved endpoint, method, response format, optional bearer token, custom headers, and JSON field mapping
+- Manual pull plus optional timed auto-refresh from the fundraising platform API while managers monitor the campaign
 - File upload for comparison CSV
 - File upload for prize model from Excel or CSV
 - Filters for ambassador, project day, exact date, date range, exact hour, hour range, donor name, and amount range
@@ -58,21 +62,24 @@ The app receives campaign export files and turns them into an active dashboard t
 - `work/assets/achim-lasemel-logo.png`
   Organization logo for Achim LaSemel.
 - `work/assets/osim-tov-betzahov-logo.png`
-  Campaign logo for Osim Tov BeTzahov.
+  Campaign logo asset for the current campaign running on GoodRaise.
 - `work/assets/campaign-project-hero.jpeg`
   Default public-facing media asset for the project donation page.
 - `work/content/project-page-default.md`
   Default markdown story shown on the public project page.
+- Ambassador link generation is configured from the manager-side Design & Media tab and stored locally in the browser until a backend persistence layer is added.
 - `work/samples/sample-source.csv`
   Synthetic sample dataset for portable builds and CI.
 - `work/config/dashboard-access.example.json`
   Example admin email allowlist config.
 - `work/dashboard_backend.py`
-  Local backend server logic for admin auth, session handling, and dashboard delivery.
+  Local backend server logic for admin auth, session handling, dashboard delivery, and secured source-API configuration/refresh endpoints.
 - `netlify/functions/auth.mjs`
-  Netlify Function entrypoint for manager auth, setup, session status, logout, and health checks.
+  Netlify Function entrypoint for manager auth, setup, session status, source-API management, logout, and health checks.
 - `netlify/lib/auth-store.mjs`
   Shared auth storage and password/session logic for Netlify Functions, with local file fallback for verification.
+- `netlify/lib/source-store.mjs`
+  Shared source-API config persistence and protected refresh logic for Netlify Functions.
 - `netlify.toml`
   Netlify build, publish, functions, and route-rewrite configuration.
 - `package.json`
@@ -107,7 +114,9 @@ Important:
 - The generated public HTML intentionally hides donor-identifying fields and does not embed the full admin dataset.
 - The full admin dataset is generated into `netlify/data/admin-dataset.json`, is ignored from git, and is served only after an authenticated admin session.
 - In local mode, manager auth is stored in `work/data/dashboard-auth.sqlite3`.
+- In local mode, source-API connection settings are stored in `work/data/dashboard-source-config.json`.
 - In Netlify mode, manager auth is stored through Netlify Functions plus Netlify Blobs persistence.
+- In Netlify mode, source-API connection settings are also persisted server-side and are not exposed in the public app shell.
 - Netlify deploys include CSP, frame protection, content-type hardening, referrer policy, and basic auth rate limiting.
 - Recommended local override file: `work/config/dashboard-access.local.json` (ignored from git).
 
@@ -154,6 +163,7 @@ Notes:
 - On first login with an approved email, the manager is prompted to define a personal password.
 - The preview on `8766` can authenticate against the local backend on `8767` through the configured local cross-origin auth flow.
 - If you place the local backend behind HTTPS, set `YELLOW_DASHBOARD_SECURE_COOKIES=1` to force `Secure` cookies.
+- The admin Control Center now supports switching the active source from file mode to API mode, saving the connector, and pulling data directly from the fundraising platform.
 
 ## Netlify Deployment
 
@@ -164,6 +174,8 @@ This repository now includes the minimum files Netlify needs in order to actuall
 - `netlify/functions/auth.mjs` serves:
   - `/api/health`
   - `/api/admin/dataset`
+  - `/api/admin/source-config`
+  - `/api/admin/source-refresh`
   - `/api/auth/status`
   - `/api/auth/login`
   - `/api/auth/setup`
@@ -191,7 +203,7 @@ Useful local verification commands:
 
 ## Repository
 
-- [ygf2703/osimtovbetzahov](https://github.com/ygf2703/osimtovbetzahov)
+- [ygf2703/goodraise](https://github.com/ygf2703/goodraise)
 
 ## Recommended Next Steps
 
@@ -199,6 +211,7 @@ Useful local verification commands:
 - Add alerting for slow hours, failed charges, and ambassador drop-offs
 - Add target forecasting and end-of-campaign projection
 - Add deeper donor analysis: new vs returning, large donors, retention
+- Persist ambassador-directory uploads and personal link metadata in a backend data layer
 - Add password reset / recovery flow and role-based authorization
 - Add centralized monitoring for auth failures and unusual usage patterns
 - Move from file-based local mode to a structured persistent data layer

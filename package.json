@@ -1,8 +1,8 @@
 {
-  "name": "osimtovbetzahov",
+  "name": "goodraise",
   "private": true,
   "version": "1.0.0",
-  "description": "Netlify deployment support for the Osim Tov BeTzahov dashboard",
+  "description": "Netlify deployment support for the GoodRaise campaign dashboard",
   "scripts": {
     "verify:auth": "node scripts/verify_netlify_auth.mjs"
   },
