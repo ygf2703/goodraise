@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "description": "Netlify deployment support for the GoodRaise campaign dashboard",
   "scripts": {
-    "verify:auth": "node scripts/verify_netlify_auth.mjs"
+    "verify:auth": "node scripts/verify_netlify_auth.mjs",
+    "test:intelligence": "node --test tests/goodraise-intelligence.test.mjs",
+    "benchmark:intelligence": "node scripts/benchmark_intelligence.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.10"

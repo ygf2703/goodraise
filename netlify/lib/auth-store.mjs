@@ -1,4 +1,4 @@
-import { getStore } from "@netlify/blobs";
+﻿import { getStore } from "@netlify/blobs";
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const DEV_STORE_PATH = resolve(ROOT_DIR, "work", "data", "netlify-auth-dev.json");
+const LOCAL_ACCESS_CONTROL_PATH = resolve(ROOT_DIR, "work", "config", "dashboard-access.local.json");
+const EXAMPLE_ACCESS_CONTROL_PATH = resolve(ROOT_DIR, "work", "config", "dashboard-access.example.json");
 const ADMIN_DATASET_PATH = resolve(ROOT_DIR, "netlify", "data", "admin-dataset.json");
 const STORE_NAME = "yellow-dashboard-auth";
 const SESSION_COOKIE_NAME = "yellow_dashboard_admin_session";
@@ -14,23 +16,52 @@ const PASSWORD_ITERATIONS = 200_000;
 const MAX_AUTH_ATTEMPTS = 5;
 const AUTH_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_LOCKOUT_MS = 20 * 60 * 1000;
-const DEFAULT_MANAGER_EMAILS = [
-  "noamfrostig@gmail.com",
-  "themoti@gmail.com",
-  "Moranmta@gmail.com",
-  "4337579@gmail.com",
-  "rasherov@gmail.com",
-  "ranbo7@gmail.com",
-  "shaywolf251996@gmail.com",
-  "Dinofek@gmail.com",
-  "Yafit.neveshalev@gmail.com",
-  "Yovelk11@gmail.com",
-  "Lalobenny@gmail.com",
-  "aharonayal@gmail.com",
-];
+const ROLE_PLATFORM_ADMIN = "platform_admin";
+const ROLE_ORGANIZATION_ADMIN = "organization_admin";
+const ROLE_CAMPAIGN_MANAGER = "campaign_manager";
+const ROLE_ANALYST = "analyst";
+const ROLE_VIEWER = "viewer";
+const KNOWN_ROLES = new Set([
+  ROLE_PLATFORM_ADMIN,
+  ROLE_ORGANIZATION_ADMIN,
+  ROLE_CAMPAIGN_MANAGER,
+  ROLE_ANALYST,
+  ROLE_VIEWER,
+]);
+const ROLE_ORDER = {
+  [ROLE_VIEWER]: 1,
+  [ROLE_ANALYST]: 2,
+  [ROLE_CAMPAIGN_MANAGER]: 3,
+  [ROLE_ORGANIZATION_ADMIN]: 4,
+  [ROLE_PLATFORM_ADMIN]: 5,
+};
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function normalizeSlug(value, fallback = "default") {
+  const cleaned = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return cleaned || fallback;
+}
+
+function normalizeRole(value, fallback = ROLE_PLATFORM_ADMIN) {
+  const candidate = String(value || "").trim().toLowerCase();
+  return KNOWN_ROLES.has(candidate) ? candidate : fallback;
+}
+
+function normalizeCampaignScope(values) {
+  if (Array.isArray(values)) {
+    return values.map((value) => normalizeSlug(value)).filter(Boolean);
+  }
+  if (typeof values === "string" && values.trim()) {
+    return values.split(",").map((value) => normalizeSlug(value)).filter(Boolean);
+  }
+  return [];
 }
 
 function isoNow() {
@@ -58,7 +89,7 @@ function auditKey() {
   return `audit:${Date.now()}:${randomBytes(6).toString("hex")}`;
 }
 
-function parseManagerEmails(rawValue) {
+function parseManagerRecords(rawValue) {
   const raw = String(rawValue || "").trim();
   if (!raw) {
     return [];
@@ -67,29 +98,101 @@ function parseManagerEmails(rawValue) {
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed.map((value) => normalizeEmail(value)).filter(Boolean);
+      return parsed
+        .map((value) => normalizeManagerRecord(value))
+        .filter(Boolean);
     }
   } catch {
     return raw
       .split(",")
-      .map((value) => normalizeEmail(value))
+      .map((value) => normalizeManagerRecord(value))
       .filter(Boolean);
   }
 
   return [];
 }
 
-function uniqueEmails(emails) {
-  return Array.from(new Set(emails.map((value) => normalizeEmail(value)).filter(Boolean)));
-}
-
-export function loadManagerEmails() {
-  const envEmails = parseManagerEmails(process.env.YELLOW_DASHBOARD_MANAGER_EMAILS);
-  if (envEmails.length > 0) {
-    return uniqueEmails(envEmails);
+function normalizeManagerRecord(value) {
+  if (typeof value === "string") {
+    const email = normalizeEmail(value);
+    if (!email) {
+      return null;
+    }
+    return {
+      email,
+      role: ROLE_PLATFORM_ADMIN,
+      organizationSlug: "default-org",
+      campaignSlugs: [],
+      isActive: true,
+    };
   }
 
-  return uniqueEmails(DEFAULT_MANAGER_EMAILS);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const email = normalizeEmail(value.email);
+  if (!email) {
+    return null;
+  }
+
+  return {
+    email,
+    role: normalizeRole(value.role, ROLE_PLATFORM_ADMIN),
+    organizationSlug: normalizeSlug(value.organizationSlug || "default-org"),
+    campaignSlugs: normalizeCampaignScope(value.campaignSlugs),
+    isActive: value.isActive !== false,
+  };
+}
+
+function uniqueManagerRecords(records) {
+  const seen = new Set();
+  return records.filter((record) => {
+    const email = normalizeEmail(record?.email);
+    if (!email || seen.has(email)) {
+      return false;
+    }
+    seen.add(email);
+    return true;
+  });
+}
+
+async function loadManagerRecordsFromFile(path) {
+  try {
+    const content = await readFile(path, "utf8");
+    const parsed = JSON.parse(content);
+    const records = [];
+    if (Array.isArray(parsed?.managers)) {
+      records.push(...parsed.managers.map((value) => normalizeManagerRecord(value)).filter(Boolean));
+    }
+    if (Array.isArray(parsed?.managerEmails)) {
+      records.push(...parsed.managerEmails.map((value) => normalizeManagerRecord(value)).filter(Boolean));
+    }
+    return uniqueManagerRecords(records);
+  } catch {}
+
+  return [];
+}
+
+export async function loadManagerRecords() {
+  const envRecords = parseManagerRecords(process.env.YELLOW_DASHBOARD_MANAGER_EMAILS);
+  if (envRecords.length > 0) {
+    return uniqueManagerRecords(envRecords);
+  }
+
+  const localRecords = await loadManagerRecordsFromFile(LOCAL_ACCESS_CONTROL_PATH);
+  if (localRecords.length > 0) {
+    return localRecords;
+  }
+
+  const allowExampleManagers = ["1", "true", "yes", "on"].includes(
+    String(process.env.YELLOW_DASHBOARD_ALLOW_EXAMPLE_MANAGERS || "").trim().toLowerCase(),
+  );
+  if (allowExampleManagers) {
+    return await loadManagerRecordsFromFile(EXAMPLE_ACCESS_CONTROL_PATH);
+  }
+
+  return [];
 }
 
 function hashPassword(password) {
@@ -304,7 +407,7 @@ async function ensureNotRateLimited(store, email, clientAddress) {
     const retryAfterSeconds = Math.max(1, Math.ceil((toMillis(record.blockedUntil) - Date.now()) / 1000));
     return failureResponse(
       429,
-      "יותר מדי ניסיונות התחברות. נסו שוב בעוד מספר דקות.",
+      "×™×•×ª×¨ ×ž×“×™ × ×™×¡×™×•× ×•×ª ×”×ª×—×‘×¨×•×ª. × ×¡×• ×©×•×‘ ×‘×¢×•×“ ×ž×¡×¤×¨ ×“×§×•×ª.",
       {
         code: "rate_limited",
         retryAfterSeconds,
@@ -319,19 +422,20 @@ async function ensureNotRateLimited(store, email, clientAddress) {
 
 async function ensureAdminSeed(store) {
   const createdAt = isoNow();
-  for (const email of loadManagerEmails()) {
-    const key = adminKey(email);
+  for (const manager of await loadManagerRecords()) {
+    const key = adminKey(manager.email);
     const existing = await store.getJSON(key);
-    if (!existing) {
-      await store.setJSON(key, {
-        email,
-        isActive: true,
-        createdAt,
-        passwordHash: "",
-        passwordSetAt: "",
-        lastLoginAt: "",
-      });
-    }
+    await store.setJSON(key, {
+      email: manager.email,
+      role: manager.role,
+      organizationSlug: manager.organizationSlug,
+      campaignSlugs: manager.campaignSlugs,
+      isActive: manager.isActive,
+      createdAt: existing?.createdAt || createdAt,
+      passwordHash: existing?.passwordHash || "",
+      passwordSetAt: existing?.passwordSetAt || "",
+      lastLoginAt: existing?.lastLoginAt || "",
+    });
   }
 }
 
@@ -342,6 +446,19 @@ async function getAdminRecord(store, email) {
 
 async function saveAdminRecord(store, record) {
   await store.setJSON(adminKey(record.email), record);
+}
+
+function hasRequiredRole(role, minimumRole) {
+  return (ROLE_ORDER[normalizeRole(role, ROLE_VIEWER)] || 0) >= (ROLE_ORDER[normalizeRole(minimumRole, ROLE_PLATFORM_ADMIN)] || 0);
+}
+
+async function deleteSessionsForEmail(store, email) {
+  const sessions = await store.listJSON("session:");
+  for (const item of sessions) {
+    if (normalizeEmail(item?.value?.adminEmail) === normalizeEmail(email)) {
+      await store.delete(item.key);
+    }
+  }
 }
 
 async function getSessionRecord(store, token) {
@@ -366,32 +483,97 @@ export async function getAuthStatus(request) {
   const store = getPersistence();
   const token = getSessionToken(request);
   const session = await getSessionRecord(store, token);
-  const authenticatedEmail = session ? normalizeEmail(session.adminEmail) : "";
+  const admin = session?.adminEmail ? await getAdminRecord(store, session.adminEmail) : null;
+  const authenticatedEmail = admin ? normalizeEmail(admin.email) : "";
 
   return {
     authenticated: Boolean(authenticatedEmail),
     email: authenticatedEmail,
+    role: admin?.role || "",
+    organizationSlug: admin?.organizationSlug || "",
+    campaignSlugs: Array.isArray(admin?.campaignSlugs) ? admin.campaignSlugs : [],
+    sessionExpiresAt: session?.expiresAt || "",
     setupSupported: true,
+  };
+}
+
+export async function requireManagerAccess(request, minimumRole = ROLE_VIEWER, unauthorizedMessage = "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ.") {
+  const auth = await getAuthStatus(request);
+  if (!auth?.authenticated || !auth?.email) {
+    return {
+      error: failureResponse(401, unauthorizedMessage),
+      auth: null,
+    };
+  }
+  if (!hasRequiredRole(auth.role, minimumRole)) {
+    return {
+      error: failureResponse(403, "××™×Ÿ ×”×¨×©××” ×ž×¡×¤×§×ª ×œ×‘×™×¦×•×¢ ×”×¤×¢×•×œ×” ×”×ž×‘×•×§×©×ª."),
+      auth,
+    };
+  }
+  return { auth };
+}
+
+export async function getRuntimeHealth() {
+  const store = getPersistence();
+  await ensureAdminSeed(store);
+  const dataset = await loadAdminDatasetPayload();
+  const managers = await loadManagerRecords();
+  const sessions = await store.listJSON("session:");
+  return {
+    ok: true,
+    service: "yellow-dashboard-netlify-auth",
+    application: {
+      status: "ok",
+      runtime: isNetlifyRuntime() ? "netlify" : "local-dev-store",
+    },
+    persistence: {
+      status: "ok",
+      managerSeedCount: managers.length,
+      activeSessionCount: sessions.length,
+    },
+    dataSource: {
+      adminDatasetReady: Boolean(dataset),
+      adminDatasetRows: Array.isArray(dataset?.rows) ? dataset.rows.length : 0,
+    },
+    time: {
+      checkedAt: isoNow(),
+      sessionDurationHours: SESSION_DURATION_HOURS,
+    },
   };
 }
 
 export async function getAdminDataset(request) {
   const store = getPersistence();
-  const token = getSessionToken(request);
-  const session = await getSessionRecord(store, token);
-  if (!session?.adminEmail) {
-    return failureResponse(401, "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים.");
+  const access = await requireManagerAccess(request, ROLE_ANALYST, "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™×™×.");
+  if (access.error) {
+    await recordAuditEvent(store, {
+      type: "dataset_denied",
+      email: normalizeEmail(access.auth?.email || ""),
+      clientAddress: getClientAddress(request),
+      userAgent: getUserAgent(request),
+      outcome: "denied",
+    });
+    return access.error;
   }
 
   const payload = await loadAdminDatasetPayload();
   if (!payload) {
-    return failureResponse(404, "מאגר הנתונים הניהולי לא זמין כרגע. אפשר להעלות קובץ עסקאות ידנית לאחר הכניסה.");
+    return failureResponse(404, "×ž××’×¨ ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™ ×œ× ×–×ž×™×Ÿ ×›×¨×’×¢. ××¤×©×¨ ×œ×”×¢×œ×•×ª ×§×•×‘×¥ ×¢×¡×§××•×ª ×™×“× ×™×ª ×œ××—×¨ ×”×›× ×™×¡×”.");
   }
+
+  await recordAuditEvent(store, {
+    type: "dataset_view",
+    email: access.auth.email,
+    clientAddress: getClientAddress(request),
+    userAgent: getUserAgent(request),
+    outcome: "success",
+  });
 
   return jsonResponse(200, {
     rows: Array.isArray(payload.rows) ? payload.rows : [],
     meta: payload.meta && typeof payload.meta === "object" ? payload.meta : {},
-    sourceLabel: payload.sourceLabel || "קובץ בסיס מאובטח",
+    sourceLabel: payload.sourceLabel || "×§×•×‘×¥ ×‘×¡×™×¡ ×ž××•×‘×˜×—",
     generatedAt: payload.generatedAt || "",
   });
 }
@@ -417,7 +599,7 @@ export async function loginManager({ email, password, request }) {
   const admin = await getAdminRecord(store, normalizedEmail);
 
   if (!normalizedEmail || !password) {
-    return failureResponse(400, "יש למלא גם מייל וגם סיסמה.");
+    return failureResponse(400, "×™×© ×œ×ž×œ× ×’× ×ž×™×™×œ ×•×’× ×¡×™×¡×ž×”.");
   }
 
   if (!admin || !admin.isActive) {
@@ -429,7 +611,7 @@ export async function loginManager({ email, password, request }) {
       userAgent,
       outcome: "denied",
     });
-    return failureResponse(403, "המייל שהוזן אינו מורשה לגישה לפאנל הניהול.");
+    return failureResponse(403, "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ×’×™×©×” ×œ×¤×× ×œ ×”× ×™×”×•×œ.");
   }
 
   if (!admin.passwordHash) {
@@ -442,7 +624,7 @@ export async function loginManager({ email, password, request }) {
     });
     return failureResponse(
       409,
-      "זו כניסה ראשונה עבור המייל הזה. יש להגדיר סיסמה אישית לפני כניסה.",
+      "×–×• ×›× ×™×¡×” ×¨××©×•× ×” ×¢×‘×•×¨ ×”×ž×™×™×œ ×”×–×”. ×™×© ×œ×”×’×“×™×¨ ×¡×™×¡×ž×” ××™×©×™×ª ×œ×¤× ×™ ×›× ×™×¡×”.",
       { code: "setup_required", setupRequired: true },
     );
   }
@@ -457,7 +639,7 @@ export async function loginManager({ email, password, request }) {
       outcome: "invalid_password",
       detail: failedAttempt.count >= MAX_AUTH_ATTEMPTS ? "locked" : "",
     });
-    return failureResponse(401, "הסיסמה שגויה. נסו שוב.");
+    return failureResponse(401, "×”×¡×™×¡×ž×” ×©×’×•×™×”. × ×¡×• ×©×•×‘.");
   }
 
   const now = isoNow();
@@ -485,7 +667,7 @@ export async function loginManager({ email, password, request }) {
     {
       authenticated: true,
       email: normalizedEmail,
-      message: "הכניסה הצליחה. הדשבורד הניהולי נפתח.",
+      message: "×”×›× ×™×¡×” ×”×¦×œ×™×—×”. ×”×“×©×‘×•×¨×“ ×”× ×™×”×•×œ×™ × ×¤×ª×—.",
     },
     request.url,
     token,
@@ -513,7 +695,7 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
   const admin = await getAdminRecord(store, normalizedEmail);
 
   if (!normalizedEmail || !password || !confirmPassword) {
-    return failureResponse(400, "יש למלא מייל, סיסמה ואימות סיסמה.");
+    return failureResponse(400, "×™×© ×œ×ž×œ× ×ž×™×™×œ, ×¡×™×¡×ž×” ×•××™×ž×•×ª ×¡×™×¡×ž×”.");
   }
 
   if (!admin || !admin.isActive) {
@@ -525,19 +707,19 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
       userAgent,
       outcome: "denied",
     });
-    return failureResponse(403, "המייל שהוזן אינו מורשה להגדיר גישת מנהל.");
+    return failureResponse(403, "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ×”×’×“×™×¨ ×’×™×©×ª ×ž× ×”×œ.");
   }
 
   if (password !== confirmPassword) {
-    return failureResponse(400, "אימות הסיסמה לא תואם.");
+    return failureResponse(400, "××™×ž×•×ª ×”×¡×™×¡×ž×” ×œ× ×ª×•××.");
   }
 
   if (password.length < 8) {
-    return failureResponse(400, "יש לבחור סיסמה באורך 8 תווים לפחות.");
+    return failureResponse(400, "×™×© ×œ×‘×—×•×¨ ×¡×™×¡×ž×” ×‘××•×¨×š 8 ×ª×•×•×™× ×œ×¤×—×•×ª.");
   }
 
   if (admin.passwordHash) {
-    return failureResponse(409, "כבר הוגדרה סיסמה עבור המייל הזה. ניתן לעבור למסך הכניסה הרגיל.");
+    return failureResponse(409, "×›×‘×¨ ×”×•×’×“×¨×” ×¡×™×¡×ž×” ×¢×‘×•×¨ ×”×ž×™×™×œ ×”×–×”. × ×™×ª×Ÿ ×œ×¢×‘×•×¨ ×œ×ž×¡×š ×”×›× ×™×¡×” ×”×¨×’×™×œ.");
   }
 
   const now = isoNow();
@@ -568,7 +750,7 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
     {
       authenticated: true,
       email: normalizedEmail,
-      message: "הסיסמה נשמרה והגישה לפאנל הניהול נפתחה.",
+      message: "×”×¡×™×¡×ž×” × ×©×ž×¨×” ×•×”×’×™×©×” ×œ×¤×× ×œ ×”× ×™×”×•×œ × ×¤×ª×—×”.",
     },
     request.url,
     token,

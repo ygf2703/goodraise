@@ -26,29 +26,18 @@ OUTPUTS_DIR = ROOT_DIR / "outputs"
 NETLIFY_DATA_DIR = ROOT_DIR / "netlify" / "data"
 ADMIN_DATASET_PATH = NETLIFY_DATA_DIR / "admin-dataset.json"
 SOURCE_CONFIG_PATH = DATA_DIR / "dashboard-source-config.json"
-ACCESS_CONTROL_PATH = Path(
+CAMPAIGN_CONFIG_PATH = DATA_DIR / "dashboard-campaign-config.json"
+AUDIT_LOG_PATH = DATA_DIR / "dashboard-audit-log.jsonl"
+LOCAL_ACCESS_CONTROL_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_ACCESS_CONTROL_JSON", str(CONFIG_DIR / "dashboard-access.local.json"))
 ).resolve()
+EXAMPLE_ACCESS_CONTROL_PATH = (CONFIG_DIR / "dashboard-access.example.json").resolve()
 DB_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_AUTH_DB_PATH", str(DATA_DIR / "dashboard-auth.sqlite3"))
 ).resolve()
 SESSION_COOKIE_NAME = "yellow_dashboard_admin_session"
 SESSION_DURATION_HOURS = 24 * 30
 PASSWORD_ITERATIONS = 200_000
-DEFAULT_MANAGER_EMAILS = [
-    "noamfrostig@gmail.com",
-    "themoti@gmail.com",
-    "Moranmta@gmail.com",
-    "4337579@gmail.com",
-    "rasherov@gmail.com",
-    "ranbo7@gmail.com",
-    "shaywolf251996@gmail.com",
-    "Dinofek@gmail.com",
-    "Yafit.neveshalev@gmail.com",
-    "Yovelk11@gmail.com",
-    "Lalobenny@gmail.com",
-    "aharonayal@gmail.com",
-]
 ALLOWED_ORIGINS = {
     "http://127.0.0.1:8766",
     "http://127.0.0.1:8767",
@@ -79,6 +68,26 @@ DEFAULT_SOURCE_FIELD_MAP = {
     "charge_result": "charge_result",
 }
 
+ROLE_PLATFORM_ADMIN = "platform_admin"
+ROLE_ORGANIZATION_ADMIN = "organization_admin"
+ROLE_CAMPAIGN_MANAGER = "campaign_manager"
+ROLE_ANALYST = "analyst"
+ROLE_VIEWER = "viewer"
+KNOWN_ROLES = {
+    ROLE_PLATFORM_ADMIN,
+    ROLE_ORGANIZATION_ADMIN,
+    ROLE_CAMPAIGN_MANAGER,
+    ROLE_ANALYST,
+    ROLE_VIEWER,
+}
+ROLE_ORDER = {
+    ROLE_VIEWER: 1,
+    ROLE_ANALYST: 2,
+    ROLE_CAMPAIGN_MANAGER: 3,
+    ROLE_ORGANIZATION_ADMIN: 4,
+    ROLE_PLATFORM_ADMIN: 5,
+}
+
 
 def normalize_email(value: str) -> str:
     return (value or "").strip().lower()
@@ -92,40 +101,140 @@ def isoformat_utc(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat()
 
 
-def load_manager_emails() -> list[str]:
-    emails = [normalize_email(email) for email in DEFAULT_MANAGER_EMAILS if normalize_email(email)]
+def normalize_slug(value: Any, fallback: str = "default") -> str:
+    raw = "".join(char.lower() if char.isalnum() else "-" for char in str(value or "").strip())
+    cleaned = "-".join(part for part in raw.split("-") if part)
+    return cleaned or fallback
 
-    if ACCESS_CONTROL_PATH.exists():
-        try:
-            payload = json.loads(ACCESS_CONTROL_PATH.read_text(encoding="utf-8"))
-            file_emails = payload.get("managerEmails")
-            if isinstance(file_emails, list) and file_emails:
-                normalized = [normalize_email(str(item)) for item in file_emails if normalize_email(str(item))]
-                if normalized:
-                    emails = normalized
-        except json.JSONDecodeError:
-            pass
+
+def normalize_role(value: Any, fallback: str = ROLE_PLATFORM_ADMIN) -> str:
+    candidate = str(value or "").strip().lower()
+    return candidate if candidate in KNOWN_ROLES else fallback
+
+
+def normalize_campaign_scope(values: Any) -> list[str]:
+    if isinstance(values, list):
+        return [normalize_slug(value) for value in values if str(value or "").strip()]
+    if isinstance(values, str) and values.strip():
+        return [normalize_slug(value) for value in values.split(",") if str(value or "").strip()]
+    return []
+
+
+def normalize_manager_record(raw_record: Any, fallback_role: str = ROLE_PLATFORM_ADMIN) -> dict[str, Any] | None:
+    if isinstance(raw_record, str):
+        email = normalize_email(raw_record)
+        if not email:
+            return None
+        return {
+            "email": email,
+            "role": fallback_role,
+            "organizationSlug": "default-org",
+            "campaignSlugs": [],
+            "isActive": True,
+        }
+
+    if not isinstance(raw_record, dict):
+        return None
+
+    email = normalize_email(str(raw_record.get("email", "")))
+    if not email:
+        return None
+
+    return {
+        "email": email,
+        "role": normalize_role(raw_record.get("role"), fallback_role),
+        "organizationSlug": normalize_slug(raw_record.get("organizationSlug") or "default-org"),
+        "campaignSlugs": normalize_campaign_scope(raw_record.get("campaignSlugs")),
+        "isActive": bool(raw_record.get("isActive", True)),
+    }
+
+
+def unique_manager_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    unique: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for record in records:
+        email = normalize_email(record.get("email", ""))
+        if not email or email in seen:
+            continue
+        next_record = {
+            "email": email,
+            "role": normalize_role(record.get("role"), ROLE_PLATFORM_ADMIN),
+            "organizationSlug": normalize_slug(record.get("organizationSlug") or "default-org"),
+            "campaignSlugs": normalize_campaign_scope(record.get("campaignSlugs")),
+            "isActive": bool(record.get("isActive", True)),
+        }
+        unique.append(next_record)
+        seen.add(email)
+    return unique
+
+
+def load_manager_records_from_file(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+    records: list[dict[str, Any]] = []
+    file_records = payload.get("managers")
+    if isinstance(file_records, list):
+        records.extend(
+            record
+            for item in file_records
+            for record in [normalize_manager_record(item, ROLE_PLATFORM_ADMIN)]
+            if record
+        )
+
+    file_emails = payload.get("managerEmails")
+    if isinstance(file_emails, list):
+        records.extend(
+            record
+            for item in file_emails
+            for record in [normalize_manager_record(item, ROLE_PLATFORM_ADMIN)]
+            if record
+        )
+
+    return unique_manager_records(records)
+
+
+def load_manager_records() -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
 
     env_emails = os.getenv("YELLOW_DASHBOARD_MANAGER_EMAILS", "").strip()
     if env_emails:
         try:
             parsed = json.loads(env_emails)
             if isinstance(parsed, list) and parsed:
-                normalized = [normalize_email(str(item)) for item in parsed if normalize_email(str(item))]
-                if normalized:
-                    emails = normalized
+                records = unique_manager_records(
+                    [
+                        record
+                        for item in parsed
+                        for record in [normalize_manager_record(item, ROLE_PLATFORM_ADMIN)]
+                        if record
+                    ]
+                )
         except json.JSONDecodeError:
-            normalized = [normalize_email(item) for item in env_emails.split(",") if normalize_email(item)]
-            if normalized:
-                emails = normalized
+            records = unique_manager_records(
+                [
+                    record
+                    for item in env_emails.split(",")
+                    for record in [normalize_manager_record(item, ROLE_PLATFORM_ADMIN)]
+                    if record
+                ]
+            )
 
-    unique_emails: list[str] = []
-    seen: set[str] = set()
-    for email in emails:
-        if email and email not in seen:
-            unique_emails.append(email)
-            seen.add(email)
-    return unique_emails
+    if not records:
+        local_records = load_manager_records_from_file(LOCAL_ACCESS_CONTROL_PATH)
+        if local_records:
+            records = local_records
+
+    if not records and os.getenv("YELLOW_DASHBOARD_ALLOW_EXAMPLE_MANAGERS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        example_records = load_manager_records_from_file(EXAMPLE_ACCESS_CONTROL_PATH)
+        if example_records:
+            records = example_records
+
+    return unique_manager_records(records)
 
 
 def ensure_data_dir() -> None:
@@ -145,6 +254,9 @@ def ensure_schema(connection: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS admins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL UNIQUE,
+            role TEXT NOT NULL DEFAULT 'platform_admin',
+            organization_slug TEXT NOT NULL DEFAULT 'default-org',
+            campaign_slugs TEXT NOT NULL DEFAULT '[]',
             password_hash TEXT,
             is_active INTEGER NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL,
@@ -167,19 +279,40 @@ def ensure_schema(connection: sqlite3.Connection) -> None:
         ON admin_sessions(expires_at);
         """
     )
+    existing_columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(admins)").fetchall()
+    }
+    if "role" not in existing_columns:
+        connection.execute("ALTER TABLE admins ADD COLUMN role TEXT NOT NULL DEFAULT 'platform_admin'")
+    if "organization_slug" not in existing_columns:
+        connection.execute("ALTER TABLE admins ADD COLUMN organization_slug TEXT NOT NULL DEFAULT 'default-org'")
+    if "campaign_slugs" not in existing_columns:
+        connection.execute("ALTER TABLE admins ADD COLUMN campaign_slugs TEXT NOT NULL DEFAULT '[]'")
     connection.commit()
 
 
 def seed_admins(connection: sqlite3.Connection) -> None:
     created_at = isoformat_utc(utc_now())
-    for email in load_manager_emails():
+    for manager in load_manager_records():
         connection.execute(
             """
-            INSERT INTO admins (email, created_at)
-            VALUES (?, ?)
-            ON CONFLICT(email) DO NOTHING
+            INSERT INTO admins (email, role, organization_slug, campaign_slugs, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(email) DO UPDATE SET
+                role = excluded.role,
+                organization_slug = excluded.organization_slug,
+                campaign_slugs = excluded.campaign_slugs,
+                is_active = excluded.is_active
             """,
-            (email, created_at),
+            (
+                manager["email"],
+                manager["role"],
+                manager["organizationSlug"],
+                json.dumps(manager["campaignSlugs"], ensure_ascii=False),
+                1 if manager["isActive"] else 0,
+                created_at,
+            ),
         )
     connection.commit()
 
@@ -235,9 +368,49 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 def get_admin(connection: sqlite3.Connection, email: str) -> sqlite3.Row | None:
     return connection.execute(
-        "SELECT email, password_hash, is_active, password_set_at, last_login_at FROM admins WHERE lower(email) = ?",
+        """
+        SELECT
+            email,
+            role,
+            organization_slug,
+            campaign_slugs,
+            password_hash,
+            is_active,
+            password_set_at,
+            last_login_at
+        FROM admins
+        WHERE lower(email) = ?
+        """,
         (normalize_email(email),),
     ).fetchone()
+
+
+def get_admin_scope(admin: sqlite3.Row | dict[str, Any] | None) -> dict[str, Any]:
+    if not admin:
+        return {
+            "role": ROLE_VIEWER,
+            "organizationSlug": "",
+            "campaignSlugs": [],
+        }
+    raw_campaigns = admin["campaign_slugs"] if isinstance(admin, sqlite3.Row) else admin.get("campaign_slugs", "[]")
+    try:
+        campaign_slugs = json.loads(raw_campaigns or "[]")
+    except json.JSONDecodeError:
+        campaign_slugs = []
+    if not isinstance(campaign_slugs, list):
+        campaign_slugs = []
+    return {
+        "role": normalize_role(admin["role"] if isinstance(admin, sqlite3.Row) else admin.get("role"), ROLE_PLATFORM_ADMIN),
+        "organizationSlug": normalize_slug(
+            admin["organization_slug"] if isinstance(admin, sqlite3.Row) else admin.get("organization_slug"),
+            "default-org",
+        ),
+        "campaignSlugs": normalize_campaign_scope(campaign_slugs),
+    }
+
+
+def has_required_role(role: str, minimum_role: str) -> bool:
+    return ROLE_ORDER.get(normalize_role(role, ROLE_VIEWER), 0) >= ROLE_ORDER.get(normalize_role(minimum_role, ROLE_PLATFORM_ADMIN), 0)
 
 
 def update_admin_password(connection: sqlite3.Connection, email: str, password: str) -> None:
@@ -253,6 +426,11 @@ def update_admin_password(connection: sqlite3.Connection, email: str, password: 
             normalize_email(email),
         ),
     )
+    connection.commit()
+
+
+def delete_sessions_for_email(connection: sqlite3.Connection, email: str) -> None:
+    connection.execute("DELETE FROM admin_sessions WHERE lower(admin_email) = ?", (normalize_email(email),))
     connection.commit()
 
 
@@ -290,18 +468,49 @@ def delete_session(connection: sqlite3.Connection, token: str) -> None:
     connection.commit()
 
 
-def get_authenticated_email(connection: sqlite3.Connection, token: str) -> str | None:
+def get_authenticated_admin_context(connection: sqlite3.Connection, token: str) -> dict[str, Any] | None:
     cleanup_expired_sessions(connection)
     record = connection.execute(
         """
-        SELECT admin_sessions.admin_email
+        SELECT
+            admin_sessions.admin_email,
+            admin_sessions.expires_at,
+            admins.role,
+            admins.organization_slug,
+            admins.campaign_slugs
         FROM admin_sessions
         JOIN admins ON lower(admins.email) = lower(admin_sessions.admin_email)
         WHERE admin_sessions.token = ? AND admins.is_active = 1
         """,
         (token,),
     ).fetchone()
-    return normalize_email(record["admin_email"]) if record else None
+    if not record:
+        return None
+    scope = get_admin_scope(record)
+    return {
+        "email": normalize_email(record["admin_email"]),
+        "role": scope["role"],
+        "organizationSlug": scope["organizationSlug"],
+        "campaignSlugs": scope["campaignSlugs"],
+        "expiresAt": str(record["expires_at"] or ""),
+    }
+
+
+def get_authenticated_email(connection: sqlite3.Connection, token: str) -> str | None:
+    context = get_authenticated_admin_context(connection, token)
+    return normalize_email(context["email"]) if context else None
+
+
+def write_audit_event(event_type: str, email: str, detail: dict[str, Any] | None = None) -> None:
+    ensure_data_dir()
+    event = {
+        "at": isoformat_utc(utc_now()),
+        "type": event_type,
+        "email": normalize_email(email),
+        "detail": detail or {},
+    }
+    with AUDIT_LOG_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(event, ensure_ascii=False) + "\n")
 
 
 def build_set_cookie(token: str | None, max_age: int) -> str:
@@ -433,6 +642,32 @@ def save_source_config(raw_config: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def load_campaign_config() -> dict[str, Any]:
+    if not CAMPAIGN_CONFIG_PATH.exists():
+        return {}
+    try:
+        payload = json.loads(CAMPAIGN_CONFIG_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(payload, dict) and isinstance(payload.get("config"), dict):
+        return json.loads(json.dumps(payload.get("config")))
+    if isinstance(payload, dict):
+        return json.loads(json.dumps(payload))
+    return {}
+
+
+def save_campaign_config(config: dict[str, Any], updated_by: str) -> dict[str, Any]:
+    ensure_data_dir()
+    normalized = json.loads(json.dumps(config if isinstance(config, dict) else {}))
+    payload = {
+        "config": normalized,
+        "updatedAt": isoformat_utc(utc_now()),
+        "updatedBy": normalize_email(updated_by),
+    }
+    CAMPAIGN_CONFIG_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return payload
+
+
 def parse_headers_text(text: str) -> dict[str, str]:
     headers: dict[str, str] = {}
     for raw_line in normalize_multiline_text(text).split("\n"):
@@ -560,7 +795,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/api/health":
-            self.respond_json(HTTPStatus.OK, {"ok": True, "service": "yellow-dashboard-backend"})
+            self.handle_health()
             return
         if parsed.path == "/api/auth/status":
             self.handle_auth_status()
@@ -570,6 +805,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/admin/source-config":
             self.handle_source_config_get()
+            return
+        if parsed.path == "/api/admin/campaign-config":
+            self.handle_campaign_config_get()
             return
         path_parts = [part for part in parsed.path.split("/") if part]
         is_project_route = len(path_parts) in {1, 2} and path_parts and path_parts[0] not in {
@@ -603,11 +841,17 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/auth/logout":
             self.handle_auth_logout()
             return
+        if parsed.path == "/api/auth/change-password":
+            self.handle_auth_change_password()
+            return
         if parsed.path == "/api/auth/reset-local":
             self.handle_auth_reset_local()
             return
         if parsed.path == "/api/admin/source-config":
             self.handle_source_config_save()
+            return
+        if parsed.path == "/api/admin/campaign-config":
+            self.handle_campaign_config_save()
             return
         if parsed.path == "/api/admin/source-refresh":
             self.handle_source_refresh()
@@ -622,6 +866,82 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             parsed = {}
         return parsed if isinstance(parsed, dict) else {}
+
+    def audit(self, event_type: str, email: str = "", **detail: Any) -> None:
+        request_context = {
+            "path": self.path,
+            "origin": self.headers.get("Origin", ""),
+            "remote": self.client_address[0] if self.client_address else "",
+        }
+        write_audit_event(event_type, email, {**request_context, **detail})
+
+    def get_auth_context(self) -> dict[str, Any] | None:
+        token = self.get_session_token()
+        if not token:
+            return None
+        with get_connection() as connection:
+            ensure_schema(connection)
+            seed_admins(connection)
+            return get_authenticated_admin_context(connection, token)
+
+    def require_authenticated_admin(self, minimum_role: str = ROLE_VIEWER) -> dict[str, Any] | None:
+        context = self.get_auth_context()
+        if not context:
+            return None
+        if not has_required_role(context.get("role", ROLE_VIEWER), minimum_role):
+            return {
+                "error": True,
+                "status": HTTPStatus.FORBIDDEN,
+                "message": "אין הרשאה מספקת לביצוע הפעולה המבוקשת.",
+                "context": context,
+            }
+        return context
+
+    def build_health_payload(self) -> dict[str, Any]:
+        source_config = load_source_config()
+        dataset_available = ADMIN_DATASET_PATH.exists()
+        dataset_size = ADMIN_DATASET_PATH.stat().st_size if dataset_available else 0
+        campaign_config_exists = CAMPAIGN_CONFIG_PATH.exists()
+        auth_db_exists = DB_PATH.exists()
+        persistence_ok = False
+        try:
+            with get_connection() as connection:
+                ensure_schema(connection)
+                seed_admins(connection)
+                connection.execute("SELECT 1").fetchone()
+                persistence_ok = True
+        except sqlite3.Error:
+            persistence_ok = False
+
+        return {
+            "ok": persistence_ok,
+            "service": "yellow-dashboard-backend",
+            "application": {
+                "status": "ok" if self.dashboard_server.browser_output.exists() else "degraded",
+                "browserOutputReady": self.dashboard_server.browser_output.exists(),
+                "shellOutputReady": self.dashboard_server.shell_output.exists(),
+            },
+            "persistence": {
+                "status": "ok" if persistence_ok else "error",
+                "authDatabaseReady": auth_db_exists,
+                "campaignConfigReady": campaign_config_exists,
+            },
+            "dataSource": {
+                "mode": source_config.get("mode", "file"),
+                "apiConfigured": bool(source_config.get("api", {}).get("endpoint")) if isinstance(source_config.get("api"), dict) else False,
+                "adminDatasetReady": dataset_available,
+                "adminDatasetBytes": dataset_size,
+            },
+            "time": {
+                "checkedAt": isoformat_utc(utc_now()),
+                "sessionDurationHours": SESSION_DURATION_HOURS,
+            },
+        }
+
+    def handle_health(self) -> None:
+        payload = self.build_health_payload()
+        status = HTTPStatus.OK if payload.get("ok") else HTTPStatus.SERVICE_UNAVAILABLE
+        self.respond_json(status, payload)
 
     def respond_json(
         self,
@@ -669,25 +989,51 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         return morsel.value if morsel else ""
 
     def handle_auth_status(self) -> None:
-        token = self.get_session_token()
-        authenticated_email = None
-        if token:
-            with get_connection() as connection:
-                ensure_schema(connection)
-                seed_admins(connection)
-                authenticated_email = get_authenticated_email(connection, token)
-
+        auth_context = self.get_auth_context()
         self.respond_json(
             HTTPStatus.OK,
             {
                 "mode": "backend",
-                "authenticated": bool(authenticated_email),
-                "email": authenticated_email or "",
+                "authenticated": bool(auth_context),
+                "email": auth_context["email"] if auth_context else "",
+                "role": auth_context["role"] if auth_context else "",
+                "organizationSlug": auth_context["organizationSlug"] if auth_context else "",
+                "campaignSlugs": auth_context["campaignSlugs"] if auth_context else [],
+                "sessionExpiresAt": auth_context["expiresAt"] if auth_context else "",
                 "setupSupported": True,
             },
         )
 
     def handle_admin_dataset(self) -> None:
+        auth_context = self.require_authenticated_admin(ROLE_ANALYST)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים."})
+            return
+        if auth_context.get("error"):
+            denied_context = auth_context.get("context", {})
+            self.audit("dataset_forbidden", denied_context.get("email", ""), role=denied_context.get("role", ""))
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        payload = load_admin_dataset_payload()
+        if not payload:
+            self.respond_json(
+                HTTPStatus.NOT_FOUND,
+                {"message": "מאגר הנתונים הניהולי לא זמין כרגע. אפשר להעלות קובץ עסקאות ידנית לאחר הכניסה."},
+            )
+            return
+
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "rows": payload.get("rows", []),
+                "meta": payload.get("meta", {}),
+                "sourceLabel": payload.get("sourceLabel", "קובץ בסיס מאובטח"),
+                "generatedAt": payload.get("generatedAt", ""),
+            },
+        )
+        self.audit("admin_dataset_view", auth_context["email"], role=auth_context["role"])
+        return
         token = self.get_session_token()
         authenticated_email = None
         if token:
@@ -718,7 +1064,18 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             },
         )
 
-    def require_authenticated_admin(self) -> str | None:
+    def require_authenticated_admin(self, minimum_role: str = ROLE_VIEWER) -> dict[str, Any] | None:
+        context = self.get_auth_context()
+        if not context:
+            return None
+        if not has_required_role(context.get("role", ROLE_VIEWER), minimum_role):
+            return {
+                "error": True,
+                "status": HTTPStatus.FORBIDDEN,
+                "message": "אין הרשאה מספקת לביצוע הפעולה המבוקשת.",
+                "context": context,
+            }
+        return context
         token = self.get_session_token()
         if not token:
             return None
@@ -728,6 +1085,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return get_authenticated_email(connection, token)
 
     def handle_source_config_get(self) -> None:
+        auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        config = load_source_config()
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "config": redact_source_config(config),
+                "message": "הגדרות מקור הנתונים נטענו.",
+            },
+        )
+        self.audit("source_config_view", auth_context["email"], role=auth_context["role"])
+        return
         authenticated_email = self.require_authenticated_admin()
         if not authenticated_email:
             self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים."})
@@ -743,6 +1118,27 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         )
 
     def handle_source_config_save(self) -> None:
+        auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור חיבור API."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        payload = self.read_json_body()
+        config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+        normalized = save_source_config(config)
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "saved": True,
+                "config": redact_source_config(normalized),
+                "message": "חיבור מקור הנתונים נשמר בשרת המקומי." if normalized.get("mode") == "api" else "מצב מקור הנתונים נשמר על טעינת קובץ.",
+            },
+        )
+        self.audit("source_config_saved", auth_context["email"], role=auth_context["role"], mode=normalized.get("mode", "file"))
+        return
         authenticated_email = self.require_authenticated_admin()
         if not authenticated_email:
             self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור חיבור API."})
@@ -760,7 +1156,134 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             },
         )
 
+    def handle_campaign_config_get(self) -> None:
+        auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הגדרות הקמפיין."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        stored_payload: dict[str, Any] = {}
+        if CAMPAIGN_CONFIG_PATH.exists():
+            try:
+                loaded = json.loads(CAMPAIGN_CONFIG_PATH.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    stored_payload = loaded
+            except json.JSONDecodeError:
+                stored_payload = {}
+
+        config = load_campaign_config()
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "config": config,
+                "updatedAt": stored_payload.get("updatedAt", ""),
+                "updatedBy": stored_payload.get("updatedBy", ""),
+                "message": "הגדרות הקמפיין נטענו מהשרת המקומי.",
+            },
+        )
+        self.audit("campaign_config_view", auth_context["email"], role=auth_context["role"])
+        return
+        authenticated_email = self.require_authenticated_admin()
+        if not authenticated_email:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הגדרות הקמפיין."})
+            return
+
+        stored_payload: dict[str, Any] = {}
+        if CAMPAIGN_CONFIG_PATH.exists():
+            try:
+                loaded = json.loads(CAMPAIGN_CONFIG_PATH.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    stored_payload = loaded
+            except json.JSONDecodeError:
+                stored_payload = {}
+
+        config = load_campaign_config()
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "config": config,
+                "updatedAt": stored_payload.get("updatedAt", ""),
+                "updatedBy": stored_payload.get("updatedBy", ""),
+                "message": "הגדרות הקמפיין נטענו מהשרת המקומי.",
+            },
+        )
+
+    def handle_campaign_config_save(self) -> None:
+        auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור את הגדרות הקמפיין."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        payload = self.read_json_body()
+        config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+        saved = save_campaign_config(config, auth_context["email"])
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "saved": True,
+                "config": saved.get("config", {}),
+                "updatedAt": saved.get("updatedAt", ""),
+                "updatedBy": saved.get("updatedBy", ""),
+                "message": "הגדרות הקמפיין נשמרו בשרת המקומי.",
+            },
+        )
+        self.audit("campaign_config_saved", auth_context["email"], role=auth_context["role"])
+        return
+        authenticated_email = self.require_authenticated_admin()
+        if not authenticated_email:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור את הגדרות הקמפיין."})
+            return
+
+        payload = self.read_json_body()
+        config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+        saved = save_campaign_config(config, authenticated_email)
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "saved": True,
+                "config": saved.get("config", {}),
+                "updatedAt": saved.get("updatedAt", ""),
+                "updatedBy": saved.get("updatedBy", ""),
+                "message": "הגדרות הקמפיין נשמרו בשרת המקומי.",
+            },
+        )
+
     def handle_source_refresh(self) -> None:
+        auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        config = load_source_config()
+        if config.get("mode") != "api":
+            self.respond_json(HTTPStatus.CONFLICT, {"message": "מקור הנתונים הפעיל מוגדר כרגע כקובץ, לא כ-API."})
+            return
+
+        try:
+            payload = fetch_source_payload(config)
+        except (RuntimeError, ValueError) as exc:
+            self.respond_json(HTTPStatus.BAD_GATEWAY, {"message": str(exc)})
+            return
+
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                **payload,
+                "message": "הנתונים נמשכו בהצלחה מהמערכת החיצונית.",
+            },
+        )
+        self.audit("source_refresh", auth_context["email"], role=auth_context["role"], mode=config.get("mode", "file"))
+        return
         authenticated_email = self.require_authenticated_admin()
         if not authenticated_email:
             self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור."})
@@ -877,6 +1400,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def handle_auth_logout(self) -> None:
         token = self.get_session_token()
+        auth_context = self.get_auth_context()
         if token:
             with get_connection() as connection:
                 ensure_schema(connection)
@@ -887,6 +1411,51 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             {"loggedOut": True},
             extra_headers=[("Set-Cookie", build_set_cookie(None, 0))],
         )
+        self.audit("logout", auth_context["email"] if auth_context else "")
+
+    def handle_auth_change_password(self) -> None:
+        auth_context = self.require_authenticated_admin(ROLE_VIEWER)
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות כדי להחליף סיסמה."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        payload = self.read_json_body()
+        current_password = str(payload.get("currentPassword", ""))
+        new_password = str(payload.get("newPassword", ""))
+        confirm_password = str(payload.get("confirmPassword", ""))
+        if not current_password or not new_password or not confirm_password:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש למלא סיסמה נוכחית, סיסמה חדשה ואימות סיסמה."})
+            return
+        if new_password != confirm_password:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "אימות הסיסמה החדשה לא תואם."})
+            return
+        if len(new_password) < 8:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "הסיסמה החדשה חייבת לכלול לפחות 8 תווים."})
+            return
+
+        with get_connection() as connection:
+            ensure_schema(connection)
+            seed_admins(connection)
+            admin = get_admin(connection, auth_context["email"])
+            if not admin or not admin["password_hash"] or not verify_password(current_password, str(admin["password_hash"])):
+                self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה הנוכחית שגויה."})
+                return
+            update_admin_password(connection, auth_context["email"], new_password)
+            delete_sessions_for_email(connection, auth_context["email"])
+            token = create_session(connection, auth_context["email"])
+
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "changed": True,
+                "message": "הסיסמה הוחלפה בהצלחה.",
+            },
+            extra_headers=[("Set-Cookie", build_set_cookie(token, SESSION_DURATION_HOURS * 60 * 60))],
+        )
+        self.audit("password_changed", auth_context["email"], role=auth_context["role"])
 
     def handle_auth_reset_local(self) -> None:
         payload = self.read_json_body()
@@ -928,6 +1497,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             },
             extra_headers=[("Set-Cookie", build_set_cookie(None, 0))],
         )
+        self.audit("password_reset_local", email)
 
 
 def serve(host: str = "127.0.0.1", port: int = 8767) -> None:

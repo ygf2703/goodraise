@@ -20,6 +20,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 WORK_DIR = Path(os.getenv("YELLOW_DASHBOARD_WORK_DIR", str(ROOT_DIR / "work"))).resolve()
 ASSETS_DIR = WORK_DIR / "assets"
 CONTENT_DIR = WORK_DIR / "content"
+FRONTEND_DIR = WORK_DIR / "frontend"
 SAMPLES_DIR = WORK_DIR / "samples"
 SOURCE_CSV = Path(os.getenv("YELLOW_DASHBOARD_SOURCE_CSV", str(WORK_DIR / "source.csv"))).resolve()
 SAMPLE_SOURCE_CSV = Path(os.getenv("YELLOW_DASHBOARD_SAMPLE_SOURCE_CSV", str(SAMPLES_DIR / "sample-source.csv"))).resolve()
@@ -31,6 +32,9 @@ BACKDROP_PATH = ASSETS_DIR / "dashboard-backdrop.png"
 PROJECT_HERO_IMAGE_PATH = ASSETS_DIR / "campaign-project-hero.jpeg"
 PROJECT_PAGE_CONTENT_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_PROJECT_PAGE_CONTENT_PATH", str(CONTENT_DIR / "project-page-default.md"))
+).resolve()
+FRONTEND_INTELLIGENCE_PATH = Path(
+    os.getenv("YELLOW_DASHBOARD_FRONTEND_INTELLIGENCE_PATH", str(FRONTEND_DIR / "goodraise-intelligence.js"))
 ).resolve()
 LEGACY_LOGO_PATH = WORK_DIR / "brand-logo.png"
 OUTPUTS_DIR = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_DIR", str(ROOT_DIR / "outputs"))).resolve()
@@ -251,6 +255,12 @@ def load_markdown_text(path: Path) -> str:
     return path.read_text(encoding="utf-8").strip()
 
 
+def load_text(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8")
+
+
 def build_default_campaign_page_settings() -> dict:
     return {
         "projectDatesLabel": "23.08.2026–01.09.2026",
@@ -397,6 +407,7 @@ def build_auth_config() -> dict:
             "logoutEndpoint": f"{prefix}/logout",
             "resetEndpoint": "",
             "datasetEndpoint": f"{base_url}/api/admin/dataset" if base_url else "/api/admin/dataset",
+            "campaignConfigEndpoint": f"{base_url}/api/admin/campaign-config" if base_url else "/api/admin/campaign-config",
             "sourceConfigEndpoint": f"{base_url}/api/admin/source-config" if base_url else "/api/admin/source-config",
             "sourceRefreshEndpoint": f"{base_url}/api/admin/source-refresh" if base_url else "/api/admin/source-refresh",
         }
@@ -410,6 +421,7 @@ def build_auth_config() -> dict:
         "logoutEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGOUT_ENDPOINT", "http://127.0.0.1:8767/api/auth/logout"),
         "resetEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_RESET_ENDPOINT", "http://127.0.0.1:8767/api/auth/reset-local"),
         "datasetEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_DATASET_ENDPOINT", "http://127.0.0.1:8767/api/admin/dataset"),
+        "campaignConfigEndpoint": os.getenv("YELLOW_DASHBOARD_CAMPAIGN_CONFIG_ENDPOINT", "http://127.0.0.1:8767/api/admin/campaign-config"),
         "sourceConfigEndpoint": os.getenv("YELLOW_DASHBOARD_SOURCE_CONFIG_ENDPOINT", "http://127.0.0.1:8767/api/admin/source-config"),
         "sourceRefreshEndpoint": os.getenv("YELLOW_DASHBOARD_SOURCE_REFRESH_ENDPOINT", "http://127.0.0.1:8767/api/admin/source-refresh"),
     }
@@ -434,6 +446,7 @@ def build_fragment(
     prize_json = json.dumps(prize_model, ensure_ascii=False, separators=(",", ":"))
     campaign_page_settings_json = json.dumps(campaign_page_settings, ensure_ascii=False, separators=(",", ":"))
     auth_config_json = json.dumps(build_auth_config(), ensure_ascii=False, separators=(",", ":"))
+    intelligence_module = load_text(FRONTEND_INTELLIGENCE_PATH).strip()
 
     template = textwrap.dedent(
         """
@@ -3567,6 +3580,7 @@ def build_fragment(
               const PRIZE_STORAGE_KEY = "yellow-dashboard.prize-model";
               const GOAL_STORAGE_KEY = "yellow-dashboard.goals";
               const CAMPAIGN_PAGE_SETTINGS_KEY = "yellow-dashboard.campaign-page-settings";
+              const CAMPAIGN_BUILDER_CONFIG_KEY = "yellow-dashboard.campaign-builder-config";
               const AMBASSADOR_DIRECTORY_KEY = "yellow-dashboard.ambassador-directory";
               const LAST_ADMIN_EMAIL_KEY = "yellow-dashboard.last-admin-email";
               const XLSX_MODULE_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
@@ -3574,6 +3588,7 @@ def build_fragment(
               root.style.setProperty("--brand-pattern-campaign", `url("${INITIAL_CAMPAIGN_LOGO}")`);
               root.style.setProperty("--brand-pattern-organization", `url("${INITIAL_ORG_LOGO}")`);
               root.style.setProperty("--dashboard-backdrop", INITIAL_BACKDROP ? `url("${INITIAL_BACKDROP}")` : "none");
+              __INTELLIGENCE_MODULE__
 
               const elements = {
                 topbarCampaignLogo: root.querySelector("#topbar-campaign-logo"),
@@ -3709,12 +3724,14 @@ def build_fragment(
                 prizeModel: readStoredPrizeModel() || INITIAL_PRIZES,
                 sourceConfig: getDefaultSourceConfig(),
                 campaignPage: initialCampaignPageSettings,
+                campaignBuilder: readStoredCampaignBuilderConfig(),
                 ambassadorDirectory: readStoredAmbassadorDirectory(),
                 session: null,
                 auth: {
                   backendAvailable: false,
                   setupMode: false,
                   adminDatasetLoaded: false,
+                  campaignConfigLoaded: false,
                 },
                 filters: getDefaultFilters(cloneSerializable(INITIAL_META)),
                 view: {
@@ -3727,8 +3744,13 @@ def build_fragment(
                   page: "project",
                   tableExpanded: false,
                   adminTab: "insights",
+                  campaignBuilderStep: 1,
                   campaignSettingsStatus: {
                     message: "ההגדרות נשמרות מקומית בדפדפן זה בלבד.",
+                    tone: "neutral",
+                  },
+                  campaignBuilderStatus: {
+                    message: "טיוטת הקמפיין עדיין לא נשמרה בשרת.",
                     tone: "neutral",
                   },
                   ambassadorDirectoryStatus: {
@@ -3949,8 +3971,9 @@ def build_fragment(
               function storePrizeModel(model) {
                 try {
                   window.localStorage.setItem(PRIZE_STORAGE_KEY, JSON.stringify(model));
+                  return true;
                 } catch (_error) {
-                  return;
+                  return false;
                 }
               }
 
@@ -3980,8 +4003,9 @@ def build_fragment(
               function storeGoals(goals) {
                 try {
                   window.localStorage.setItem(GOAL_STORAGE_KEY, JSON.stringify(goals));
+                  return true;
                 } catch (_error) {
-                  return;
+                  return false;
                 }
               }
 
@@ -4064,6 +4088,9 @@ def build_fragment(
                       email,
                       phone,
                       nickname,
+                      team: String(record?.team || "").trim(),
+                      personalTarget: Number(record?.personalTarget || 0),
+                      status: String(record?.status || "").trim().toLowerCase() || "active",
                     };
                   })
                   .filter(Boolean)
@@ -4159,6 +4186,9 @@ def build_fragment(
                   const email = pickValue(row, ["email", "Email", "מייל", "דואל"]);
                   const phone = pickValue(row, ["phone", "Phone", "טלפון", "mobile"]);
                   const nickname = normalizeUrlSlug(pickValue(row, ["nickname", "Nickname", "alias", "slug", "כינוי"]));
+                  const team = pickValue(row, ["team", "Team", "group", "קבוצה", "צוות"]);
+                  const personalTarget = pickValue(row, ["personal_target", "target", "Target", "יעד אישי"]);
+                  const status = pickValue(row, ["status", "Status", "סטטוס"]);
                   if (!fullName || !nickname) {
                     missingRows.push(index + 2);
                     return;
@@ -4168,7 +4198,15 @@ def build_fragment(
                     return;
                   }
                   seenNicknames.add(nickname);
-                  records.push({ fullName, email, phone, nickname });
+                  records.push({
+                    fullName,
+                    email,
+                    phone,
+                    nickname,
+                    team,
+                    personalTarget: Number(personalTarget || 0),
+                    status: String(status || "").trim().toLowerCase() || "active",
+                  });
                 });
 
                 return {
@@ -4266,6 +4304,30 @@ def build_fragment(
                 };
               }
 
+              function getCampaignBuilderStatus() {
+                return state.ui.campaignBuilderStatus || {
+                  message: "טיוטת הקמפיין עדיין לא נשמרה בשרת.",
+                  tone: "neutral",
+                };
+              }
+
+              function setCampaignBuilderStatus(message, tone = "neutral") {
+                state.ui.campaignBuilderStatus = {
+                  message: String(message || "טיוטת הקמפיין עדיין לא נשמרה בשרת."),
+                  tone: String(tone || "neutral"),
+                };
+                const status = elements.campaignDesignerPanel?.querySelector("[data-builder-status]");
+                if (!status) {
+                  return;
+                }
+                status.textContent = state.ui.campaignBuilderStatus.message;
+                if (state.ui.campaignBuilderStatus.tone === "neutral") {
+                  status.removeAttribute("data-tone");
+                } else {
+                  status.dataset.tone = state.ui.campaignBuilderStatus.tone;
+                }
+              }
+
               function persistCampaignPageSettings(
                 settings,
                 successMessage = "ההגדרות נשמרו מקומית בדפדפן זה.",
@@ -4278,6 +4340,507 @@ def build_fragment(
                 }
                 setCampaignSettingsStatus(failureMessage, "warning");
                 return false;
+              }
+
+              function buildProjectWindowLabelFromBasics(basics) {
+                const start = basics?.startDate ? formatDate(basics.startDate) : "";
+                const end = basics?.endDate ? formatDate(basics.endDate) : "";
+                if (start && end) {
+                  return `${start}–${end}`;
+                }
+                return start || end || INITIAL_CAMPAIGN_PAGE_SETTINGS.projectDatesLabel || "";
+              }
+
+              function createCampaignBuilderDefaults() {
+                const storedGoals = readStoredGoals();
+                const storedPrizes = readStoredPrizeModel() || INITIAL_PRIZES;
+                return {
+                  basics: {
+                    campaignName: String(INITIAL_CAMPAIGN_PAGE_SETTINGS.title || "").trim(),
+                    organizationName: "אחים לסמל",
+                    slug: normalizeUrlSlug(INITIAL_CAMPAIGN_PAGE_SETTINGS.projectSlug || "campaign"),
+                    target: Number(storedGoals.total || 0),
+                    currency: "ILS",
+                    startDate: String(INITIAL_META.defaultFrom || "").trim(),
+                    startTime: "00:00",
+                    endDate: String(INITIAL_META.defaultTo || "").trim(),
+                    endTime: "23:59",
+                    timeZone: "Asia/Jerusalem",
+                    status: "draft",
+                  },
+                  teams: {
+                    enabled: false,
+                    groups: [],
+                  },
+                  permissions: {
+                    admins: [],
+                    managers: [],
+                    viewers: [],
+                  },
+                  ambassadors: {
+                    importMode: "csv",
+                    personalTargetDefault: 0,
+                    manualDraft: {
+                      fullName: "",
+                      nickname: "",
+                      email: "",
+                      phone: "",
+                      team: "",
+                      personalTarget: "",
+                    },
+                  },
+                  goals: {
+                    ambassadorGoal: 0,
+                    teamGoal: 0,
+                    tierRuleNote: String(storedPrizes?.tierRuleNote || "").trim(),
+                  },
+                  templates: {
+                    type: "annual-recurring",
+                    duplicatedFromSlug: "",
+                  },
+                  review: {
+                    launchedAt: "",
+                  },
+                  ui: {
+                    previewMode: "desktop",
+                  },
+                  meta: {
+                    lastSavedAt: "",
+                    lastSavedBy: "",
+                  },
+                };
+              }
+
+              function normalizeCampaignBuilderConfig(value) {
+                const defaults = createCampaignBuilderDefaults();
+                const candidate = value && typeof value === "object" ? value : {};
+                const basics = candidate.basics && typeof candidate.basics === "object" ? candidate.basics : {};
+                const teams = candidate.teams && typeof candidate.teams === "object" ? candidate.teams : {};
+                const permissions = candidate.permissions && typeof candidate.permissions === "object" ? candidate.permissions : {};
+                const ambassadors = candidate.ambassadors && typeof candidate.ambassadors === "object" ? candidate.ambassadors : {};
+                const goals = candidate.goals && typeof candidate.goals === "object" ? candidate.goals : {};
+                const templates = candidate.templates && typeof candidate.templates === "object" ? candidate.templates : {};
+                const review = candidate.review && typeof candidate.review === "object" ? candidate.review : {};
+                const uiState = candidate.ui && typeof candidate.ui === "object" ? candidate.ui : {};
+                const meta = candidate.meta && typeof candidate.meta === "object" ? candidate.meta : {};
+                return {
+                  basics: {
+                    campaignName: String(basics.campaignName || defaults.basics.campaignName || "").trim(),
+                    organizationName: String(basics.organizationName || defaults.basics.organizationName || "").trim(),
+                    slug: normalizeUrlSlug(basics.slug || defaults.basics.slug || "campaign"),
+                    target: Number(basics.target || defaults.basics.target || 0),
+                    currency: ["ILS", "USD", "EUR"].includes(String(basics.currency || "").trim().toUpperCase())
+                      ? String(basics.currency).trim().toUpperCase()
+                      : defaults.basics.currency,
+                    startDate: String(basics.startDate || defaults.basics.startDate || "").trim(),
+                    startTime: String(basics.startTime || defaults.basics.startTime || "00:00").trim(),
+                    endDate: String(basics.endDate || defaults.basics.endDate || "").trim(),
+                    endTime: String(basics.endTime || defaults.basics.endTime || "23:59").trim(),
+                    timeZone: String(basics.timeZone || defaults.basics.timeZone || "Asia/Jerusalem").trim(),
+                    status: ["draft", "scheduled", "live", "paused", "completed", "archived"].includes(String(basics.status || "").trim().toLowerCase())
+                      ? String(basics.status).trim().toLowerCase()
+                      : defaults.basics.status,
+                  },
+                  teams: {
+                    enabled: Boolean(teams.enabled),
+                    groups: Array.isArray(teams.groups)
+                      ? teams.groups
+                          .map((group) => ({
+                            name: String(group?.name || "").trim(),
+                            manager: String(group?.manager || "").trim(),
+                            target: Number(group?.target || 0),
+                          }))
+                          .filter((group) => group.name)
+                      : [],
+                  },
+                  permissions: {
+                    admins: Array.isArray(permissions.admins) ? permissions.admins.map((item) => normalizeSearchToken(item)).filter(Boolean) : [],
+                    managers: Array.isArray(permissions.managers) ? permissions.managers.map((item) => normalizeSearchToken(item)).filter(Boolean) : [],
+                    viewers: Array.isArray(permissions.viewers) ? permissions.viewers.map((item) => normalizeSearchToken(item)).filter(Boolean) : [],
+                  },
+                  ambassadors: {
+                    importMode: String(ambassadors.importMode || defaults.ambassadors.importMode || "csv").trim().toLowerCase() === "manual" ? "manual" : "csv",
+                    personalTargetDefault: Number(ambassadors.personalTargetDefault || 0),
+                    manualDraft: {
+                      fullName: String(ambassadors.manualDraft?.fullName || "").trim(),
+                      nickname: normalizeUrlSlug(ambassadors.manualDraft?.nickname || ""),
+                      email: normalizeSearchToken(ambassadors.manualDraft?.email || ""),
+                      phone: String(ambassadors.manualDraft?.phone || "").trim(),
+                      team: String(ambassadors.manualDraft?.team || "").trim(),
+                      personalTarget: String(ambassadors.manualDraft?.personalTarget || "").trim(),
+                    },
+                  },
+                  goals: {
+                    ambassadorGoal: Number(goals.ambassadorGoal || 0),
+                    teamGoal: Number(goals.teamGoal || 0),
+                    tierRuleNote: String(goals.tierRuleNote || defaults.goals.tierRuleNote || "").trim(),
+                  },
+                  templates: {
+                    type: ["ambassador", "community", "emergency", "annual-recurring", "short", "long-running"].includes(String(templates.type || "").trim())
+                      ? String(templates.type).trim()
+                      : defaults.templates.type,
+                    duplicatedFromSlug: normalizeUrlSlug(templates.duplicatedFromSlug || ""),
+                  },
+                  review: {
+                    launchedAt: String(review.launchedAt || "").trim(),
+                  },
+                  ui: {
+                    previewMode: String(uiState.previewMode || defaults.ui.previewMode || "desktop").trim().toLowerCase() === "mobile" ? "mobile" : "desktop",
+                  },
+                  meta: {
+                    lastSavedAt: String(meta.lastSavedAt || "").trim(),
+                    lastSavedBy: normalizeSearchToken(meta.lastSavedBy || ""),
+                  },
+                };
+              }
+
+              function readStoredCampaignBuilderConfig() {
+                try {
+                  const raw = window.localStorage.getItem(CAMPAIGN_BUILDER_CONFIG_KEY);
+                  return raw ? normalizeCampaignBuilderConfig(JSON.parse(raw)) : normalizeCampaignBuilderConfig(null);
+                } catch (_error) {
+                  return normalizeCampaignBuilderConfig(null);
+                }
+              }
+
+              function storeCampaignBuilderConfig(config) {
+                try {
+                  window.localStorage.setItem(CAMPAIGN_BUILDER_CONFIG_KEY, JSON.stringify(normalizeCampaignBuilderConfig(config)));
+                  return true;
+                } catch (_error) {
+                  return false;
+                }
+              }
+
+              function getCampaignBuilderSnapshot() {
+                const builder = normalizeCampaignBuilderConfig(state.campaignBuilder);
+                const prizeModel = cloneSerializable(state.prizeModel || INITIAL_PRIZES);
+                return {
+                  basics: {
+                    ...builder.basics,
+                    slug: getCampaignProjectSlug(),
+                    target: Number(state.goals.total || builder.basics.target || 0),
+                  },
+                  branding: {
+                    eyebrow: state.campaignPage.eyebrow,
+                    projectDatesLabel: state.campaignPage.projectDatesLabel,
+                    title: state.campaignPage.title,
+                    subtitle: state.campaignPage.subtitle,
+                    storyMarkdown: state.campaignPage.storyMarkdown,
+                    primaryCtaLabel: state.campaignPage.primaryCtaLabel,
+                    secondaryCtaLabel: state.campaignPage.secondaryCtaLabel,
+                    mediaType: state.campaignPage.mediaType,
+                    mediaUrl: state.campaignPage.mediaUrl,
+                    mediaAlt: state.campaignPage.mediaAlt,
+                    fontFamily: state.campaignPage.fontFamily,
+                    theme: cloneSerializable(state.campaignPage.theme),
+                  },
+                  donation: {
+                    externalDonationUrl: state.campaignPage.externalDonationUrl,
+                    trustNote: state.campaignPage.trustNote,
+                    successHint: state.campaignPage.successHint,
+                    showRecurring: state.campaignPage.showRecurring !== false,
+                    minimumDonation: Number(state.campaignPage.amountCards?.[0]?.value || 0),
+                    recommendedAmount: Number(state.campaignPage.amountCards?.[2]?.value || state.campaignPage.amountCards?.[0]?.value || 0),
+                    presets: cloneSerializable(state.campaignPage.amountCards || []),
+                  },
+                  ambassadors: {
+                    ...cloneSerializable(builder.ambassadors),
+                    records: cloneSerializable(state.ambassadorDirectory || []),
+                  },
+                  teams: cloneSerializable(builder.teams),
+                  goals: {
+                    ...cloneSerializable(builder.goals),
+                    campaignGoal: Number(state.goals.total || 0),
+                    dailyGoal: Number(state.goals.daily || 0),
+                    placePrizes: cloneSerializable(prizeModel.placePrizes || []),
+                    tierPrizes: cloneSerializable(prizeModel.tierPrizes || []),
+                  },
+                  dataSource: cloneSerializable(state.sourceConfig),
+                  permissions: cloneSerializable(builder.permissions),
+                  templates: cloneSerializable(builder.templates),
+                  review: cloneSerializable(builder.review),
+                  ui: cloneSerializable(builder.ui),
+                  meta: cloneSerializable(builder.meta),
+                };
+              }
+
+              function applyCampaignBuilderConfig(config, options = {}) {
+                const raw = config && typeof config === "object" ? config : {};
+                const normalized = normalizeCampaignBuilderConfig(raw);
+                const branding = raw.branding && typeof raw.branding === "object" ? raw.branding : {};
+                const donation = raw.donation && typeof raw.donation === "object" ? raw.donation : {};
+                const goals = raw.goals && typeof raw.goals === "object" ? raw.goals : {};
+                state.campaignBuilder = normalized;
+                state.campaignPage = normalizeCampaignPageSettings({
+                  ...state.campaignPage,
+                  projectSlug: normalized.basics.slug,
+                  projectDatesLabel: buildProjectWindowLabelFromBasics(normalized.basics),
+                  eyebrow: branding.eyebrow || state.campaignPage.eyebrow,
+                  title: branding.title || normalized.basics.campaignName || state.campaignPage.title,
+                  subtitle: branding.subtitle || state.campaignPage.subtitle,
+                  storyMarkdown: branding.storyMarkdown || state.campaignPage.storyMarkdown,
+                  primaryCtaLabel: branding.primaryCtaLabel || state.campaignPage.primaryCtaLabel,
+                  secondaryCtaLabel: branding.secondaryCtaLabel || state.campaignPage.secondaryCtaLabel,
+                  externalDonationUrl: donation.externalDonationUrl || state.campaignPage.externalDonationUrl,
+                  trustNote: donation.trustNote || state.campaignPage.trustNote,
+                  successHint: donation.successHint || state.campaignPage.successHint,
+                  mediaType: branding.mediaType || state.campaignPage.mediaType,
+                  mediaUrl: branding.mediaUrl || state.campaignPage.mediaUrl,
+                  mediaAlt: branding.mediaAlt || state.campaignPage.mediaAlt,
+                  fontFamily: branding.fontFamily || state.campaignPage.fontFamily,
+                  theme: branding.theme || state.campaignPage.theme,
+                  amountCards: donation.presets || state.campaignPage.amountCards,
+                  showRecurring: donation.showRecurring !== false,
+                });
+                state.goals = {
+                  total: Number(goals.campaignGoal || normalized.basics.target || 0),
+                  daily: Number(goals.dailyGoal || 0),
+                };
+                if (goals.placePrizes || goals.tierPrizes) {
+                  state.prizeModel = {
+                    placePrizes: cloneSerializable(goals.placePrizes || state.prizeModel?.placePrizes || []),
+                    tierPrizes: cloneSerializable(goals.tierPrizes || state.prizeModel?.tierPrizes || []),
+                    tierRuleNote: String(goals.tierRuleNote || state.prizeModel?.tierRuleNote || "").trim(),
+                  };
+                }
+                if (!options.preserveSourceConfig && raw.dataSource) {
+                  state.sourceConfig = normalizeSourceConfig(raw.dataSource);
+                }
+                if (Array.isArray(raw.ambassadors?.records)) {
+                  state.ambassadorDirectory = normalizeAmbassadorDirectory(raw.ambassadors.records);
+                }
+                state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
+              }
+
+              function formatCampaignSavedAt(isoText) {
+                if (!isoText) {
+                  return "טרם נשמר";
+                }
+                return formatDateTime(isoText);
+              }
+
+              function buildCampaignPreflight(snapshot) {
+                const ready = [];
+                const warnings = [];
+                const blocking = [];
+                const basics = snapshot.basics || {};
+                const donation = snapshot.donation || {};
+                const ambassadors = snapshot.ambassadors || {};
+                const goals = snapshot.goals || {};
+                const dataSource = snapshot.dataSource || {};
+                const permissions = snapshot.permissions || {};
+
+                if (basics.campaignName) {
+                  ready.push(`זהות קמפיין: ${basics.campaignName}`);
+                } else {
+                  blocking.push("חסרה כותרת קמפיין.");
+                }
+                if (basics.slug) {
+                  ready.push(`Slug ציבורי: ${basics.slug}`);
+                } else {
+                  blocking.push("חסר slug ציבורי.");
+                }
+                if (Number(basics.target || 0) > 0) {
+                  ready.push(`יעד קמפיין: ${formatAmount(basics.target)}`);
+                } else {
+                  blocking.push("יש להגדיר יעד גיוס גדול מ־0.");
+                }
+                if (basics.startDate && basics.endDate) {
+                  ready.push(`חלון קמפיין: ${formatDate(basics.startDate)} עד ${formatDate(basics.endDate)}`);
+                  if (`${basics.endDate}T${basics.endTime || "23:59"}` < `${basics.startDate}T${basics.startTime || "00:00"}`) {
+                    blocking.push("תאריך/שעת הסיום מוקדמים מתאריך/שעת ההתחלה.");
+                  }
+                } else {
+                  blocking.push("יש להגדיר תאריכי התחלה וסיום.");
+                }
+                if (donation.presets?.length) {
+                  ready.push(`${formatNumber(donation.presets.length)} סכומי תרומה מוכנים.`);
+                } else {
+                  blocking.push("אין סכומי תרומה מוגדרים.");
+                }
+                if (donation.externalDonationUrl) {
+                  ready.push("קיים handoff לסליקה חיצונית.");
+                } else {
+                  blocking.push("חסר קישור חיצוני להמשך התרומה.");
+                }
+                if (ambassadors.records?.length) {
+                  ready.push(`${formatNumber(ambassadors.records.length)} שגרירים מוכנים.`);
+                } else {
+                  warnings.push("עדיין לא נטענו שגרירים.");
+                }
+                if (goals.placePrizes?.length || goals.tierPrizes?.length) {
+                  ready.push("מודל פרסים פעיל.");
+                } else {
+                  warnings.push("אין טבלת פרסים פעילה.");
+                }
+                if (dataSource.mode === "api") {
+                  if (dataSource.api?.endpoint) {
+                    ready.push("חיבור API הוגדר.");
+                  } else {
+                    blocking.push("מצב API נבחר אך חסר endpoint.");
+                  }
+                } else {
+                  warnings.push("המערכת במצב טעינת קובץ ולא במצב API.");
+                }
+                if ((permissions.admins?.length || 0) + (permissions.managers?.length || 0) > 0) {
+                  ready.push("הוגדרו בעלי גישה ניהולית לקמפיין.");
+                } else {
+                  warnings.push("לא הוגדרו עדיין תפקידי מנהלים בתוך ה־builder.");
+                }
+                return { ready, warnings, blocking };
+              }
+
+              function setValueAtPath(target, path, rawValue) {
+                const segments = String(path || "").split(".").filter(Boolean);
+                if (!segments.length || !target || typeof target !== "object") {
+                  return;
+                }
+                let current = target;
+                while (segments.length > 1) {
+                  const segment = segments.shift();
+                  if (!current[segment] || typeof current[segment] !== "object") {
+                    current[segment] = {};
+                  }
+                  current = current[segment];
+                }
+                current[segments[0]] = rawValue;
+              }
+
+              function parseEmailLines(text) {
+                return String(text || "")
+                  .split(/\r?\n|,/)
+                  .map((item) => normalizeSearchToken(item))
+                  .filter(Boolean);
+              }
+
+              function serializeEmailLines(items) {
+                return Array.isArray(items) ? items.join("\n") : "";
+              }
+
+              function applyCampaignTemplate(templateType) {
+                const template = String(templateType || "").trim();
+                const nextBuilder = normalizeCampaignBuilderConfig(state.campaignBuilder);
+                nextBuilder.templates.type = template;
+                if (template === "emergency") {
+                  nextBuilder.basics.status = "scheduled";
+                  nextBuilder.basics.endDate = nextBuilder.basics.startDate || nextBuilder.basics.endDate;
+                  state.campaignPage.primaryCtaLabel = "לתרומה מיידית";
+                } else if (template === "community") {
+                  state.campaignPage.primaryCtaLabel = "מצטרפים לקמפיין הקהילתי";
+                } else if (template === "long-running") {
+                  nextBuilder.basics.status = "live";
+                } else {
+                  state.campaignPage.primaryCtaLabel = INITIAL_CAMPAIGN_PAGE_SETTINGS.primaryCtaLabel;
+                }
+                state.campaignBuilder = normalizeCampaignBuilderConfig(nextBuilder);
+                queueCampaignBuilderAutosave("תבנית הקמפיין עודכנה ונשמרת בטיוטה.");
+              }
+
+              function duplicateCampaignBuilderDraft() {
+                const snapshot = getCampaignBuilderSnapshot();
+                const copySlug = normalizeUrlSlug(`${snapshot.basics.slug || "campaign"}-copy`);
+                snapshot.basics.campaignName = `${snapshot.basics.campaignName || "Campaign"} (Copy)`;
+                snapshot.basics.slug = copySlug;
+                snapshot.basics.status = "draft";
+                snapshot.templates = {
+                  ...snapshot.templates,
+                  duplicatedFromSlug: getCampaignProjectSlug(),
+                };
+                snapshot.review = {
+                  ...snapshot.review,
+                  launchedAt: "",
+                };
+                snapshot.meta = {
+                  ...snapshot.meta,
+                  lastSavedAt: "",
+                  lastSavedBy: "",
+                };
+                applyCampaignBuilderConfig(snapshot);
+                persistCampaignPageSettings(state.campaignPage, "נוצרה טיוטת קמפיין משוכפלת.");
+                storeGoals(state.goals);
+                storePrizeModel(state.prizeModel);
+                storeAmbassadorDirectory(state.ambassadorDirectory);
+                storeCampaignBuilderConfig(state.campaignBuilder);
+                setCampaignBuilderStatus(`נוצרה טיוטת שכפול חדשה עבור ${snapshot.basics.campaignName}.`, "success");
+                renderCampaignDesigner(true);
+                renderProjectPage();
+              }
+
+              let campaignBuilderAutosaveTimerId = 0;
+
+              function clearCampaignBuilderAutosaveTimer() {
+                if (campaignBuilderAutosaveTimerId) {
+                  window.clearTimeout(campaignBuilderAutosaveTimerId);
+                  campaignBuilderAutosaveTimerId = 0;
+                }
+              }
+
+              function queueCampaignBuilderAutosave(message = "טיוטת הקמפיין נשמרת...") {
+                clearCampaignBuilderAutosaveTimer();
+                setCampaignBuilderStatus(message, "neutral");
+                campaignBuilderAutosaveTimerId = window.setTimeout(() => {
+                  void saveCampaignBuilderConfig({ silent: true });
+                }, 700);
+              }
+
+              async function saveCampaignBuilderConfig(options = {}) {
+                const snapshot = getCampaignBuilderSnapshot();
+                const persistedLocal = [
+                  storeCampaignBuilderConfig(state.campaignBuilder),
+                  storeCampaignPageSettings(state.campaignPage),
+                  storeGoals(state.goals),
+                  storePrizeModel(state.prizeModel),
+                  storeAmbassadorDirectory(state.ambassadorDirectory),
+                ].every(Boolean);
+                if (!persistedLocal && !options.silent) {
+                  setCampaignBuilderStatus("חלק מהטיוטה לא נשמר מקומית בדפדפן.", "warning");
+                }
+                if (!canUseBackendAuth() || !AUTH_CONFIG.campaignConfigEndpoint || !isManagerAuthenticated()) {
+                  state.campaignBuilder.meta.lastSavedAt = new Date().toISOString();
+                  state.campaignBuilder.meta.lastSavedBy = state.session?.email || "";
+                  storeCampaignBuilderConfig(state.campaignBuilder);
+                  setCampaignBuilderStatus(`טיוטת קמפיין נשמרה מקומית · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                  return snapshot;
+                }
+                const { response, payload } = await authRequest(AUTH_CONFIG.campaignConfigEndpoint, {
+                  method: "POST",
+                  body: { config: snapshot },
+                });
+                if (!response.ok) {
+                  throw new Error(payload?.message || "שמירת טיוטת הקמפיין בשרת נכשלה.");
+                }
+                state.campaignBuilder.meta.lastSavedAt = payload?.updatedAt || new Date().toISOString();
+                state.campaignBuilder.meta.lastSavedBy = payload?.updatedBy || state.session?.email || "";
+                storeCampaignBuilderConfig(state.campaignBuilder);
+                setCampaignBuilderStatus(`נשמר בשרת · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                return payload?.config || snapshot;
+              }
+
+              async function hydrateCampaignBuilderConfig() {
+                const localConfig = readStoredCampaignBuilderConfig();
+                state.campaignBuilder = normalizeCampaignBuilderConfig(localConfig);
+                applyCampaignBuilderConfig(getCampaignBuilderSnapshot(), { preserveSourceConfig: true });
+                if (!canUseBackendAuth() || !AUTH_CONFIG.campaignConfigEndpoint || !isManagerAuthenticated()) {
+                  state.auth.campaignConfigLoaded = false;
+                  return state.campaignBuilder;
+                }
+                try {
+                  const { response, payload } = await authRequest(AUTH_CONFIG.campaignConfigEndpoint);
+                  if (response.ok && payload?.config) {
+                    applyCampaignBuilderConfig(payload.config, { preserveSourceConfig: true });
+                    state.auth.campaignConfigLoaded = true;
+                    state.campaignBuilder.meta.lastSavedAt = String(payload.updatedAt || "").trim();
+                    state.campaignBuilder.meta.lastSavedBy = normalizeSearchToken(payload.updatedBy || "");
+                    storeCampaignBuilderConfig(state.campaignBuilder);
+                    setCampaignBuilderStatus(`נטען מהשרת · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                    return state.campaignBuilder;
+                  }
+                } catch (_error) {
+                  state.auth.campaignConfigLoaded = false;
+                }
+                setCampaignBuilderStatus("לא נטענה טיוטת שרת. עובדים כרגע על הגדרות מקומיות.", "warning");
+                return state.campaignBuilder;
               }
 
               function readStoredAdminEmail() {
@@ -4752,6 +5315,7 @@ def build_fragment(
 
               async function loadProtectedManagerData() {
                 await hydrateSourceConfig();
+                await hydrateCampaignBuilderConfig();
                 if (state.sourceConfig.mode === "api") {
                   try {
                     return await refreshSourceDataFromApi({ silent: true, render: false });
@@ -5568,6 +6132,11 @@ def build_fragment(
                 return `${prefix}${Math.abs(value * 100).toFixed(1)} נק'`;
               }
 
+              function formatSignedPercent(value) {
+                const prefix = value > 0 ? "+" : value < 0 ? "-" : "";
+                return `${prefix}${Math.abs(value * 100).toFixed(1)}%`;
+              }
+
               function buildDatasetSummary(rows, label) {
                 const total = sumAmount(rows);
                 const deals = rows.length;
@@ -5663,6 +6232,23 @@ def build_fragment(
                   facts,
                   critical,
                   insights,
+                };
+              }
+
+              const intelligenceEngine = createGoodRaiseIntelligence({
+                groupBy,
+                sumAmount,
+                buildLeaderboard,
+              });
+
+              function buildIntelligenceContext(rows) {
+                return {
+                  rows,
+                  meta: state.meta,
+                  goals: state.goals,
+                  prizeModel: state.prizeModel,
+                  ambassadorDirectory: state.ambassadorDirectory,
+                  campaignBuilder: state.campaignBuilder,
                 };
               }
 
@@ -5911,28 +6497,26 @@ def build_fragment(
               }
 
               function renderMetrics(rows) {
+                const context = buildIntelligenceContext(rows);
                 const total = sumAmount(rows);
-                const ambassadors = new Set(rows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך"));
-                const average = rows.length ? total / rows.length : 0;
-                const successCount = rows.filter((row) => row.status === "success").length;
-                const successRate = rows.length ? successCount / rows.length : 0;
-                const peakHourEntry = Array.from(groupBy(rows, (row) => row.hour).entries())
-                  .map(([hour, items]) => [hour, sumAmount(items)])
-                  .sort((left, right) => right[1] - left[1])[0];
-                const peakHourLabel = peakHourEntry ? `${String(peakHourEntry[0]).padStart(2, "0")}:00` : "אין";
-                const topAmbassador = buildLeaderboard(rows)[0] || null;
                 const totalGoal = Number(state.goals.total || 0);
-                const totalGoalProgress = totalGoal > 0 ? total / totalGoal : 0;
-
+                const health = intelligenceEngine.buildHealthModel(rows, context);
+                const velocity = intelligenceEngine.buildVelocityModel(rows, context);
+                const forecast = intelligenceEngine.buildForecastModel(rows, context);
+                const ambassadors = intelligenceEngine.buildAmbassadorModels(rows, context);
+                const activeAmbassadors = ambassadors.filter((item) => item.hasStarted).length;
+                const average = rows.length ? total / rows.length : 0;
+                const targetPct = totalGoal > 0 ? total / totalGoal : 0;
+                const timeRemainingHours = Math.max(0, Math.round(velocity.bounds.remainingHours));
                 const stats = [
-                  { label: "סך הגיוס", value: formatAmount(total), detail: `${formatNumber(rows.length)} עסקאות בפילוח` },
-                  { label: "מספר עסקאות", value: formatNumber(rows.length), detail: `שיעור הצלחה ${formatPercent(successRate)}` },
-                  { label: "ממוצע לעסקה", value: formatAmount(average), detail: "לפי התצוגה הפעילה" },
-                  { label: "שגרירים פעילים", value: formatNumber(ambassadors.size), detail: "עם לפחות עסקה אחת" },
-                  { label: "ביצוע מול יעד", value: totalGoal ? formatPercent(totalGoalProgress) : "ללא יעד", detail: totalGoal ? `${formatAmount(Math.max(totalGoal - total, 0))} נותרו ליעד` : "הגדירו יעד כולל" },
-                  { label: "שגריר מוביל", value: topAmbassador ? topAmbassador.ambassador : "אין", detail: topAmbassador ? formatAmount(topAmbassador.total) : "אין נתונים" },
-                  { label: "שעת שיא", value: peakHourLabel, detail: peakHourEntry ? formatAmount(peakHourEntry[1]) : "אין נתונים" },
-                  { label: "עסקאות מחויבות", value: formatNumber(successCount), detail: `${formatPercent(successRate)} מסך העסקאות` },
+                  { label: "סכום שגויס", value: totalGoal ? `${formatAmount(total)} / ${formatAmount(totalGoal)}` : formatAmount(total), detail: totalGoal ? `${formatPercent(targetPct)} מהיעד` : "עדיין לא הוגדר יעד" },
+                  { label: "תחזית סיום", value: formatAmount(forecast.projectedFinal), detail: totalGoal ? `${formatPercent(forecast.projectedTargetPct)} מהיעד · ${forecast.confidence}` : forecast.confidenceReason },
+                  { label: "זמן שנותר", value: `${formatNumber(timeRemainingHours)} שעות`, detail: `חלון קמפיין: ${formatPercent(velocity.bounds.elapsedRatio)} הושלם` },
+                  { label: "תרומות", value: formatNumber(rows.length), detail: `ממוצע לתרומה ${formatAmount(average)}` },
+                  { label: "שגרירים פעילים", value: formatNumber(activeAmbassadors), detail: `${formatNumber(ambassadors.length)} שגרירים מזוהים` },
+                  { label: "קצב גיוס נוכחי", value: `${formatAmount(velocity.last3Hours.amountPerHour)}/שעה`, detail: `שינוי ${formatSignedPercent(velocity.changeVsPrevious3Hours.amountRatio)} מול 3 השעות הקודמות` },
+                  { label: "Campaign Health", value: `${formatNumber(health.score)}/100`, detail: health.label },
+                  { label: "כשלי סליקה", value: formatNumber(rows.filter((row) => row.status === "failed").length), detail: `${formatPercent(rows.length ? rows.filter((row) => row.status === "failed").length / rows.length : 0)} מכלל העסקאות` },
                 ];
 
                 elements.metrics.innerHTML = stats
@@ -6047,34 +6631,44 @@ def build_fragment(
                   return;
                 }
 
+                const context = buildIntelligenceContext(rows);
+                const velocity = intelligenceEngine.buildVelocityModel(rows, context);
+                const health = intelligenceEngine.buildHealthModel(rows, context);
+                const forecast = intelligenceEngine.buildForecastModel(rows, context);
+                const attentionItems = intelligenceEngine.buildAttentionNow(rows, context);
                 const model = buildExecutiveModel(rows);
-                elements.executiveSummary.textContent = `${formatDate(model.lastDate)} הוא היום המאוחר ביותר במסנן | ${formatNumber(model.ambassadorCount)} שגרירים פעילים`;
+                elements.executiveSummary.textContent = `${health.label} · תחזית ${formatAmount(forecast.projectedFinal)} · ${attentionItems.length} נקודות טיפול פתוחות`;
 
                 const cards = [
                   {
-                    title: "תמונת מצב",
+                    title: "Campaign Health",
+                    items: [
+                      `ציון בריאות הקמפיין עומד על ${formatNumber(health.score)} מתוך 100 ומסווג כ-${health.label}.`,
+                      ...health.reasons.map((item) => item.text),
+                    ],
+                  },
+                  {
+                    title: "Forecast & Trajectory",
+                    items: [
+                      `תחזית הסיום הנוכחית היא ${formatAmount(forecast.projectedFinal)}.`,
+                      Number(state.goals.total || 0) > 0
+                        ? `המשמעות היא ${formatPercent(forecast.projectedTargetPct)} מהיעד הכולל ו-${forecast.gapOrSurplus >= 0 ? "עודף" : "פער"} של ${formatAmount(Math.abs(forecast.gapOrSurplus))}.`
+                        : "טרם הוגדר יעד כולל, ולכן התחזית מוצגת ללא אחוז יעד.",
+                      `מהירות 3 השעות האחרונות: ${formatAmount(velocity.last3Hours.amountPerHour)}/שעה מול ממוצע קמפיין של ${formatAmount(velocity.campaignAverage.amountPerHour)}/שעה.`,
+                    ],
+                  },
+                  {
+                    title: "מה דורש טיפול עכשיו?",
+                    items: attentionItems.length
+                      ? attentionItems.slice(0, 3).map((item) => `${item.issue} ${item.evidence ? `| ${item.evidence}` : ""} | פעולה: ${item.action}`)
+                      : ["לא זוהו כרגע חריגות משמעותיות שמחייבות פעולה מיידית."],
+                  },
+                  {
+                    title: "תמונת מצב מנהלית",
                     items: [
                       `סך הגיוס כרגע הוא ${formatAmount(model.total)} מתוך ${formatNumber(model.deals)} עסקאות.`,
-                      `הממוצע לעסקה עומד על ${formatAmount(model.average)}.`,
-                      `שיעור ההצלחה הכולל הוא ${formatPercent(model.successRate)}.`,
-                    ],
-                  },
-                  {
-                    title: "מנועי צמיחה",
-                    items: [
-                      model.topAmbassador
-                        ? `השגריר המוביל הוא ${model.topAmbassador.ambassador} עם ${formatAmount(model.topAmbassador.total)}.`
-                        : "עדיין אין שגריר מוביל מזוהה.",
-                      model.topDay ? `יום השיא הוא ${formatDate(model.topDay.date)} עם ${formatAmount(model.topDay.total)}.` : "עדיין אין יום שיא מזוהה.",
-                      model.peakHour ? `שעת השיא היא ${String(model.peakHour.hour).padStart(2, "0")}:00 עם ${formatAmount(model.peakHour.total)}.` : "עדיין אין שעת שיא מזוהה.",
-                    ],
-                  },
-                  {
-                    title: "ריכוזיות ובקרה",
-                    items: [
-                      model.topAmbassador ? `חלקו של המוביל מתוך כלל הגיוס הוא ${formatPercent(model.topAmbassadorShare)}.` : "אין ריכוזיות מדידה כרגע.",
-                      `יש כרגע ${formatNumber(model.failedCount)} עסקאות שנכשלו בתוך המסנן.`,
-                      `נפרסו ${formatNumber(model.ambassadorCount)} שגרירים פעילים בטווח הזמן הנבחר.`,
+                      model.topAmbassador ? `המוביל/ה כרגע: ${model.topAmbassador.ambassador} עם ${formatAmount(model.topAmbassador.total)}.` : "אין שגריר מוביל מזוהה.",
+                      `יש ${formatNumber(model.failedCount)} עסקאות שנכשלו ו-${formatNumber(model.ambassadorCount)} שגרירים פעילים בפילוח הנוכחי.`,
                     ],
                   },
                 ];
@@ -6225,11 +6819,40 @@ def build_fragment(
                 }
 
                 const model = buildSegmentModel(rows);
+                const context = buildIntelligenceContext(rows);
+                const ambassadors = intelligenceEngine.buildAmbassadorModels(rows, context);
+                const priorities = intelligenceEngine.buildPriorityList(rows, context);
                 const largeBucket = model.buckets[model.buckets.length - 1];
-                elements.segmentSummary.textContent = `עסקאות של ₪1000+ מהוות ${formatNumber(largeBucket.count)} עסקאות ו-${formatAmount(largeBucket.total)} מהמחזור המסונן`;
+                elements.segmentSummary.textContent = `זוהו ${formatNumber(ambassadors.length)} שגרירים ו-${formatNumber(priorities.length)} הזדמנויות פעולה מיידיות.`;
 
                 elements.segmentBoard.innerHTML = `
                   <div class="segment-grid">
+                    <section class="analysis-card">
+                      <h4>Who Should I Contact Now?</h4>
+                      <ul>
+                        ${priorities.length
+                          ? priorities
+                              .slice(0, 6)
+                              .map((item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> · ${escapeHtml(item.reason)} · ${escapeHtml(item.action)}</li>`)
+                              .join("")
+                          : `<li>לא זוהו כרגע הזדמנויות פעולה ממוקדות.</li>`}
+                      </ul>
+                    </section>
+                    <section class="analysis-card">
+                      <h4>Ambassador Intelligence</h4>
+                      <ul>
+                        ${ambassadors.length
+                          ? ambassadors
+                              .slice()
+                              .sort((left, right) => right.total - left.total)
+                              .slice(0, 6)
+                              .map(
+                                (item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> · ${escapeHtml(item.status)} · ${escapeHtml(formatAmount(item.total))} · ${escapeHtml(item.target ? formatPercent(item.targetProgress) : "ללא יעד")} · ${escapeHtml(item.hoursSinceActivity ? `${Math.round(item.hoursSinceActivity)} שעות ללא פעילות` : "פעיל כעת")}</li>`
+                              )
+                              .join("")
+                          : `<li>אין שגרירים להצגה בטווח המסונן.</li>`}
+                      </ul>
+                    </section>
                     <section class="analysis-card">
                       <h4>התפלגות סכומי תרומה</h4>
                       <div class="bucket-row">
@@ -6247,22 +6870,7 @@ def build_fragment(
                           )
                           .join("")}
                       </div>
-                    </section>
-                    <section class="analysis-card">
-                      <h4>תורמים מובילים</h4>
-                      <ul>
-                        ${model.topDonors.length
-                          ? model.topDonors.map((item) => `<li>${escapeHtml(item.donor)} · ${escapeHtml(formatAmount(item.total))} · ${escapeHtml(formatNumber(item.count))} עסקאות</li>`).join("")
-                          : `<li>אין מספיק נתונים לזיהוי תורמים מובילים.</li>`}
-                      </ul>
-                    </section>
-                    <section class="analysis-card">
-                      <h4>פיצול לפי סטטוס</h4>
-                      <ul>
-                        ${model.statusCounts
-                          .map((item) => `<li>${escapeHtml(item.status === "success" ? "חויב" : "נכשל")} · ${escapeHtml(formatNumber(item.count))} עסקאות · ${escapeHtml(formatAmount(item.total))}</li>`)
-                          .join("")}
-                      </ul>
+                      <div class="text-small text-muted">עסקאות של ₪1000+ מהוות ${escapeHtml(formatNumber(largeBucket.count))} עסקאות ו-${escapeHtml(formatAmount(largeBucket.total))} מהמחזור המסונן.</div>
                     </section>
                   </div>
                 `;
@@ -7342,15 +7950,33 @@ def build_fragment(
                 if (!elements.campaignDesignerPanel) {
                   return;
                 }
-                if (!force && elements.campaignDesignerPanel.dataset.ready === "true") {
-                  setCampaignSettingsStatus(getCampaignSettingsStatus().message, getCampaignSettingsStatus().tone);
-                  return;
-                }
-
                 const settings = state.campaignPage;
+                const builder = normalizeCampaignBuilderConfig(state.campaignBuilder);
+                state.campaignBuilder = builder;
+                const snapshot = getCampaignBuilderSnapshot();
+                const preflight = buildCampaignPreflight(snapshot);
                 const statusState = getCampaignSettingsStatus();
+                const builderStatus = getCampaignBuilderStatus();
                 const directoryStatus = getAmbassadorDirectoryStatus();
                 const directoryRows = state.ambassadorDirectory || [];
+                const currentStep = Math.max(1, Math.min(9, Number(state.ui.campaignBuilderStep || 1)));
+                state.ui.campaignBuilderStep = currentStep;
+                const steps = [
+                  "פרטי קמפיין",
+                  "מיתוג וסיפור",
+                  "חוויית תרומה",
+                  "שגרירים",
+                  "צוותים",
+                  "יעדים ופרסים",
+                  "דאטה ואינטגרציה",
+                  "גישה והרשאות",
+                  "Review & Publish",
+                ];
+                const mediaPreviewMarkup = settings.mediaUrl
+                  ? settings.mediaType === "video"
+                    ? `<video src="${escapeAttribute(settings.mediaUrl)}" controls playsinline></video>`
+                    : `<img src="${escapeAttribute(settings.mediaUrl)}" alt="${escapeAttribute(settings.mediaAlt || settings.title)}" />`
+                  : `<div class="settings-media-preview-placeholder">עדיין לא נטענה מדיה. לאחר העלאה, תופיע כאן תצוגה מקדימה.</div>`;
                 const ambassadorRowsMarkup = directoryRows.length
                   ? `
                       <div class="table-wrap ambassador-links-table-wrap">
@@ -7359,8 +7985,9 @@ def build_fragment(
                             <tr>
                               <th>שגריר/ה</th>
                               <th>כינוי</th>
+                              <th>צוות</th>
+                              <th>יעד אישי</th>
                               <th>מייל</th>
-                              <th>טלפון</th>
                               <th>לינק אישי</th>
                             </tr>
                           </thead>
@@ -7371,8 +7998,9 @@ def build_fragment(
                                   <tr>
                                     <td>${escapeHtml(record.fullName)}</td>
                                     <td dir="ltr">${escapeHtml(record.nickname)}</td>
+                                    <td>${escapeHtml(record.team || "-")}</td>
+                                    <td>${escapeHtml(record.personalTarget ? formatAmount(record.personalTarget) : "-")}</td>
                                     <td dir="ltr">${escapeHtml(record.email || "-")}</td>
-                                    <td dir="ltr">${escapeHtml(record.phone || "-")}</td>
                                     <td dir="ltr"><a href="${escapeAttribute(buildAmbassadorPersonalUrl(record))}" target="_blank" rel="noopener noreferrer">${escapeHtml(buildAmbassadorPersonalUrl(record))}</a></td>
                                   </tr>
                                 `
@@ -7382,15 +8010,103 @@ def build_fragment(
                         </table>
                       </div>
                     `
-                  : `<div class="empty-state">אחרי העלאת קובץ שגרירים, כאן תופיע רשימת הלינקים האישיים ל־GoodRaise.</div>`;
-                const mediaPreviewMarkup = settings.mediaUrl
-                  ? settings.mediaType === "video"
-                    ? `<video src="${escapeAttribute(settings.mediaUrl)}" controls playsinline></video>`
-                    : `<img src="${escapeAttribute(settings.mediaUrl)}" alt="${escapeAttribute(settings.mediaAlt || settings.title)}" />`
-                  : `<div class="settings-media-preview-placeholder">עדיין לא נטענה מדיה. לאחר העלאה, תופיע כאן תצוגה מקדימה.</div>`;
-                elements.campaignDesignerPanel.innerHTML = `
-                  <div class="campaign-settings-panel">
-                    <div class="settings-panel-note">המסך הזה בונה את דף הפרויקט הציבורי ואת זרימת התרומה עד המעבר לספק הסליקה. כרגע כל ההגדרות נשמרות מקומית בלבד בדפדפן זה.</div>
+                  : `<div class="empty-state">עדיין אין שגרירים מוגדרים. אפשר להעלות CSV או להוסיף ידנית.</div>`;
+                const teamsMarkup = builder.teams.groups.length
+                  ? builder.teams.groups
+                      .map(
+                        (group, index) => `
+                          <article class="analysis-card">
+                            <h4>${escapeHtml(group.name)}</h4>
+                            <ul>
+                              <li>מנהל/ת: ${escapeHtml(group.manager || "טרם הוגדר")}</li>
+                              <li>יעד: ${escapeHtml(group.target ? formatAmount(group.target) : "ללא יעד")}</li>
+                            </ul>
+                            <button class="button-ghost" type="button" data-builder-action="remove-team" data-team-index="${index}">הסרה</button>
+                          </article>
+                        `
+                      )
+                      .join("")
+                  : `<div class="empty-state">עדיין לא נבנו צוותים. אפשר להשאיר ריק או להוסיף קבוצות גיוס.</div>`;
+                const preflightMarkup = `
+                  <div class="signal-grid">
+                    <section class="analysis-card">
+                      <h4>Ready</h4>
+                      <ul>${preflight.ready.length ? preflight.ready.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>אין פריטים מסומנים עדיין.</li>"}</ul>
+                    </section>
+                    <section class="analysis-card">
+                      <h4>Warning</h4>
+                      <ul>${preflight.warnings.length ? preflight.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>אין אזהרות פעילות.</li>"}</ul>
+                    </section>
+                    <section class="analysis-card">
+                      <h4>Blocking Issue</h4>
+                      <ul>${preflight.blocking.length ? preflight.blocking.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>אין חסימות פעילות.</li>"}</ul>
+                    </section>
+                  </div>
+                `;
+                let stepMarkup = "";
+
+                if (currentStep === 1) {
+                  stepMarkup = `
+                    <div class="campaign-settings-grid">
+                      <label class="form-label">
+                        שם הקמפיין
+                        <input class="form-control" type="text" value="${escapeAttribute(builder.basics.campaignName)}" data-builder-setting="basics.campaignName" />
+                      </label>
+                      <label class="form-label">
+                        ארגון מוביל
+                        <input class="form-control" type="text" value="${escapeAttribute(builder.basics.organizationName)}" data-builder-setting="basics.organizationName" />
+                      </label>
+                      <label class="form-label">
+                        Slug ציבורי
+                        <input class="form-control" type="text" value="${escapeAttribute(builder.basics.slug)}" data-builder-setting="basics.slug" dir="ltr" />
+                      </label>
+                      <label class="form-label">
+                        יעד גיוס
+                        <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(builder.basics.target || "")}" data-builder-goal="total" />
+                      </label>
+                      <label class="form-label">
+                        מטבע
+                        <select class="form-select" data-builder-setting="basics.currency">
+                          ${["ILS", "USD", "EUR"].map((currency) => `<option value="${currency}"${builder.basics.currency === currency ? " selected" : ""}>${currency}</option>`).join("")}
+                        </select>
+                      </label>
+                      <label class="form-label">
+                        סטטוס קמפיין
+                        <select class="form-select" data-builder-setting="basics.status">
+                          ${[
+                            ["draft", "Draft"],
+                            ["scheduled", "Scheduled"],
+                            ["live", "Live"],
+                            ["paused", "Paused"],
+                            ["completed", "Completed"],
+                            ["archived", "Archived"],
+                          ].map(([value, label]) => `<option value="${value}"${builder.basics.status === value ? " selected" : ""}>${label}</option>`).join("")}
+                        </select>
+                      </label>
+                      <label class="form-label">
+                        תאריך התחלה
+                        <input class="form-control" type="date" value="${escapeAttribute(builder.basics.startDate)}" data-builder-setting="basics.startDate" />
+                      </label>
+                      <label class="form-label">
+                        שעת התחלה
+                        <input class="form-control" type="time" value="${escapeAttribute(builder.basics.startTime)}" data-builder-setting="basics.startTime" />
+                      </label>
+                      <label class="form-label">
+                        תאריך סיום
+                        <input class="form-control" type="date" value="${escapeAttribute(builder.basics.endDate)}" data-builder-setting="basics.endDate" />
+                      </label>
+                      <label class="form-label">
+                        שעת סיום
+                        <input class="form-control" type="time" value="${escapeAttribute(builder.basics.endTime)}" data-builder-setting="basics.endTime" />
+                      </label>
+                      <label class="form-label">
+                        Time zone
+                        <input class="form-control" type="text" value="${escapeAttribute(builder.basics.timeZone)}" data-builder-setting="basics.timeZone" dir="ltr" />
+                      </label>
+                    </div>
+                  `;
+                } else if (currentStep === 2) {
+                  stepMarkup = `
                     <div class="campaign-settings-grid">
                       <label class="form-label">
                         כותרת עליונה
@@ -7399,14 +8115,6 @@ def build_fragment(
                       <label class="form-label">
                         טווח תאריכי פרויקט
                         <input class="form-control" type="text" value="${escapeAttribute(settings.projectDatesLabel)}" data-campaign-setting="projectDatesLabel" />
-                      </label>
-                      <label class="form-label">
-                        כתובת בסיס לפלטפורמה
-                        <input class="form-control" type="url" value="${escapeAttribute(settings.platformBaseUrl)}" data-campaign-setting="platformBaseUrl" dir="ltr" />
-                      </label>
-                      <label class="form-label">
-                        מזהה פרויקט ב־URL
-                        <input class="form-control" type="text" value="${escapeAttribute(settings.projectSlug)}" data-campaign-setting="projectSlug" dir="ltr" />
                       </label>
                       <label class="form-label">
                         כותרת ראשית
@@ -7418,23 +8126,9 @@ def build_fragment(
                       </label>
                     </div>
                     <label class="form-label">
-                      טקסט גמיש ב-Markdown
+                      סיפור הפרויקט ב-Markdown
                       <textarea class="form-control settings-textarea" data-campaign-setting="storyMarkdown">${escapeHtml(settings.storyMarkdown)}</textarea>
                     </label>
-                    <div class="campaign-settings-grid">
-                      <label class="form-label">
-                        כפתור ראשי
-                        <input class="form-control" type="text" value="${escapeAttribute(settings.primaryCtaLabel)}" data-campaign-setting="primaryCtaLabel" />
-                      </label>
-                      <label class="form-label">
-                        כפתור משני
-                        <input class="form-control" type="text" value="${escapeAttribute(settings.secondaryCtaLabel)}" data-campaign-setting="secondaryCtaLabel" />
-                      </label>
-                      <label class="form-label form-label--full">
-                        קישור יציאה לספק התשלום
-                        <input class="form-control" type="url" value="${escapeAttribute(settings.externalDonationUrl)}" data-campaign-setting="externalDonationUrl" />
-                      </label>
-                    </div>
                     <div class="campaign-settings-grid">
                       <label class="form-label">
                         סוג מדיה
@@ -7449,70 +8143,111 @@ def build_fragment(
                           ${["Assistant", "Heebo", "Rubik", "Arial"].map((font) => `<option value="${font}"${settings.fontFamily === font ? " selected" : ""}>${font}</option>`).join("")}
                         </select>
                       </label>
+                      <label class="form-label">
+                        מצב preview
+                        <select class="form-select" data-builder-setting="ui.previewMode">
+                          <option value="desktop"${builder.ui.previewMode === "desktop" ? " selected" : ""}>Desktop</option>
+                          <option value="mobile"${builder.ui.previewMode === "mobile" ? " selected" : ""}>Mobile</option>
+                        </select>
+                      </label>
                       <label class="form-label form-label--full">
                         כתובת או Data URI למדיה
                         <input class="form-control" type="text" value="${escapeAttribute(settings.mediaUrl)}" data-campaign-setting="mediaUrl" />
                       </label>
                       <label class="form-label form-label--full">
-                        טקסט חלופי למדיה
+                        טקסט חלופי
                         <input class="form-control" type="text" value="${escapeAttribute(settings.mediaAlt)}" data-campaign-setting="mediaAlt" />
                       </label>
                       <label class="form-label form-label--full">
-                        העלאת תמונה או וידאו
+                        העלאת מדיה
                         <input id="campaign-media-upload" class="form-control" type="file" accept="image/*,video/*" />
                       </label>
-                      <div class="settings-media-preview form-label--full">
-                        <div class="settings-media-preview-head">
-                          <div class="settings-media-preview-label">תצוגה מקדימה של המדיה</div>
-                          <div class="settings-media-preview-meta">${settings.mediaType === "video" ? "וידאו" : "תמונה"}${settings.mediaAlt ? ` · ${escapeHtml(settings.mediaAlt)}` : ""}</div>
-                        </div>
-                        <div class="settings-media-preview-frame">
-                          ${mediaPreviewMarkup}
-                        </div>
-                      </div>
                     </div>
                     <div class="settings-inline-grid settings-inline-grid--three">
                       <label class="form-label">
-                        צבע ראשי
+                        Primary
                         <input class="form-control" type="color" value="${escapeAttribute(settings.theme.primary)}" data-campaign-setting="theme.primary" />
                       </label>
                       <label class="form-label">
-                        צבע משני
+                        Secondary
                         <input class="form-control" type="color" value="${escapeAttribute(settings.theme.secondary)}" data-campaign-setting="theme.secondary" />
                       </label>
                       <label class="form-label">
-                        צבע הדגשה
+                        Accent
                         <input class="form-control" type="color" value="${escapeAttribute(settings.theme.accent)}" data-campaign-setting="theme.accent" />
                       </label>
                       <label class="form-label">
-                        צבע משטח
+                        Surface
                         <input class="form-control" type="color" value="${escapeAttribute(settings.theme.surface)}" data-campaign-setting="theme.surface" />
                       </label>
                       <label class="form-label">
-                        צבע טקסט
+                        Text
                         <input class="form-control" type="color" value="${escapeAttribute(settings.theme.text)}" data-campaign-setting="theme.text" />
                       </label>
+                    </div>
+                    <div class="settings-media-preview">
+                      <div class="settings-media-preview-head">
+                        <div class="settings-media-preview-label">תצוגה מקדימה</div>
+                        <div class="settings-media-preview-meta">${builder.ui.previewMode === "mobile" ? "Mobile" : "Desktop"} · ${escapeHtml(settings.mediaType === "video" ? "וידאו" : "תמונה")}</div>
+                      </div>
+                      <div class="settings-media-preview-frame">
+                        ${mediaPreviewMarkup}
+                      </div>
+                    </div>
+                  `;
+                } else if (currentStep === 3) {
+                  stepMarkup = `
+                    <div class="campaign-settings-grid">
                       <label class="form-label">
-                        מסלול חודשי
-                        <select class="form-select" data-campaign-setting="showRecurring">
-                          <option value="true"${settings.showRecurring ? " selected" : ""}>פעיל</option>
-                          <option value="false"${!settings.showRecurring ? " selected" : ""}>מוסתר</option>
-                        </select>
+                        CTA ראשי
+                        <input class="form-control" type="text" value="${escapeAttribute(settings.primaryCtaLabel)}" data-campaign-setting="primaryCtaLabel" />
+                      </label>
+                      <label class="form-label">
+                        CTA משני
+                        <input class="form-control" type="text" value="${escapeAttribute(settings.secondaryCtaLabel)}" data-campaign-setting="secondaryCtaLabel" />
+                      </label>
+                      <label class="form-label form-label--full">
+                        קישור לסליקה חיצונית
+                        <input class="form-control" type="url" value="${escapeAttribute(settings.externalDonationUrl)}" data-campaign-setting="externalDonationUrl" />
                       </label>
                     </div>
                     <label class="form-label">
                       סכומי תרומה מוגדרים מראש
                       <textarea class="form-control settings-textarea" data-campaign-setting="amountCardsText">${escapeHtml(formatAmountCardText(settings.amountCards))}</textarea>
-                      <div class="text-small text-muted">שורה לכל כרטיס: <code>180|מארז חג|תיאור קצר</code></div>
+                      <div class="text-small text-muted">שורה לכל preset: <code>180|מארז חג|תיאור קצר</code></div>
                     </label>
+                    <div class="campaign-settings-grid">
+                      <label class="form-label">
+                        מסלול חודשי
+                        <select class="form-select" data-campaign-setting="showRecurring">
+                          <option value="true"${settings.showRecurring ? " selected" : ""}>פעיל</option>
+                          <option value="false"${!settings.showRecurring ? " selected" : ""}>כבוי</option>
+                        </select>
+                      </label>
+                      <label class="form-label">
+                        יעד יומי
+                        <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(state.goals.daily || "")}" data-builder-goal="daily" />
+                      </label>
+                      <label class="form-label">
+                        המלצה אוטומטית
+                        <input class="form-control" type="number" min="0" step="10" value="${escapeAttribute(snapshot.donation.recommendedAmount || "")}" readonly />
+                      </label>
+                    </div>
                     <label class="form-label">
-                      הודעת אמון ליד ה-CTA
+                      הודעת אמון
                       <textarea class="form-control" data-campaign-setting="trustNote">${escapeHtml(settings.trustNote)}</textarea>
                     </label>
+                    <label class="form-label">
+                      הודעת מעבר/תודה
+                      <textarea class="form-control" data-campaign-setting="successHint">${escapeHtml(settings.successHint)}</textarea>
+                    </label>
+                  `;
+                } else if (currentStep === 4) {
+                  stepMarkup = `
                     <section class="control-group">
                       <div class="control-group-header">
-                        <h4>קישורי שגרירים אישיים</h4>
-                        <p>CSV עם השדות <code>full_name</code>, <code>email</code>, <code>phone</code>, <code>nickname</code> ייצור לינק אישי בפורמט GoodRaise לכל שגריר/ה.</p>
+                        <h4>ייבוא CSV</h4>
+                        <p>CSV עם <code>full_name</code>, <code>nickname</code>, <code>email</code>, <code>phone</code> ובמידת הצורך גם <code>team</code> ו-<code>personal_target</code>.</p>
                       </div>
                       <div class="filters-grid">
                         <label class="form-label">
@@ -7520,24 +8255,246 @@ def build_fragment(
                           <input id="ambassador-directory-upload" class="form-control" type="file" accept=".csv,text/csv" />
                         </label>
                         <label class="form-label">
-                          תבנית לינק
+                          תבנית לינק אישי
                           <input class="form-control" type="text" value="${escapeAttribute(`${getCampaignPlatformBaseUrl()}/${getCampaignProjectSlug()}/{nickname}`)}" readonly dir="ltr" />
                         </label>
                       </div>
                       <div class="settings-actions">
                         <div class="settings-status" data-ambassador-status${directoryStatus.tone !== "neutral" ? ` data-tone="${escapeAttribute(directoryStatus.tone)}"` : ""}>${escapeHtml(directoryStatus.message)}</div>
                         <div class="project-hero-actions">
-                          <button class="button-secondary" type="button" data-project-action="export-ambassador-links">ייצוא CSV של לינקים</button>
+                          <button class="button-secondary" type="button" data-project-action="export-ambassador-links">ייצוא לינקים</button>
                           <button class="button-ghost" type="button" data-project-action="clear-ambassador-directory">ניקוי רשימת שגרירים</button>
                         </div>
                       </div>
-                      ${ambassadorRowsMarkup}
+                    </section>
+                    <section class="control-group">
+                      <div class="control-group-header">
+                        <h4>הוספה ידנית</h4>
+                        <p>ליצירת שגריר בודד בלי להעלות קובץ.</p>
+                      </div>
+                      <div class="campaign-settings-grid">
+                        <label class="form-label">
+                          שם מלא
+                          <input class="form-control" type="text" value="${escapeAttribute(builder.ambassadors.manualDraft.fullName)}" data-builder-setting="ambassadors.manualDraft.fullName" />
+                        </label>
+                        <label class="form-label">
+                          כינוי
+                          <input class="form-control" type="text" value="${escapeAttribute(builder.ambassadors.manualDraft.nickname)}" data-builder-setting="ambassadors.manualDraft.nickname" dir="ltr" />
+                        </label>
+                        <label class="form-label">
+                          מייל
+                          <input class="form-control" type="email" value="${escapeAttribute(builder.ambassadors.manualDraft.email)}" data-builder-setting="ambassadors.manualDraft.email" dir="ltr" />
+                        </label>
+                        <label class="form-label">
+                          טלפון
+                          <input class="form-control" type="text" value="${escapeAttribute(builder.ambassadors.manualDraft.phone)}" data-builder-setting="ambassadors.manualDraft.phone" dir="ltr" />
+                        </label>
+                        <label class="form-label">
+                          צוות
+                          <input class="form-control" type="text" value="${escapeAttribute(builder.ambassadors.manualDraft.team)}" data-builder-setting="ambassadors.manualDraft.team" />
+                        </label>
+                        <label class="form-label">
+                          יעד אישי
+                          <input class="form-control" type="number" min="0" step="50" value="${escapeAttribute(builder.ambassadors.manualDraft.personalTarget)}" data-builder-setting="ambassadors.manualDraft.personalTarget" />
+                        </label>
+                      </div>
+                      <div class="control-actions control-actions--inline">
+                        <button class="button-primary" type="button" data-builder-action="add-manual-ambassador">הוספת שגריר/ה</button>
+                      </div>
+                    </section>
+                    ${ambassadorRowsMarkup}
+                  `;
+                } else if (currentStep === 5) {
+                  stepMarkup = `
+                    <div class="campaign-settings-grid">
+                      <label class="form-label">
+                        הפעלת צוותים
+                        <select class="form-select" data-builder-setting="teams.enabled">
+                          <option value="true"${builder.teams.enabled ? " selected" : ""}>כן</option>
+                          <option value="false"${!builder.teams.enabled ? " selected" : ""}>לא</option>
+                        </select>
+                      </label>
+                      <label class="form-label">
+                        שם צוות חדש
+                        <input id="builder-team-name" class="form-control" type="text" placeholder="לדוגמה: דרום / בוגרים / סניף מרכז" />
+                      </label>
+                      <label class="form-label">
+                        מנהל/ת
+                        <input id="builder-team-manager" class="form-control" type="text" placeholder="שם מוביל/ת" />
+                      </label>
+                      <label class="form-label">
+                        יעד צוות
+                        <input id="builder-team-target" class="form-control" type="number" min="0" step="100" placeholder="למשל 50000" />
+                      </label>
+                    </div>
+                    <div class="control-actions control-actions--inline">
+                      <button class="button-secondary" type="button" data-builder-action="add-team">הוספת צוות</button>
+                    </div>
+                    <div class="signal-grid">${teamsMarkup}</div>
+                  `;
+                } else if (currentStep === 6) {
+                  stepMarkup = `
+                    <div class="campaign-settings-grid">
+                      <label class="form-label">
+                        יעד קמפיין
+                        <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(state.goals.total || "")}" data-builder-goal="total" />
+                      </label>
+                      <label class="form-label">
+                        יעד יומי
+                        <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(state.goals.daily || "")}" data-builder-goal="daily" />
+                      </label>
+                      <label class="form-label">
+                        יעד לשגריר
+                        <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(builder.goals.ambassadorGoal || "")}" data-builder-setting="goals.ambassadorGoal" />
+                      </label>
+                      <label class="form-label">
+                        יעד לצוות
+                        <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(builder.goals.teamGoal || "")}" data-builder-setting="goals.teamGoal" />
+                      </label>
+                    </div>
+                    <label class="form-label">
+                      הערת tie-break / eligibility
+                      <textarea class="form-control settings-textarea" data-builder-setting="goals.tierRuleNote">${escapeHtml(builder.goals.tierRuleNote)}</textarea>
+                    </label>
+                    <div class="signal-grid">
+                      <article class="analysis-card">
+                        <h4>פרסי מיקומים</h4>
+                        <ul>${(state.prizeModel.placePrizes || []).length ? state.prizeModel.placePrizes.map((item) => `<li>${escapeHtml(item.label || `מקום ${item.place}`)} · ${escapeHtml(item.prize || "ללא פרס")}</li>`).join("") : "<li>אין פרסי מיקומים מוגדרים.</li>"}</ul>
+                      </article>
+                      <article class="analysis-card">
+                        <h4>מדרגות פרס</h4>
+                        <ul>${(state.prizeModel.tierPrizes || []).length ? state.prizeModel.tierPrizes.map((item) => `<li>${escapeHtml(item.prize || "מדרגה")} · ${escapeHtml(formatAmount(item.threshold || 0))}</li>`).join("") : "<li>אין מדרגות פרס מוגדרות.</li>"}</ul>
+                      </article>
+                    </div>
+                  `;
+                } else if (currentStep === 7) {
+                  stepMarkup = `
+                    <div class="signal-grid">
+                      <article class="analysis-card">
+                        <h4>מצב מקור נתונים</h4>
+                        <ul>
+                          <li>Mode: ${escapeHtml(state.sourceConfig.mode === "api" ? "API" : "File Upload")}</li>
+                          <li>Endpoint: <span dir="ltr">${escapeHtml(state.sourceConfig.api.endpoint || "לא הוגדר")}</span></li>
+                          <li>Response: ${escapeHtml(state.sourceConfig.api.responseFormat || "csv")}</li>
+                          <li>Auto refresh: ${escapeHtml(formatNumber(Number(state.sourceConfig.api.autoRefreshMinutes || 0)))} דקות</li>
+                        </ul>
+                      </article>
+                      <article class="analysis-card">
+                        <h4>מיפוי וחיווי</h4>
+                        <ul>
+                          <li>${escapeHtml(state.sourceConfig.api.recordsPath ? `נתיב רשומות: ${state.sourceConfig.api.recordsPath}` : "אין נתיב רשומות מיוחד.")}</li>
+                          <li>${escapeHtml(state.sourceConfig.api.hasBearerToken ? "קיים bearer token שמור בשרת." : "לא נשמר bearer token.")}</li>
+                          <li>${escapeHtml(getSourceConfigStatus().message)}</li>
+                        </ul>
+                      </article>
+                    </div>
+                    <div class="settings-actions">
+                      <div class="settings-status" data-source-summary>${escapeHtml(getSourceConfigStatus().message)}</div>
+                      <div class="project-hero-actions">
+                        <button class="button-secondary" type="button" data-builder-action="go-to-source-center">מעבר לחיבור מקור הנתונים</button>
+                      </div>
+                    </div>
+                  `;
+                } else if (currentStep === 8) {
+                  stepMarkup = `
+                    <div class="campaign-settings-grid">
+                      <label class="form-label form-label--full">
+                        Organization Admin
+                        <textarea class="form-control settings-textarea" data-builder-email-list="permissions.admins" dir="ltr" placeholder="admin@example.org&#10;owner@example.org">${escapeHtml(serializeEmailLines(builder.permissions.admins))}</textarea>
+                      </label>
+                      <label class="form-label form-label--full">
+                        Campaign Manager
+                        <textarea class="form-control settings-textarea" data-builder-email-list="permissions.managers" dir="ltr" placeholder="manager@example.org">${escapeHtml(serializeEmailLines(builder.permissions.managers))}</textarea>
+                      </label>
+                      <label class="form-label form-label--full">
+                        Analyst / Viewer
+                        <textarea class="form-control settings-textarea" data-builder-email-list="permissions.viewers" dir="ltr" placeholder="viewer@example.org">${escapeHtml(serializeEmailLines(builder.permissions.viewers))}</textarea>
+                      </label>
+                    </div>
+                    <div class="status-note text-small">השלב הזה שומר את מבנה ההרשאות בתוך תצורת הקמפיין. מנגנון ה־auth הקיים נשאר שרת-צד ולא נשבר.</div>
+                  `;
+                } else {
+                  stepMarkup = `
+                    ${preflightMarkup}
+                    <div class="campaign-settings-grid">
+                      <label class="form-label">
+                        תבנית קמפיין
+                        <select class="form-select" data-builder-template>
+                          ${[
+                            ["annual-recurring", "Annual recurring"],
+                            ["ambassador", "Ambassador campaign"],
+                            ["community", "Community fundraising"],
+                            ["emergency", "Emergency campaign"],
+                            ["short", "Short campaign"],
+                            ["long-running", "Long-running campaign"],
+                          ].map(([value, label]) => `<option value="${value}"${builder.templates.type === value ? " selected" : ""}>${label}</option>`).join("")}
+                        </select>
+                      </label>
+                      <label class="form-label">
+                        סטטוס נוכחי
+                        <input class="form-control" type="text" value="${escapeAttribute(builder.basics.status)}" readonly />
+                      </label>
+                    </div>
+                    <div class="control-actions control-actions--inline">
+                      <button class="button-primary" type="button" data-builder-action="launch-campaign"${preflight.blocking.length ? " disabled" : ""}>Launch Campaign</button>
+                    </div>
+                  `;
+                }
+
+                elements.campaignDesignerPanel.innerHTML = `
+                  <div class="campaign-settings-panel">
+                    <div class="settings-panel-note">Campaign Builder שומר את כל שכבת ההקמה של הקמפיין: פרטים עסקיים, מיתוג, תרומות, שגרירים, פרסים והרשאות. הזרימה מיועדת לעבודה חוזרת של ארגונים ולא להגדרה חד-פעמית בלבד.</div>
+                    <div class="settings-actions">
+                      <div class="settings-status" data-builder-status${builderStatus.tone !== "neutral" ? ` data-tone="${escapeAttribute(builderStatus.tone)}"` : ""}>${escapeHtml(builderStatus.message)}</div>
+                      <div class="project-hero-actions">
+                        <button class="button-secondary" type="button" data-builder-action="save-now">שמירת טיוטה</button>
+                        <button class="button-ghost" type="button" data-builder-action="duplicate-campaign">Duplicate Campaign</button>
+                        <button class="button-ghost" type="button" data-project-action="open-project-preview">Preview</button>
+                      </div>
+                    </div>
+                    <div class="data-toolbar metric-toolbar" aria-label="שלבי ה־Campaign Builder">
+                      ${steps.map((label, index) => `<button class="metric-toggle${currentStep === index + 1 ? " is-active" : ""}" type="button" data-builder-step="${index + 1}">${index + 1}. ${escapeHtml(label)}</button>`).join("")}
+                    </div>
+                    <div class="signal-grid">
+                      <section class="analysis-card">
+                        <h4>תמונת מצב</h4>
+                        <ul>
+                          <li>${escapeHtml(snapshot.basics.campaignName || "ללא שם קמפיין")}</li>
+                          <li>${escapeHtml(snapshot.basics.organizationName || "ללא ארגון")}</li>
+                          <li>${escapeHtml(formatAmount(Number(snapshot.basics.target || 0)))} יעד</li>
+                          <li>${escapeHtml(formatNumber(directoryRows.length))} שגרירים</li>
+                        </ul>
+                      </section>
+                      <section class="analysis-card">
+                        <h4>מצב שמירה</h4>
+                        <ul>
+                          <li>Last saved: ${escapeHtml(formatCampaignSavedAt(builder.meta.lastSavedAt))}</li>
+                          <li dir="ltr">Saved by: ${escapeHtml(builder.meta.lastSavedBy || "-")}</li>
+                          <li>${escapeHtml(preflight.blocking.length ? `${formatNumber(preflight.blocking.length)} חסימות` : "אין חסימות פתוחות")}</li>
+                        </ul>
+                      </section>
+                      <section class="analysis-card">
+                        <h4>Preflight</h4>
+                        <ul>
+                          <li>${escapeHtml(`${formatNumber(preflight.ready.length)} Ready`)}</li>
+                          <li>${escapeHtml(`${formatNumber(preflight.warnings.length)} Warning`)}</li>
+                          <li>${escapeHtml(`${formatNumber(preflight.blocking.length)} Blocking`)}</li>
+                        </ul>
+                      </section>
+                    </div>
+                    <section class="control-group">
+                      <div class="control-group-header">
+                        <h4>שלב ${currentStep}: ${escapeHtml(steps[currentStep - 1])}</h4>
+                        <p>מסלול מונחה להגדרת קמפיין מלא, עם טיוטה, שכפול ו־review לפני עלייה לאוויר.</p>
+                      </div>
+                      ${stepMarkup}
                     </section>
                     <div class="settings-actions">
                       <div class="settings-status" data-settings-status${statusState.tone !== "neutral" ? ` data-tone="${escapeAttribute(statusState.tone)}"` : ""}>${escapeHtml(statusState.message)}</div>
                       <div class="project-hero-actions">
-                        <button class="button-secondary" type="button" data-project-action="open-project-preview">מעבר לדף הפרויקט</button>
-                        <button class="button-ghost" type="button" data-project-action="reset-campaign-settings">איפוס להגדרות ברירת מחדל</button>
+                        <button class="button-ghost" type="button" data-builder-action="prev-step"${currentStep === 1 ? " disabled" : ""}>הקודם</button>
+                        <button class="button-secondary" type="button" data-builder-action="next-step"${currentStep === steps.length ? " disabled" : ""}>הבא</button>
+                        <button class="button-ghost" type="button" data-project-action="reset-campaign-settings">איפוס</button>
                       </div>
                     </div>
                   </div>
@@ -7880,6 +8837,57 @@ def build_fragment(
 
                 if (elements.campaignDesignerPanel) {
                   elements.campaignDesignerPanel.addEventListener("input", (event) => {
+                    const builderSettingPath = event.target?.dataset?.builderSetting;
+                    if (builderSettingPath) {
+                      let value = event.target.value;
+                      if (event.target.type === "number") {
+                        value = Number(value || 0);
+                      }
+                      if (value === "true") {
+                        value = true;
+                      } else if (value === "false") {
+                        value = false;
+                      }
+                      if (builderSettingPath.endsWith(".nickname") || builderSettingPath === "basics.slug") {
+                        value = normalizeUrlSlug(value);
+                        event.target.value = value;
+                      }
+                      if (builderSettingPath.endsWith(".email")) {
+                        value = normalizeSearchToken(value);
+                        event.target.value = value;
+                      }
+                      const nextBuilder = cloneSerializable(state.campaignBuilder);
+                      setValueAtPath(nextBuilder, builderSettingPath, value);
+                      state.campaignBuilder = normalizeCampaignBuilderConfig(nextBuilder);
+                      if (builderSettingPath === "basics.slug") {
+                        state.campaignPage.projectSlug = value;
+                      }
+                      queueCampaignBuilderAutosave();
+                      return;
+                    }
+
+                    const builderEmailListPath = event.target?.dataset?.builderEmailList;
+                    if (builderEmailListPath) {
+                      const nextBuilder = cloneSerializable(state.campaignBuilder);
+                      setValueAtPath(nextBuilder, builderEmailListPath, parseEmailLines(event.target.value));
+                      state.campaignBuilder = normalizeCampaignBuilderConfig(nextBuilder);
+                      queueCampaignBuilderAutosave();
+                      return;
+                    }
+
+                    const builderGoalPath = event.target?.dataset?.builderGoal;
+                    if (builderGoalPath) {
+                      const numericValue = Number(event.target.value || 0);
+                      if (builderGoalPath === "total") {
+                        state.goals.total = numericValue;
+                        state.campaignBuilder.basics.target = numericValue;
+                      } else if (builderGoalPath === "daily") {
+                        state.goals.daily = numericValue;
+                      }
+                      queueCampaignBuilderAutosave();
+                      return;
+                    }
+
                     const settingPath = event.target?.dataset?.campaignSetting;
                     if (!settingPath) {
                       return;
@@ -7896,9 +8904,23 @@ def build_fragment(
                     persistCampaignPageSettings(state.campaignPage);
                     state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
                     renderProjectPage();
+                    queueCampaignBuilderAutosave();
                   });
 
                   elements.campaignDesignerPanel.addEventListener("change", async (event) => {
+                    if (event.target?.dataset?.builderStep) {
+                      state.ui.campaignBuilderStep = Number(event.target.dataset.builderStep || 1);
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+
+                    if (event.target?.hasAttribute("data-builder-template")) {
+                      applyCampaignTemplate(event.target.value);
+                      renderCampaignDesigner(true);
+                      renderProjectPage();
+                      return;
+                    }
+
                     const settingPath = event.target?.dataset?.campaignSetting;
                     if (settingPath) {
                       let value = event.target.value;
@@ -7921,6 +8943,7 @@ def build_fragment(
                         renderCampaignDesigner(true);
                       }
                       renderProjectPage();
+                      queueCampaignBuilderAutosave();
                       return;
                     }
 
@@ -7943,6 +8966,7 @@ def build_fragment(
                         state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
                         renderCampaignDesigner(true);
                         renderProjectPage();
+                        queueCampaignBuilderAutosave("המדיה נטענה ונשמרת בטיוטת הקמפיין.");
                       };
                       reader.onerror = () => {
                         setCampaignSettingsStatus("טעינת הקובץ נכשלה. נסה שוב עם תמונה אחרת או קובץ קטן יותר.", "error");
@@ -7979,6 +9003,7 @@ def build_fragment(
                         state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
                         renderCampaignDesigner(true);
                         renderProjectPage();
+                        queueCampaignBuilderAutosave("רשימת השגרירים עודכנה ונשמרת בטיוטת הקמפיין.");
                       } catch (_error) {
                         setAmbassadorDirectoryStatus("טעינת קובץ השגרירים נכשלה. ודא/י שמדובר ב-CSV תקין עם full_name ו-nickname.", "error");
                         renderCampaignDesigner(true);
@@ -7999,7 +9024,9 @@ def build_fragment(
                     }
                     if (action === "reset-campaign-settings") {
                       state.campaignPage = normalizeCampaignPageSettings(cloneSerializable(INITIAL_CAMPAIGN_PAGE_SETTINGS));
+                      state.campaignBuilder = normalizeCampaignBuilderConfig(null);
                       persistCampaignPageSettings(state.campaignPage, "הגדרות דף הפרויקט אופסו לברירת המחדל.");
+                      storeCampaignBuilderConfig(state.campaignBuilder);
                       state.donation = getDefaultDonationState(state.campaignPage);
                       renderCampaignDesigner(true);
                       renderProjectPage();
@@ -8025,6 +9052,129 @@ def build_fragment(
                       }
                       renderCampaignDesigner(true);
                       renderProjectPage();
+                      queueCampaignBuilderAutosave("רשימת השגרירים נוקתה ונשמרת בטיוטה.");
+                    }
+                  });
+
+                  elements.campaignDesignerPanel.addEventListener("click", async (event) => {
+                    const stepButton = event.target.closest("[data-builder-step]");
+                    if (stepButton) {
+                      state.ui.campaignBuilderStep = Number(stepButton.dataset.builderStep || 1);
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+                    const builderActionElement = event.target.closest("[data-builder-action]");
+                    if (!builderActionElement) {
+                      return;
+                    }
+                    const action = builderActionElement.dataset.builderAction;
+                    if (action === "next-step") {
+                      state.ui.campaignBuilderStep = Math.min(9, Number(state.ui.campaignBuilderStep || 1) + 1);
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+                    if (action === "prev-step") {
+                      state.ui.campaignBuilderStep = Math.max(1, Number(state.ui.campaignBuilderStep || 1) - 1);
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+                    if (action === "save-now") {
+                      try {
+                        await saveCampaignBuilderConfig();
+                      } catch (error) {
+                        setCampaignBuilderStatus(error?.message || "שמירת טיוטת הקמפיין נכשלה.", "error");
+                      }
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+                    if (action === "duplicate-campaign") {
+                      duplicateCampaignBuilderDraft();
+                      return;
+                    }
+                    if (action === "go-to-source-center") {
+                      setAdminTab("insights");
+                      elements.sourceMode?.focus();
+                      return;
+                    }
+                    if (action === "add-manual-ambassador") {
+                      const draft = normalizeCampaignBuilderConfig(state.campaignBuilder).ambassadors.manualDraft;
+                      if (!draft.fullName || !draft.nickname) {
+                        setAmbassadorDirectoryStatus("כדי להוסיף שגריר ידנית יש למלא לפחות שם מלא וכינוי.", "error");
+                        renderCampaignDesigner(true);
+                        return;
+                      }
+                      state.ambassadorDirectory = normalizeAmbassadorDirectory([
+                        ...state.ambassadorDirectory,
+                        {
+                          fullName: draft.fullName,
+                          nickname: draft.nickname,
+                          email: draft.email,
+                          phone: draft.phone,
+                          team: draft.team,
+                          personalTarget: Number(draft.personalTarget || 0),
+                          status: "active",
+                        },
+                      ]);
+                      state.campaignBuilder.ambassadors.manualDraft = {
+                        fullName: "",
+                        nickname: "",
+                        email: "",
+                        phone: "",
+                        team: "",
+                        personalTarget: "",
+                      };
+                      storeAmbassadorDirectory(state.ambassadorDirectory);
+                      setAmbassadorDirectoryStatus("השגריר/ה נוספו לרשימה ונשמרים בטיוטה.", "success");
+                      renderCampaignDesigner(true);
+                      renderProjectPage();
+                      queueCampaignBuilderAutosave();
+                      return;
+                    }
+                    if (action === "add-team") {
+                      const teamName = elements.campaignDesignerPanel.querySelector("#builder-team-name")?.value || "";
+                      const teamManager = elements.campaignDesignerPanel.querySelector("#builder-team-manager")?.value || "";
+                      const teamTarget = Number(elements.campaignDesignerPanel.querySelector("#builder-team-target")?.value || 0);
+                      if (!String(teamName).trim()) {
+                        setCampaignBuilderStatus("יש להזין שם צוות לפני הוספה.", "error");
+                        renderCampaignDesigner(true);
+                        return;
+                      }
+                      state.campaignBuilder.teams.enabled = true;
+                      state.campaignBuilder.teams.groups = [
+                        ...state.campaignBuilder.teams.groups,
+                        {
+                          name: String(teamName).trim(),
+                          manager: String(teamManager).trim(),
+                          target: teamTarget,
+                        },
+                      ];
+                      renderCampaignDesigner(true);
+                      queueCampaignBuilderAutosave("הצוות נוסף ונשמר בטיוטה.");
+                      return;
+                    }
+                    if (action === "remove-team") {
+                      const index = Number(builderActionElement.dataset.teamIndex || -1);
+                      state.campaignBuilder.teams.groups = state.campaignBuilder.teams.groups.filter((_item, itemIndex) => itemIndex !== index);
+                      renderCampaignDesigner(true);
+                      queueCampaignBuilderAutosave("הצוות הוסר מהטיוטה.");
+                      return;
+                    }
+                    if (action === "launch-campaign") {
+                      const preflight = buildCampaignPreflight(getCampaignBuilderSnapshot());
+                      if (preflight.blocking.length) {
+                        setCampaignBuilderStatus("לא ניתן להעלות קמפיין עם חסימות פתוחות. השלם/י קודם את ה־preflight.", "error");
+                        renderCampaignDesigner(true);
+                        return;
+                      }
+                      state.campaignBuilder.basics.status = "live";
+                      state.campaignBuilder.review.launchedAt = new Date().toISOString();
+                      try {
+                        await saveCampaignBuilderConfig();
+                      } catch (error) {
+                        setCampaignBuilderStatus(error?.message || "שמירת סטטוס ההשקה נכשלה.", "error");
+                      }
+                      renderCampaignDesigner(true);
+                      return;
                     }
                   });
                 }
@@ -8449,6 +9599,7 @@ def build_fragment(
         .replace("__INITIAL_PRIZES__", prize_json)
         .replace("__INITIAL_CAMPAIGN_PAGE_SETTINGS__", campaign_page_settings_json)
         .replace("__AUTH_CONFIG__", auth_config_json)
+        .replace("__INTELLIGENCE_MODULE__", intelligence_module)
     )
 
 

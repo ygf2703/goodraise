@@ -14,10 +14,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Install Node dependencies
+        run: npm ci
 
       - name: Install dependencies
         run: |
@@ -29,3 +37,12 @@ jobs:
 
       - name: Verify outputs
         run: python scripts/verify_dashboard_release.py
+
+      - name: Verify auth flow
+        run: npm run verify:auth
+
+      - name: Test intelligence layer
+        run: npm run test:intelligence
+
+      - name: Verify repository hygiene
+        run: python scripts/verify_repository_hygiene.py

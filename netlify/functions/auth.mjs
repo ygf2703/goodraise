@@ -1,11 +1,13 @@
 import {
   getAdminDataset,
   getAuthStatus,
+  getRuntimeHealth,
   jsonResponse,
   loginManager,
   logoutManager,
   setupManagerPassword,
 } from "../lib/auth-store.mjs";
+import { getAdminCampaignConfig, saveAdminCampaignConfig } from "../lib/campaign-store.mjs";
 import {
   getAdminSourceConfig,
   refreshAdminSource,
@@ -40,7 +42,8 @@ export default async (request) => {
   }
 
   if (url.pathname === "/api/health" && request.method === "GET") {
-    return jsonResponse(200, { ok: true, service: "yellow-dashboard-netlify-auth" });
+    const payload = await getRuntimeHealth();
+    return jsonResponse(payload.ok ? 200 : 503, payload);
   }
 
   if (url.pathname === "/api/auth/status" && request.method === "GET") {
@@ -59,9 +62,18 @@ export default async (request) => {
     return getAdminSourceConfig(request);
   }
 
+  if (url.pathname === "/api/admin/campaign-config" && request.method === "GET") {
+    return getAdminCampaignConfig(request);
+  }
+
   if (url.pathname === "/api/admin/source-config" && request.method === "POST") {
     const payload = await readRequestPayload(request);
     return saveAdminSourceConfig(request, payload.config || {});
+  }
+
+  if (url.pathname === "/api/admin/campaign-config" && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return saveAdminCampaignConfig(request, payload.config || {});
   }
 
   if (url.pathname === "/api/admin/source-refresh" && request.method === "POST") {
@@ -98,6 +110,7 @@ export const config = {
   path: [
     "/api/health",
     "/api/admin/dataset",
+    "/api/admin/campaign-config",
     "/api/admin/source-config",
     "/api/admin/source-refresh",
     "/api/auth/status",
