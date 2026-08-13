@@ -532,6 +532,10 @@ def build_fragment(
               box-sizing: border-box;
             }
 
+            #yellow-dashboard-root [hidden] {
+              display: none !important;
+            }
+
             #yellow-dashboard-root svg text,
             #yellow-dashboard-root .metric-value,
             #yellow-dashboard-root .comparison-value,
@@ -2526,10 +2530,13 @@ def build_fragment(
             }
 
             #yellow-dashboard-root .login-visual {
+              position: relative;
+              z-index: 0;
               padding: var(--space-6);
               border-radius: var(--radius-xl);
               display: grid;
               gap: var(--space-5);
+              pointer-events: none;
             }
 
             #yellow-dashboard-root .login-logo-frame {
@@ -2537,6 +2544,9 @@ def build_fragment(
             }
 
             #yellow-dashboard-root .login-card {
+              position: relative;
+              z-index: 1;
+              isolation: isolate;
               display: grid;
               gap: var(--space-4);
               align-content: center;
@@ -2590,11 +2600,19 @@ def build_fragment(
             }
 
             #yellow-dashboard-root .login-actions {
+              position: relative;
+              z-index: 4;
               display: flex;
               align-items: center;
               justify-content: space-between;
               gap: var(--space-3);
               flex-wrap: wrap;
+            }
+
+            #yellow-dashboard-root #login-button,
+            #yellow-dashboard-root #login-reset-button {
+              position: relative;
+              z-index: 5;
             }
 
             #yellow-dashboard-root .public-panel-header {
@@ -3132,7 +3150,7 @@ def build_fragment(
                         </div>
                         <div class="text-small text-muted">בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.</div>
                       </label>
-                      <label id="login-password-confirm-label" class="form-label" hidden>
+                      <label id="login-password-confirm-label" class="form-label" hidden style="display:none;">
                         אימות סיסמה
                         <input id="login-password-confirm" class="form-control" type="password" autocomplete="new-password" placeholder="הקלד/י שוב את הסיסמה" />
                       </label>
@@ -3702,6 +3720,23 @@ def build_fragment(
                 tableToggle: root.querySelector("#table-toggle"),
               };
 
+              const weekdayFormatter = new Intl.DateTimeFormat("he-IL", { weekday: "short" });
+              const dateFormatter = new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" });
+              const dateShortFormatter = new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit" });
+              const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+              const currencyFormatter = new Intl.NumberFormat("he-IL", {
+                style: "currency",
+                currency: "ILS",
+                maximumFractionDigits: 0,
+              });
+              const numberFormatter = new Intl.NumberFormat("he-IL");
+
               const initialCampaignRegistry = readStoredCampaignRegistry();
               const initialActiveCampaignEntry = getCampaignRegistryActiveEntry(initialCampaignRegistry);
               const initialCampaignPageSettings = buildCampaignPageSettingsFromSnapshot(
@@ -3781,25 +3816,9 @@ def build_fragment(
                 },
               };
 
-              const weekdayFormatter = new Intl.DateTimeFormat("he-IL", { weekday: "short" });
               if (state.ambassadorDirectory.length) {
                 setAmbassadorDirectoryStatus(`${state.ambassadorDirectory.length} שגרירים נטענו מהאחסון המקומי עם לינקים אישיים פעילים.`, "success");
               }
-              const dateFormatter = new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit", year: "numeric" });
-              const dateShortFormatter = new Intl.DateTimeFormat("he-IL", { day: "2-digit", month: "2-digit" });
-              const dateTimeFormatter = new Intl.DateTimeFormat("he-IL", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              });
-              const currencyFormatter = new Intl.NumberFormat("he-IL", {
-                style: "currency",
-                currency: "ILS",
-                maximumFractionDigits: 0,
-              });
-              const numberFormatter = new Intl.NumberFormat("he-IL");
 
               function cloneSerializable(value) {
                 return JSON.parse(JSON.stringify(value));
@@ -4371,8 +4390,11 @@ def build_fragment(
               function createCampaignBuilderDefaults() {
                 return {
                   basics: {
+                    id: "",
                     campaignName: String(INITIAL_CAMPAIGN_PAGE_SETTINGS.title || "").trim(),
+                    organizationId: "",
                     organizationName: "",
+                    organizationSlug: "",
                     slug: normalizeUrlSlug(INITIAL_CAMPAIGN_PAGE_SETTINGS.projectSlug || "campaign"),
                     target: 0,
                     currency: "ILS",
@@ -4671,6 +4693,17 @@ def build_fragment(
                     sourceConfig: buildSourceConfigFromCampaignSnapshot(item.config),
                     ambassadorDirectory: buildAmbassadorDirectoryFromCampaignSnapshot(item.config),
                   });
+                  const organizationName = String(item.config.basics.organizationName || "").trim();
+                  const organizationSlug = normalizeUrlSlug(item.config.basics.organizationSlug || organizationName || "organization") || "organization";
+                  const organizationId = normalizeUrlSlug(item.config.basics.organizationId || organizationSlug) || organizationSlug;
+                  item.config.organization = {
+                    id: organizationId,
+                    slug: organizationSlug,
+                    name: organizationName || "Organization",
+                  };
+                  item.config.basics.id = item.id;
+                  item.config.basics.organizationId = organizationId;
+                  item.config.basics.organizationSlug = organizationSlug;
                   item.config.basics.slug = item.slug;
                   item.config.basics.campaignName = item.name;
                   item.config.meta.lastSavedAt = String(item.updatedAt || item.config.meta?.lastSavedAt || "").trim();
@@ -4729,13 +4762,21 @@ def build_fragment(
                   null;
                 const basics = targetEntry?.config?.basics && typeof targetEntry.config.basics === "object" ? targetEntry.config.basics : {};
                 const organization = targetEntry?.config?.organization && typeof targetEntry.config.organization === "object" ? targetEntry.config.organization : {};
+                const organizationName = String(organization.name || basics.organizationName || "").trim();
+                const organizationSlug = String(
+                  organization.slug || basics.organizationSlug || normalizeUrlSlug(organizationName || "organization")
+                ).trim();
+                const campaignName = String(targetEntry?.name || basics.campaignName || "").trim();
+                const campaignSlug = String(
+                  targetEntry?.slug || basics.slug || normalizeUrlSlug(campaignName || "campaign")
+                ).trim();
                 return {
-                  organizationId: String(organization.id || basics.organizationId || "").trim(),
-                  organizationSlug: String(organization.slug || basics.organizationSlug || "").trim(),
-                  organizationName: String(organization.name || basics.organizationName || "").trim(),
-                  campaignId: String(targetEntry?.id || basics.id || "").trim(),
-                  campaignSlug: String(targetEntry?.slug || basics.slug || "").trim(),
-                  campaignName: String(targetEntry?.name || basics.campaignName || "").trim(),
+                  organizationId: String(organization.id || basics.organizationId || organizationSlug || "organization").trim(),
+                  organizationSlug,
+                  organizationName: organizationName || "Organization",
+                  campaignId: String(targetEntry?.id || basics.id || campaignSlug || "campaign").trim(),
+                  campaignSlug,
+                  campaignName: campaignName || "Campaign",
                 };
               }
 
@@ -4753,8 +4794,11 @@ def build_fragment(
                 const meta = candidate.meta && typeof candidate.meta === "object" ? candidate.meta : {};
                 return {
                   basics: {
+                    id: normalizeUrlSlug(basics.id || ""),
                     campaignName: String(basics.campaignName || defaults.basics.campaignName || "").trim(),
+                    organizationId: normalizeUrlSlug(basics.organizationId || ""),
                     organizationName: String(basics.organizationName || defaults.basics.organizationName || "").trim(),
+                    organizationSlug: normalizeUrlSlug(basics.organizationSlug || ""),
                     slug: normalizeUrlSlug(basics.slug || defaults.basics.slug || "campaign"),
                     target: Number(basics.target || defaults.basics.target || 0),
                     currency: ["ILS", "USD", "EUR"].includes(String(basics.currency || "").trim().toUpperCase())
@@ -5124,13 +5168,13 @@ def build_fragment(
 
               function parseEmailLines(text) {
                 return String(text || "")
-                  .split(/\r?\n|,/)
+                  .split(/\\r?\\n|,/)
                   .map((item) => normalizeSearchToken(item))
                   .filter(Boolean);
               }
 
               function serializeEmailLines(items) {
-                return Array.isArray(items) ? items.join("\n") : "";
+                return Array.isArray(items) ? items.join("\\n") : "";
               }
 
               function applyCampaignTemplate(templateType) {
@@ -5409,6 +5453,10 @@ def build_fragment(
                 return AUTH_CONFIG?.mode === "backend" && ["http:", "https:"].includes(window.location.protocol);
               }
 
+              function getLocalAdminEntryHint() {
+                return "כדי להיכנס לפאנל הניהול יש לפתוח את המערכת דרך http://127.0.0.1:8767/ או דרך http://127.0.0.1:8766/yellow-project-dashboard-browser.html ולא דרך קובץ file:// מקומי.";
+              }
+
               function buildAuthUrl(path) {
                 const baseUrl = String(AUTH_CONFIG?.baseUrl || "").trim().replace(/\\/$/, "");
                 return baseUrl ? `${baseUrl}${path}` : path;
@@ -5482,9 +5530,12 @@ def build_fragment(
                 state.auth.setupMode = Boolean(enabled);
                 if (elements.loginPasswordConfirmLabel) {
                   elements.loginPasswordConfirmLabel.hidden = !state.auth.setupMode;
+                  elements.loginPasswordConfirmLabel.style.display = state.auth.setupMode ? "" : "none";
                 }
                 if (elements.loginPasswordConfirm) {
                   elements.loginPasswordConfirm.required = state.auth.setupMode;
+                  elements.loginPasswordConfirm.hidden = !state.auth.setupMode;
+                  elements.loginPasswordConfirm.style.display = state.auth.setupMode ? "" : "none";
                   if (!state.auth.setupMode) {
                     elements.loginPasswordConfirm.value = "";
                   }
@@ -5493,9 +5544,13 @@ def build_fragment(
                   elements.loginButton.textContent = state.auth.setupMode ? "שמירת סיסמה וכניסה" : "כניסה לפאנל הניהול";
                 }
                 if (elements.loginModeHint) {
-                  elements.loginModeHint.textContent = state.auth.setupMode
-                    ? "זו כניסה ראשונה למייל הזה. בחרו סיסמה אישית, אשרו אותה והמערכת תשמור אותה בשרת המקומי."
-                    : "הכניסה נשמרת ב-session מקומי מאובטח בשרת. בפריסה ציבורית יש להפעיל HTTPS וניהול secrets מסודר.";
+                  if (!canUseBackendAuth()) {
+                    elements.loginModeHint.textContent = getLocalAdminEntryHint();
+                  } else {
+                    elements.loginModeHint.textContent = state.auth.setupMode
+                      ? "זו כניסה ראשונה למייל הזה. בחרו סיסמה אישית, אשרו אותה והמערכת תשמור אותה בשרת המקומי."
+                      : "הכניסה נשמרת ב-session מקומי מאובטח בשרת. בפריסה ציבורית יש להפעיל HTTPS וניהול secrets מסודר.";
+                  }
                 }
                 if (elements.loginPassword) {
                   elements.loginPassword.autocomplete = state.auth.setupMode ? "new-password" : "current-password";
@@ -5555,6 +5610,7 @@ def build_fragment(
                 clearSessionState();
                 if (!canUseBackendAuth()) {
                   state.auth.backendAvailable = false;
+                  setLoginMessage(getLocalAdminEntryHint(), "warning");
                   renderSourceConfigControls();
                   return;
                 }
@@ -9861,7 +9917,7 @@ def build_fragment(
                 elements.loginForm.addEventListener("submit", async (event) => {
                   event.preventDefault();
                   if (!canUseBackendAuth()) {
-                    setLoginMessage("כדי להיכנס לפאנל הניהול יש לפתוח את המערכת דרך שרת הניהול המקומי.", "error");
+                    setLoginMessage(getLocalAdminEntryHint(), "error");
                     return;
                   }
                   const email = normalizeSearchToken(elements.loginEmail.value);
