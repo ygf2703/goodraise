@@ -1,0 +1,875 @@
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+
+import { normalizeEmail } from "./multi-tenant-model.mjs";
+
+let postgresPoolPromise = null;
+
+const CSV_FIELD_NAMES = [
+  "id",
+  "created_at",
+  "full_name",
+  "reward",
+  "price",
+  "quantity",
+  "total",
+  "currencyname",
+  "phone",
+  "email",
+  "Ambassador name",
+  "Ambassador email",
+  "shipping_name",
+  "delivery_comment",
+  "google_address_line",
+  "city",
+  "zip",
+  "charged_success",
+  "charge_result",
+  "direct_debit",
+  "direct debit active",
+];
+
+const CSV_FIELD_ALIASES = {
+  ambassador_name: "Ambassador name",
+  ambassadorName: "Ambassador name",
+  ambassador_email: "Ambassador email",
+  ambassadorEmail: "Ambassador email",
+  fullName: "full_name",
+  createdAt: "created_at",
+  shippingName: "shipping_name",
+  deliveryComment: "delivery_comment",
+  address: "google_address_line",
+  addressLine: "google_address_line",
+  currency: "currencyname",
+  chargedSuccess: "charged_success",
+  chargeResult: "charge_result",
+  directDebit: "direct_debit",
+  directDebitActive: "direct debit active",
+};
+
+const SCHEMA_SQL = `
+CREATE SCHEMA IF NOT EXISTS goodraise;
+
+CREATE TABLE IF NOT EXISTS goodraise.organizations (
+    id UUID PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.campaigns (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    source_filename TEXT,
+    source_checksum_sha256 TEXT,
+    starts_at TIMESTAMPTZ,
+    ends_at TIMESTAMPTZ,
+    currency_code TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (organization_id, slug)
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.currencies (
+    code TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.import_batches (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+    source_filename TEXT NOT NULL,
+    source_checksum_sha256 TEXT NOT NULL,
+    raw_fieldnames JSONB NOT NULL,
+    raw_row_count INTEGER NOT NULL DEFAULT 0,
+    imported_row_count INTEGER NOT NULL DEFAULT 0,
+    skipped_blank_rows INTEGER NOT NULL DEFAULT 0,
+    imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    imported_by TEXT NOT NULL DEFAULT 'external-api',
+    notes TEXT,
+    UNIQUE (campaign_id, source_checksum_sha256)
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.donors (
+    id UUID PRIMARY KEY,
+    donor_key TEXT NOT NULL UNIQUE,
+    full_name TEXT,
+    phone TEXT,
+    email TEXT,
+    email_normalized TEXT,
+    shipping_name TEXT,
+    delivery_comment TEXT,
+    google_address_line TEXT,
+    city TEXT,
+    zip TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.ambassadors (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+    ambassador_key TEXT NOT NULL,
+    full_name TEXT,
+    email TEXT,
+    email_normalized TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (campaign_id, ambassador_key)
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.rewards (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+    reward_key TEXT NOT NULL,
+    reward_name TEXT,
+    unit_price NUMERIC(12, 2),
+    quantity INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (campaign_id, reward_key)
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.transactions (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+    import_batch_id UUID NOT NULL REFERENCES goodraise.import_batches(id) ON DELETE CASCADE,
+    source_row_number INTEGER NOT NULL,
+    source_id TEXT,
+    source_transaction_key TEXT NOT NULL,
+    canonical_event_key TEXT,
+    donor_id UUID REFERENCES goodraise.donors(id),
+    ambassador_id UUID REFERENCES goodraise.ambassadors(id),
+    reward_id UUID REFERENCES goodraise.rewards(id),
+    occurred_at TIMESTAMPTZ,
+    occurred_at_raw TEXT,
+    total_amount NUMERIC(12, 2),
+    currency_code TEXT REFERENCES goodraise.currencies(code),
+    charged_success BOOLEAN,
+    charge_result_code TEXT,
+    direct_debit BOOLEAN,
+    direct_debit_active BOOLEAN,
+    raw_payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (campaign_id, source_transaction_key)
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.transactions_csv_raw (
+    import_batch_id UUID NOT NULL REFERENCES goodraise.import_batches(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+    transaction_id UUID REFERENCES goodraise.transactions(id) ON DELETE SET NULL,
+    source_row_number INTEGER NOT NULL,
+    "id" TEXT,
+    "created_at" TEXT,
+    "full_name" TEXT,
+    "reward" TEXT,
+    "price" TEXT,
+    "quantity" TEXT,
+    "total" TEXT,
+    "currencyname" TEXT,
+    "phone" TEXT,
+    "email" TEXT,
+    "Ambassador name" TEXT,
+    "Ambassador email" TEXT,
+    "shipping_name" TEXT,
+    "delivery_comment" TEXT,
+    "google_address_line" TEXT,
+    "city" TEXT,
+    "zip" TEXT,
+    "charged_success" TEXT,
+    "charge_result" TEXT,
+    "direct_debit" TEXT,
+    "direct debit active" TEXT,
+    imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (import_batch_id, source_row_number)
+);
+
+ALTER TABLE goodraise.transactions ADD COLUMN IF NOT EXISTS canonical_event_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_campaign_canonical_event_key ON goodraise.transactions(campaign_id, canonical_event_key);
+`;
+
+class IngestHttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.name = "IngestHttpError";
+    this.status = status;
+  }
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function normalizePhone(value) {
+  return String(value || "").replace(/\D+/g, "");
+}
+
+function parseDecimal(value) {
+  const raw = normalizeText(value).replace(/,/g, "");
+  if (!raw) {
+    return null;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseInteger(value) {
+  const raw = normalizeText(value);
+  if (!raw) {
+    return null;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseBoolean(value) {
+  const raw = normalizeText(value).toLowerCase();
+  if (["true", "1", "yes", "y"].includes(raw)) {
+    return true;
+  }
+  if (["false", "0", "no", "n"].includes(raw)) {
+    return false;
+  }
+  return null;
+}
+
+function parseTimestamp(value) {
+  const raw = normalizeText(value);
+  if (!raw) {
+    return null;
+  }
+  const shortMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{2})(?:\s+(\d{2}):(\d{2}))?$/);
+  if (shortMatch) {
+    const [, day, month, year, hours = "00", minutes = "00"] = shortMatch;
+    return new Date(Date.UTC(Number(`20${year}`), Number(month) - 1, Number(day), Number(hours), Number(minutes)));
+  }
+  const longMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+  if (longMatch) {
+    const [, day, month, year, hours = "00", minutes = "00"] = longMatch;
+    return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes)));
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function normalizeExternalRecord(payload = {}) {
+  const record = payload && typeof payload.record === "object" && !Array.isArray(payload.record) ? payload.record : payload;
+  const normalized = Object.fromEntries(CSV_FIELD_NAMES.map((field) => [field, ""]));
+  for (const [key, value] of Object.entries(record || {})) {
+    const canonicalKey = CSV_FIELD_ALIASES[key] || key;
+    if (canonicalKey in normalized) {
+      normalized[canonicalKey] = value == null ? "" : String(value).trim();
+    }
+  }
+  return normalized;
+}
+
+function isBlankRecord(record) {
+  return Object.values(record).every((value) => !normalizeText(value));
+}
+
+function buildDonorKey(record) {
+  const email = normalizeEmail(record.email);
+  const phone = normalizePhone(record.phone);
+  const fullName = normalizeText(record.full_name);
+  const address = normalizeText(record.google_address_line);
+  const city = normalizeText(record.city);
+  const zip = normalizeText(record.zip);
+  if (email) {
+    return sha256(`email:${email}`);
+  }
+  if (phone) {
+    return sha256(`phone:${phone}`);
+  }
+  return sha256(`name:${fullName}|address:${address}|city:${city}|zip:${zip}`);
+}
+
+function buildAmbassadorKey(record) {
+  const email = normalizeEmail(record["Ambassador email"]);
+  const fullName = normalizeText(record["Ambassador name"]);
+  if (email) {
+    return sha256(`ambassador-email:${email}`);
+  }
+  if (fullName) {
+    return sha256(`ambassador-name:${fullName}`);
+  }
+  return null;
+}
+
+function buildRewardKey(record) {
+  const reward = normalizeText(record.reward);
+  const price = normalizeText(record.price);
+  const quantity = normalizeText(record.quantity);
+  if (!reward && !price && !quantity) {
+    return null;
+  }
+  return sha256(`reward:${reward}|price:${price}|quantity:${quantity}`);
+}
+
+function buildCanonicalEventKey(record) {
+  const sourceId = normalizeText(record.id);
+  if (sourceId) {
+    return sha256(`source-id:${sourceId}`);
+  }
+  return sha256(
+    JSON.stringify(
+      {
+        created_at: normalizeText(record.created_at),
+        email: normalizeEmail(record.email),
+        phone: normalizePhone(record.phone),
+        full_name: normalizeText(record.full_name),
+        total: normalizeText(record.total),
+        currencyname: normalizeText(record.currencyname),
+        ambassador_email: normalizeEmail(record["Ambassador email"]),
+        charge_result: normalizeText(record.charge_result),
+        charged_success: normalizeText(record.charged_success),
+      },
+      Object.keys(record).sort(),
+    ),
+  );
+}
+
+function buildSourceTransactionKey(record) {
+  return buildCanonicalEventKey(record);
+}
+
+function getConfiguredApiKeys() {
+  const singular = String(process.env.GOODRAISE_INGEST_API_KEY || "").trim();
+  const plural = String(process.env.GOODRAISE_INGEST_API_KEYS || "").trim();
+  if (plural) {
+    try {
+      const parsed = JSON.parse(plural);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item || "").trim()).filter(Boolean);
+      }
+    } catch {
+      return plural.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return singular ? [singular] : [];
+}
+
+function readPresentedApiKey(request) {
+  const headerKey = String(request.headers.get("x-goodraise-api-key") || "").trim();
+  if (headerKey) {
+    return headerKey;
+  }
+  const authHeader = String(request.headers.get("authorization") || "").trim();
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  return bearerMatch ? bearerMatch[1].trim() : "";
+}
+
+export function validateIngestApiKey(request) {
+  const configuredKeys = getConfiguredApiKeys();
+  if (!configuredKeys.length) {
+    return { ok: false, status: 503, message: "Ingest API key is not configured on the server." };
+  }
+  const presentedKey = readPresentedApiKey(request);
+  if (!presentedKey) {
+    return { ok: false, status: 401, message: "Missing API key." };
+  }
+  const matched = configuredKeys.some((configuredKey) => {
+    const left = Buffer.from(configuredKey);
+    const right = Buffer.from(presentedKey);
+    return left.length === right.length && timingSafeEqual(left, right);
+  });
+  return matched ? { ok: true } : { ok: false, status: 401, message: "Invalid API key." };
+}
+
+async function getPostgresPool() {
+  if (!postgresPoolPromise) {
+    postgresPoolPromise = import("pg").then(({ Pool }) => {
+      const connectionString = String(process.env.GOODRAISE_DATABASE_URL || process.env.DATABASE_URL || "").trim();
+      if (!connectionString) {
+        throw new IngestHttpError(503, "GOODRAISE_DATABASE_URL is not configured on the server.");
+      }
+      return new Pool({
+        connectionString,
+        max: 4,
+        idleTimeoutMillis: 10_000,
+        connectionTimeoutMillis: 10_000,
+      });
+    });
+  }
+  return postgresPoolPromise;
+}
+
+async function ensureSchema(client) {
+  await client.query(SCHEMA_SQL);
+}
+
+async function resolveScope(client, organizationIdentifier, campaignIdentifier) {
+  const result = await client.query(
+    `
+      SELECT
+        o.id::text AS organization_id,
+        o.slug AS organization_slug,
+        o.name AS organization_name,
+        c.id::text AS campaign_id,
+        c.slug AS campaign_slug,
+        c.name AS campaign_name,
+        c.status AS campaign_status,
+        c.currency_code AS currency_code
+      FROM goodraise.organizations o
+      INNER JOIN goodraise.campaigns c
+        ON c.organization_id = o.id
+      WHERE
+        (LOWER(CAST(o.id AS TEXT)) = LOWER($1) OR LOWER(o.slug) = LOWER($1))
+        AND
+        (LOWER(CAST(c.id AS TEXT)) = LOWER($2) OR LOWER(c.slug) = LOWER($2))
+      LIMIT 1
+    `,
+    [organizationIdentifier, campaignIdentifier],
+  );
+  return result.rows[0] || null;
+}
+
+async function backfillExistingCanonicalEventKeys(client, campaignId) {
+  const result = await client.query(
+    `
+      SELECT id::text AS id, source_id, raw_payload
+      FROM goodraise.transactions
+      WHERE campaign_id = $1::uuid
+        AND (canonical_event_key IS NULL OR canonical_event_key = '')
+    `,
+    [campaignId],
+  );
+  for (const row of result.rows) {
+    const record = normalizeExternalRecord(row.raw_payload || {});
+    if (row.source_id) {
+      record.id = String(row.source_id);
+    }
+    await client.query(
+      `
+        UPDATE goodraise.transactions
+        SET canonical_event_key = $1
+        WHERE id = $2::uuid
+      `,
+      [buildCanonicalEventKey(record), row.id],
+    );
+  }
+}
+
+async function findExistingTransactionByCanonicalKey(client, campaignId, canonicalEventKey) {
+  const result = await client.query(
+    `
+      SELECT id::text AS id, import_batch_id::text AS import_batch_id
+      FROM goodraise.transactions
+      WHERE campaign_id = $1::uuid
+        AND canonical_event_key = $2
+      LIMIT 1
+    `,
+    [campaignId, canonicalEventKey],
+  );
+  return result.rows[0] || null;
+}
+
+async function ensureCurrency(client, code) {
+  const normalized = normalizeText(code).toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+  await client.query(
+    `
+      INSERT INTO goodraise.currencies (code, name)
+      VALUES ($1, $1)
+      ON CONFLICT (code) DO NOTHING
+    `,
+    [normalized],
+  );
+  return normalized;
+}
+
+async function upsertDonor(client, record) {
+  const donorKey = buildDonorKey(record);
+  const result = await client.query(
+    `
+      INSERT INTO goodraise.donors (
+        id, donor_key, full_name, phone, email, email_normalized, shipping_name, delivery_comment, google_address_line, city, zip
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (donor_key) DO UPDATE
+      SET full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), goodraise.donors.full_name),
+          phone = COALESCE(NULLIF(EXCLUDED.phone, ''), goodraise.donors.phone),
+          email = COALESCE(NULLIF(EXCLUDED.email, ''), goodraise.donors.email),
+          email_normalized = COALESCE(NULLIF(EXCLUDED.email_normalized, ''), goodraise.donors.email_normalized),
+          shipping_name = COALESCE(NULLIF(EXCLUDED.shipping_name, ''), goodraise.donors.shipping_name),
+          delivery_comment = COALESCE(NULLIF(EXCLUDED.delivery_comment, ''), goodraise.donors.delivery_comment),
+          google_address_line = COALESCE(NULLIF(EXCLUDED.google_address_line, ''), goodraise.donors.google_address_line),
+          city = COALESCE(NULLIF(EXCLUDED.city, ''), goodraise.donors.city),
+          zip = COALESCE(NULLIF(EXCLUDED.zip, ''), goodraise.donors.zip),
+          updated_at = NOW()
+      RETURNING id::text
+    `,
+    [
+      randomUUID(),
+      donorKey,
+      record.full_name,
+      record.phone,
+      record.email,
+      normalizeEmail(record.email),
+      record.shipping_name,
+      record.delivery_comment,
+      record.google_address_line,
+      record.city,
+      record.zip,
+    ],
+  );
+  return { id: result.rows[0].id, donorKey };
+}
+
+async function upsertAmbassador(client, organizationId, campaignId, record) {
+  const ambassadorKey = buildAmbassadorKey(record);
+  if (!ambassadorKey) {
+    return { id: null, ambassadorKey: null };
+  }
+  const result = await client.query(
+    `
+      INSERT INTO goodraise.ambassadors (
+        id, organization_id, campaign_id, ambassador_key, full_name, email, email_normalized
+      )
+      VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7)
+      ON CONFLICT (campaign_id, ambassador_key) DO UPDATE
+      SET full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), goodraise.ambassadors.full_name),
+          email = COALESCE(NULLIF(EXCLUDED.email, ''), goodraise.ambassadors.email),
+          email_normalized = COALESCE(NULLIF(EXCLUDED.email_normalized, ''), goodraise.ambassadors.email_normalized),
+          updated_at = NOW()
+      RETURNING id::text
+    `,
+    [
+      randomUUID(),
+      organizationId,
+      campaignId,
+      ambassadorKey,
+      record["Ambassador name"],
+      record["Ambassador email"],
+      normalizeEmail(record["Ambassador email"]),
+    ],
+  );
+  return { id: result.rows[0].id, ambassadorKey };
+}
+
+async function upsertReward(client, organizationId, campaignId, record) {
+  const rewardKey = buildRewardKey(record);
+  if (!rewardKey) {
+    return { id: null, rewardKey: null };
+  }
+  const result = await client.query(
+    `
+      INSERT INTO goodraise.rewards (
+        id, organization_id, campaign_id, reward_key, reward_name, unit_price, quantity
+      )
+      VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6, $7)
+      ON CONFLICT (campaign_id, reward_key) DO UPDATE
+      SET reward_name = COALESCE(NULLIF(EXCLUDED.reward_name, ''), goodraise.rewards.reward_name),
+          unit_price = COALESCE(EXCLUDED.unit_price, goodraise.rewards.unit_price),
+          quantity = COALESCE(EXCLUDED.quantity, goodraise.rewards.quantity),
+          updated_at = NOW()
+      RETURNING id::text
+    `,
+    [
+      randomUUID(),
+      organizationId,
+      campaignId,
+      rewardKey,
+      record.reward,
+      parseDecimal(record.price),
+      parseInteger(record.quantity),
+    ],
+  );
+  return { id: result.rows[0].id, rewardKey };
+}
+
+export async function ingestCampaignRecord({ organizationIdentifier, campaignIdentifier, payload = {} }) {
+  const record = normalizeExternalRecord(payload);
+  if (isBlankRecord(record)) {
+    throw new IngestHttpError(400, "Payload must include a non-empty record object.");
+  }
+
+  const sourceLabel = normalizeText(payload.sourceLabel || payload.source || "external-api") || "external-api";
+  const requestReference = normalizeText(payload.requestId || payload.externalReference || payload.reference || "");
+  const canonicalEventKey = buildCanonicalEventKey(record);
+  const sourceTransactionKey = buildSourceTransactionKey(record);
+  const importBatchId = randomUUID();
+  const importChecksum = sha256(
+    JSON.stringify(
+      {
+        requestReference,
+        sourceLabel,
+        record,
+        transactionKey: sourceTransactionKey,
+        importBatchId,
+      },
+      Object.keys(record).sort(),
+    ),
+  );
+
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await ensureSchema(client);
+
+    const scope = await resolveScope(client, organizationIdentifier, campaignIdentifier);
+    if (!scope) {
+      throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
+    }
+    await backfillExistingCanonicalEventKeys(client, scope.campaign_id);
+    const existingTransaction = await findExistingTransactionByCanonicalKey(client, scope.campaign_id, canonicalEventKey);
+    if (existingTransaction) {
+      await client.query("COMMIT");
+      return {
+        ok: true,
+        duplicate: true,
+        created: false,
+        organization: {
+          id: scope.organization_id,
+          slug: scope.organization_slug,
+          name: scope.organization_name,
+        },
+        campaign: {
+          id: scope.campaign_id,
+          slug: scope.campaign_slug,
+          name: scope.campaign_name,
+          status: scope.campaign_status,
+        },
+        importBatch: {
+          id: existingTransaction.import_batch_id,
+          sourceLabel,
+          requestReference,
+        },
+        transaction: {
+          id: existingTransaction.id,
+          sourceId: normalizeText(record.id) || "",
+          sourceTransactionKey,
+          totalAmount: parseDecimal(record.total),
+          currencyCode: normalizeText(record.currencyname || scope.currency_code || ""),
+          donorId: "",
+          ambassadorId: "",
+          rewardId: "",
+        },
+      };
+    }
+
+    const occurredAt = parseTimestamp(record.created_at);
+    const currencyCode = await ensureCurrency(client, record.currencyname || scope.currency_code || "ILS");
+    const donor = await upsertDonor(client, record);
+    const ambassador = await upsertAmbassador(client, scope.organization_id, scope.campaign_id, record);
+    const reward = await upsertReward(client, scope.organization_id, scope.campaign_id, record);
+
+    await client.query(
+      `
+        INSERT INTO goodraise.import_batches (
+          id,
+          organization_id,
+          campaign_id,
+          source_filename,
+          source_checksum_sha256,
+          raw_fieldnames,
+          raw_row_count,
+          imported_row_count,
+          skipped_blank_rows,
+          imported_by,
+          notes
+        )
+        VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::jsonb, 1, 1, 0, $7, $8)
+      `,
+      [
+        importBatchId,
+        scope.organization_id,
+        scope.campaign_id,
+        `${sourceLabel}.json`,
+        importChecksum,
+        JSON.stringify(CSV_FIELD_NAMES),
+        "external-api",
+        requestReference ? `request_reference=${requestReference}` : "",
+      ],
+    );
+
+    const transactionResult = await client.query(
+      `
+        INSERT INTO goodraise.transactions (
+          id,
+          organization_id,
+          campaign_id,
+          import_batch_id,
+          source_row_number,
+          source_id,
+          source_transaction_key,
+          canonical_event_key,
+          donor_id,
+          ambassador_id,
+          reward_id,
+          occurred_at,
+          occurred_at_raw,
+          total_amount,
+          currency_code,
+          charged_success,
+          charge_result_code,
+          direct_debit,
+          direct_debit_active,
+          raw_payload
+        )
+        VALUES (
+          $1, $2::uuid, $3::uuid, $4::uuid, 1, $5, $6, $7, $8::uuid, $9::uuid, $10::uuid, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb
+        )
+        ON CONFLICT (campaign_id, canonical_event_key) DO UPDATE
+        SET donor_id = EXCLUDED.donor_id,
+            ambassador_id = EXCLUDED.ambassador_id,
+            reward_id = EXCLUDED.reward_id,
+            occurred_at = EXCLUDED.occurred_at,
+            occurred_at_raw = EXCLUDED.occurred_at_raw,
+            total_amount = EXCLUDED.total_amount,
+            currency_code = EXCLUDED.currency_code,
+            charged_success = EXCLUDED.charged_success,
+            charge_result_code = EXCLUDED.charge_result_code,
+            direct_debit = EXCLUDED.direct_debit,
+            direct_debit_active = EXCLUDED.direct_debit_active,
+            raw_payload = EXCLUDED.raw_payload,
+            import_batch_id = EXCLUDED.import_batch_id
+        RETURNING id::text
+      `,
+      [
+        randomUUID(),
+        scope.organization_id,
+        scope.campaign_id,
+        importBatchId,
+        normalizeText(record.id) || null,
+        sourceTransactionKey,
+        canonicalEventKey,
+        donor.id,
+        ambassador.id,
+        reward.id,
+        occurredAt,
+        record.created_at,
+        parseDecimal(record.total),
+        currencyCode,
+        parseBoolean(record.charged_success),
+        normalizeText(record.charge_result) || null,
+        parseBoolean(record.direct_debit),
+        parseBoolean(record["direct debit active"]),
+        JSON.stringify(record),
+      ],
+    );
+    const transactionId = transactionResult.rows[0].id;
+
+    await client.query(
+      `
+        INSERT INTO goodraise.transactions_csv_raw (
+          import_batch_id,
+          organization_id,
+          campaign_id,
+          transaction_id,
+          source_row_number,
+          "id",
+          "created_at",
+          "full_name",
+          "reward",
+          "price",
+          "quantity",
+          "total",
+          "currencyname",
+          "phone",
+          "email",
+          "Ambassador name",
+          "Ambassador email",
+          "shipping_name",
+          "delivery_comment",
+          "google_address_line",
+          "city",
+          "zip",
+          "charged_success",
+          "charge_result",
+          "direct_debit",
+          "direct debit active"
+        )
+        VALUES (
+          $1::uuid, $2::uuid, $3::uuid, $4::uuid, 1, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+        )
+      `,
+      [
+        importBatchId,
+        scope.organization_id,
+        scope.campaign_id,
+        transactionId,
+        record.id,
+        record.created_at,
+        record.full_name,
+        record.reward,
+        record.price,
+        record.quantity,
+        record.total,
+        record.currencyname,
+        record.phone,
+        record.email,
+        record["Ambassador name"],
+        record["Ambassador email"],
+        record.shipping_name,
+        record.delivery_comment,
+        record.google_address_line,
+        record.city,
+        record.zip,
+        record.charged_success,
+        record.charge_result,
+        record.direct_debit,
+        record["direct debit active"],
+      ],
+    );
+
+    await client.query("COMMIT");
+    return {
+      ok: true,
+      duplicate: false,
+      created: true,
+      organization: {
+        id: scope.organization_id,
+        slug: scope.organization_slug,
+        name: scope.organization_name,
+      },
+      campaign: {
+        id: scope.campaign_id,
+        slug: scope.campaign_slug,
+        name: scope.campaign_name,
+        status: scope.campaign_status,
+      },
+      importBatch: {
+        id: importBatchId,
+        sourceLabel,
+        requestReference,
+      },
+      transaction: {
+        id: transactionId,
+        sourceId: normalizeText(record.id) || "",
+        sourceTransactionKey,
+        totalAmount: parseDecimal(record.total),
+        currencyCode: currencyCode || "",
+        donorId: donor.id,
+        ambassadorId: ambassador.id || "",
+        rewardId: reward.id || "",
+      },
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error instanceof IngestHttpError) {
+      throw error;
+    }
+    throw new IngestHttpError(500, "Failed to ingest the external campaign record.");
+  } finally {
+    client.release();
+  }
+}
+
+export { IngestHttpError };

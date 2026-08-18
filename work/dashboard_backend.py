@@ -20,6 +20,16 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 from urllib.parse import parse_qs, urljoin, urlparse
 
+try:
+    import psycopg
+except Exception:  # pragma: no cover - optional at runtime
+    psycopg = None  # type: ignore[assignment]
+
+try:
+    from scripts import setup_relational_campaign_db as relational_postgres
+except Exception:  # pragma: no cover - optional at runtime
+    relational_postgres = None  # type: ignore[assignment]
+
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 WORK_DIR = ROOT_DIR / "work"
@@ -103,6 +113,7 @@ ROLE_ORDER = {
     ROLE_ORGANIZATION_ADMIN: 4,
     ROLE_PLATFORM_ADMIN: 5,
 }
+INGEST_API_KEY_HEADER = "X-GoodRaise-API-Key"
 
 
 def normalize_email(value: str) -> str:
@@ -251,6 +262,44 @@ def load_manager_records() -> list[dict[str, Any]]:
             records = example_records
 
     return unique_manager_records(records)
+
+
+def load_ingest_api_keys() -> list[str]:
+    raw_plural = os.getenv("GOODRAISE_INGEST_API_KEYS", "").strip()
+    if raw_plural:
+        try:
+            parsed = json.loads(raw_plural)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            return [item.strip() for item in raw_plural.split(",") if item.strip()]
+
+    raw_single = os.getenv("GOODRAISE_INGEST_API_KEY", "").strip()
+    return [raw_single] if raw_single else []
+
+
+def extract_ingest_api_key(headers: Any) -> str:
+    header_key = (headers.get(INGEST_API_KEY_HEADER) or "").strip()
+    if header_key:
+        return header_key
+    auth_header = (headers.get("Authorization") or "").strip()
+    match = re.match(r"^Bearer\s+(.+)$", auth_header, re.IGNORECASE)
+    return match.group(1).strip() if match else ""
+
+
+def validate_ingest_api_key(headers: Any) -> tuple[bool, HTTPStatus, str]:
+    configured_keys = load_ingest_api_keys()
+    if not configured_keys:
+        return False, HTTPStatus.SERVICE_UNAVAILABLE, "Ingest API key is not configured on the server."
+
+    presented_key = extract_ingest_api_key(headers)
+    if not presented_key:
+        return False, HTTPStatus.UNAUTHORIZED, "Missing API key."
+
+    if any(hmac.compare_digest(configured_key, presented_key) for configured_key in configured_keys):
+        return True, HTTPStatus.OK, ""
+
+    return False, HTTPStatus.UNAUTHORIZED, "Invalid API key."
 
 
 def ensure_data_dir() -> None:
@@ -1389,6 +1438,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     SCOPED_DATASET_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/dataset$")
     SCOPED_SOURCE_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source$")
     SCOPED_SOURCE_REFRESH_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source/refresh$")
+    SCOPED_INGEST_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/ingest$")
     SCOPED_CAMPAIGN_LIST_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns$")
 
     @property
@@ -1412,7 +1462,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return [
                 ("Access-Control-Allow-Origin", origin),
                 ("Access-Control-Allow-Credentials", "true"),
-                ("Access-Control-Allow-Headers", "Content-Type"),
+                ("Access-Control-Allow-Headers", "Content-Type, X-GoodRaise-API-Key, Authorization"),
                 ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
                 ("Vary", "Origin"),
             ]
@@ -1543,6 +1593,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.handle_scoped_source_refresh(
                 normalize_slug(source_refresh_match.group(1), "default-org"),
                 normalize_slug(source_refresh_match.group(2), "campaign"),
+            )
+            return True
+
+        ingest_match = self.SCOPED_INGEST_RE.match(path)
+        if method == "POST" and ingest_match:
+            self.handle_scoped_external_ingest(
+                normalize_slug(ingest_match.group(1), "default-org"),
+                normalize_slug(ingest_match.group(2), "campaign"),
             )
             return True
         return False
@@ -1972,6 +2030,69 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             },
         )
         self.audit("source_refresh", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], mode=config.get("mode", "file"))
+
+    def handle_scoped_external_ingest(self, organization_id: str, campaign_id: str) -> None:
+        is_valid, status, message = validate_ingest_api_key(self.headers)
+        if not is_valid:
+            self.audit("external_ingest", "", organizationId=organization_id, campaignId=campaign_id, outcome="denied", reason=message)
+            self.respond_json(status, {"message": message})
+            return
+
+        database_url = (os.getenv("GOODRAISE_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+        if not database_url:
+            self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, {"message": "GOODRAISE_DATABASE_URL is not configured on the server."})
+            return
+        if psycopg is None or relational_postgres is None:
+            self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, {"message": "PostgreSQL ingestion dependencies are not available on the server."})
+            return
+
+        payload = self.read_json_body()
+        source_label = str(payload.get("sourceLabel") or payload.get("source") or "external-api").strip() or "external-api"
+        request_reference = str(payload.get("requestId") or payload.get("externalReference") or payload.get("reference") or "").strip()
+
+        try:
+            with psycopg.connect(database_url) as connection:
+                result = relational_postgres.ingest_external_record(
+                    connection,
+                    organization_id,
+                    campaign_id,
+                    payload,
+                    source_label=source_label,
+                    imported_by="external-api",
+                    request_reference=request_reference,
+                )
+        except LookupError as exc:
+            self.audit("external_ingest", "", organizationId=organization_id, campaignId=campaign_id, outcome="error", reason=str(exc))
+            self.respond_json(HTTPStatus.NOT_FOUND, {"message": str(exc)})
+            return
+        except ValueError as exc:
+            self.audit("external_ingest", "", organizationId=organization_id, campaignId=campaign_id, outcome="error", reason=str(exc))
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": str(exc)})
+            return
+        except Exception:
+            self.audit("external_ingest", "", organizationId=organization_id, campaignId=campaign_id, outcome="error", reason="unexpected_failure")
+            self.respond_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"message": "Failed to ingest the external record."})
+            return
+
+        self.audit(
+            "external_ingest",
+            "",
+            organizationId=result.get("organizationId", organization_id),
+            campaignId=result.get("campaignId", campaign_id),
+            outcome="success",
+            transactionId=result.get("transactionId", ""),
+            importBatchId=result.get("importBatchId", ""),
+            sourceTransactionKey=result.get("sourceTransactionKey", ""),
+            sourceLabel=source_label,
+        )
+        self.respond_json(
+            HTTPStatus.OK if result.get("created") is False else HTTPStatus.CREATED,
+            {
+                "ok": True,
+                **result,
+                "message": "The external record was ingested successfully.",
+            },
+        )
 
     def handle_auth_status(self) -> None:
         auth_context = self.get_auth_context()

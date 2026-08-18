@@ -24,6 +24,11 @@ import {
   refreshAdminSource,
   saveAdminSourceConfig,
 } from "../lib/source-store.mjs";
+import {
+  IngestHttpError,
+  ingestCampaignRecord,
+  validateIngestApiKey,
+} from "../lib/postgres-ingest.mjs";
 
 const JSON_METHODS = new Set(["POST", "PUT", "PATCH"]);
 
@@ -149,6 +154,57 @@ export default async (request) => {
 
   if (pathname === "/api/admin/source-refresh" && request.method === "POST") {
     return refreshAdminSource(request);
+  }
+
+  const scopedIngest = matchScopedCampaignRoute(pathname, "/ingest");
+  if (scopedIngest && request.method === "POST") {
+    const apiKeyValidation = validateIngestApiKey(request);
+    if (!apiKeyValidation.ok) {
+      await appendAuditEvent({
+        action: "external_ingest",
+        outcome: "denied",
+        detail: {
+          reason: apiKeyValidation.message,
+          organizationId: scopedIngest.organizationId,
+          campaignId: scopedIngest.campaignId,
+        },
+      });
+      return jsonResponse(apiKeyValidation.status, { message: apiKeyValidation.message });
+    }
+    try {
+      const payload = await readRequestPayload(request);
+      const result = await ingestCampaignRecord({
+        organizationIdentifier: scopedIngest.organizationId,
+        campaignIdentifier: scopedIngest.campaignId,
+        payload,
+      });
+      await appendAuditEvent({
+        action: "external_ingest",
+        outcome: "success",
+        organizationId: result.organization.id,
+        campaignId: result.campaign.id,
+        detail: {
+          importBatchId: result.importBatch.id,
+          transactionId: result.transaction.id,
+          sourceTransactionKey: result.transaction.sourceTransactionKey,
+          sourceLabel: result.importBatch.sourceLabel,
+        },
+      });
+      return jsonResponse(result.created === false ? 200 : 201, result);
+    } catch (error) {
+      const status = error instanceof IngestHttpError ? error.status : 500;
+      const message = error instanceof IngestHttpError ? error.message : "Failed to ingest the external record.";
+      await appendAuditEvent({
+        action: "external_ingest",
+        outcome: "error",
+        detail: {
+          reason: message,
+          organizationId: scopedIngest.organizationId,
+          campaignId: scopedIngest.campaignId,
+        },
+      });
+      return jsonResponse(status, { message });
+    }
   }
 
   const scopedDataset = matchScopedCampaignRoute(pathname, "/dataset");

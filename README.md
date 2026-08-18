@@ -118,6 +118,8 @@ The app receives campaign export files and turns them into an active dashboard t
   Local verification for the Netlify auth flow.
 - `scripts/benchmark_intelligence.mjs`
   Synthetic scale benchmark for the GoodRaise intelligence layer across 1k, 10k, and 100k donation scenarios.
+- `scripts/setup_relational_campaign_db.py`
+  Creates a relational PostgreSQL schema for GoodRaise and imports a campaign CSV into both raw CSV-parity storage and normalized campaign tables.
 - `scripts/verify_repository_hygiene.py`
   Fails if sensitive local/config/data files slip back into git.
 - `tests/goodraise-intelligence.test.mjs`
@@ -172,6 +174,7 @@ Important:
 - In Netlify mode, manager auth is stored through Netlify Functions plus Netlify Blobs persistence.
 - In Netlify mode, campaign-builder and source-API configuration are also persisted server-side and are not exposed in the public app shell.
 - Netlify deploys include CSP, frame protection, content-type hardening, referrer policy, and basic auth rate limiting.
+- External real-time ingestion into PostgreSQL is available through a campaign-scoped `POST /api/organizations/:orgId/campaigns/:campaignId/ingest` endpoint protected by an API key.
 - Recommended local override file: `work/config/dashboard-access.local.json` (ignored from git).
 - Real manager emails are intentionally excluded from tracked source. Supply them through `work/config/dashboard-access.local.json` locally or `YELLOW_DASHBOARD_MANAGER_EMAILS` in deployment.
 
@@ -258,6 +261,109 @@ Before the first real deploy, verify in Netlify:
 5. Keep the default security headers from `netlify.toml`, and deploy only on HTTPS domains.
 
 Useful local verification commands:
+
+## Relational PostgreSQL Import
+
+GoodRaise can also persist campaign exports into a relational PostgreSQL database.
+
+What the importer does:
+
+- preserves the CSV structure in `goodraise.transactions_csv_raw` with the exact source columns
+- creates normalized relational tables for `organizations`, `campaigns`, `import_batches`, `donors`, `ambassadors`, `rewards`, and `transactions`
+- links every imported transaction to an organization, campaign, donor, ambassador, reward, and import batch where relevant
+
+Required environment variable:
+
+```powershell
+$env:GOODRAISE_DATABASE_URL="postgresql://username:password@host/database?sslmode=require"
+$env:GOODRAISE_INGEST_API_KEY="replace-with-a-long-random-secret"
+```
+
+Install the Python dependencies:
+
+```powershell
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" -m pip install -r requirements.txt
+```
+
+Run the importer:
+
+```powershell
+& "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" scripts/setup_relational_campaign_db.py `
+  --csv "C:\path\to\campaign.csv" `
+  --organization-slug "default-org" `
+  --organization-name "GoodRaise Imported Organization" `
+  --campaign-slug "imported-campaign" `
+  --campaign-name "Imported Campaign" `
+  --campaign-status "completed" `
+  --imported-by "codex"
+```
+
+The script prints a JSON summary with the created organization, campaign, import batch, and campaign-level row counts.
+
+## Real-Time External Ingestion Endpoint
+
+GoodRaise can receive a single external donation row in real time and save it into the same relational PostgreSQL schema.
+
+Endpoint:
+
+```text
+POST /api/organizations/:organizationId/campaigns/:campaignId/ingest
+```
+
+Authentication:
+
+- header `X-GoodRaise-API-Key: <your-secret>`
+- or `Authorization: Bearer <your-secret>`
+
+Notes:
+
+- `organizationId` and `campaignId` may be either the stable IDs or the slugs stored in PostgreSQL
+- the route writes to both `goodraise.transactions` and `goodraise.transactions_csv_raw`
+- duplicate records are blocked at the database layer through a campaign-scoped canonical event key, even if the same donation arrives later through a different source such as CSV import plus live event ingestion
+
+Example `POST`:
+
+```powershell
+$headers = @{
+  "Content-Type" = "application/json"
+  "X-GoodRaise-API-Key" = "replace-with-a-long-random-secret"
+}
+
+$body = @"
+{
+  "sourceLabel": "giveback-live",
+  "requestId": "evt-20260818-0001",
+  "record": {
+    "id": "live-10001",
+    "created_at": "18/08/26 18:45",
+    "full_name": "ישראל ישראלי",
+    "total": "360.00",
+    "currencyname": "ILS",
+    "phone": "0501234567",
+    "email": "donor@example.org",
+    "Ambassador name": "נועם פרוסטיג",
+    "Ambassador email": "noamfrostig@gmail.com",
+    "city": "תל אביב",
+    "charged_success": "true",
+    "charge_result": "000",
+    "direct_debit": "false"
+  }
+}
+"@
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8767/api/organizations/goodraise-default/campaigns/osim-tov-betzahov-pesach-2026/ingest" `
+  -Headers $headers `
+  -Body $body
+```
+
+Successful response includes:
+
+- organization and campaign identity
+- created import-batch ID
+- transaction ID
+- campaign-scoped source transaction key
 
 ```powershell
 & "$env:USERPROFILE\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" work/build_yellow_dashboard.py
