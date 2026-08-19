@@ -296,6 +296,41 @@ function normalizeExternalRecord(payload = {}) {
   return normalized;
 }
 
+function hasSuspiciousQuestionMarks(value) {
+  const text = normalizeText(value);
+  if (!text.includes("?")) {
+    return false;
+  }
+  const compact = text.replace(/\s+/g, "");
+  const questionCount = Array.from(compact).filter((char) => char === "?").length;
+  if (questionCount < 2) {
+    return false;
+  }
+  const hasLetterOrDigit = /[A-Za-z0-9\u0590-\u05FF]/.test(text);
+  if (!hasLetterOrDigit) {
+    return true;
+  }
+  return questionCount / Math.max(compact.length, 1) >= 0.45;
+}
+
+function validateExternalRecordEncoding(record) {
+  const suspiciousFields = [
+    ["full_name", "full_name"],
+    ["Ambassador name", "Ambassador name"],
+    ["city", "city"],
+    ["shipping_name", "shipping_name"],
+    ["google_address_line", "google_address_line"],
+  ]
+    .filter(([fieldName]) => hasSuspiciousQuestionMarks(record[fieldName]))
+    .map(([, label]) => label);
+  if (suspiciousFields.length) {
+    throw new IngestHttpError(
+      400,
+      `Payload text appears mis-encoded in fields: ${suspiciousFields.join(", ")}. Send the JSON body as UTF-8.`,
+    );
+  }
+}
+
 function isBlankRecord(record) {
   return Object.values(record).every((value) => !normalizeText(value));
 }
@@ -711,6 +746,7 @@ async function upsertReward(client, organizationId, campaignId, record) {
 
 export async function ingestCampaignRecord({ organizationIdentifier, campaignIdentifier, payload = {} }) {
   const record = normalizeExternalRecord(payload);
+  validateExternalRecordEncoding(record);
   if (isBlankRecord(record)) {
     throw new IngestHttpError(400, "Payload must include a non-empty record object.");
   }

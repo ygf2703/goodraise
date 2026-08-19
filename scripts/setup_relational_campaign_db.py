@@ -464,6 +464,38 @@ def normalize_external_record(payload: dict[str, Any]) -> dict[str, str]:
     return normalized
 
 
+def has_suspicious_question_marks(value: str) -> bool:
+    text = normalize_text(value)
+    if "?" not in text:
+        return False
+    compact = re.sub(r"\s+", "", text)
+    if compact.count("?") < 2:
+        return False
+    has_letter_or_digit = bool(re.search(r"[A-Za-z0-9\u0590-\u05FF]", text))
+    if not has_letter_or_digit:
+        return True
+    return compact.count("?") / max(len(compact), 1) >= 0.45
+
+
+def validate_external_record_encoding(record: dict[str, str]) -> None:
+    suspicious_fields = [
+        label
+        for field_name, label in (
+            ("full_name", "full_name"),
+            ("Ambassador name", "Ambassador name"),
+            ("city", "city"),
+            ("shipping_name", "shipping_name"),
+            ("google_address_line", "google_address_line"),
+        )
+        if has_suspicious_question_marks(record.get(field_name, ""))
+    ]
+    if suspicious_fields:
+        joined = ", ".join(suspicious_fields)
+        raise ValueError(
+            f"Payload text appears mis-encoded in fields: {joined}. Send the JSON body as UTF-8."
+        )
+
+
 def compute_file_checksum(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -1196,6 +1228,7 @@ def ingest_external_record(
     request_reference: str = "",
 ) -> dict[str, Any]:
     normalized_record = normalize_external_record(record_payload)
+    validate_external_record_encoding(normalized_record)
     if is_blank_row(normalized_record):
         raise ValueError("Payload record is empty.")
 
