@@ -408,6 +408,7 @@ def build_auth_config() -> dict:
             "setupEndpoint": f"{prefix}/setup",
             "logoutEndpoint": f"{prefix}/logout",
             "resetEndpoint": "",
+            "publicContextEndpoint": f"{base_url}/api/public-context" if base_url else "/api/public-context",
             "datasetEndpoint": f"{base_url}/api/admin/dataset" if base_url else "/api/admin/dataset",
             "campaignConfigEndpoint": f"{base_url}/api/admin/campaign-config" if base_url else "/api/admin/campaign-config",
             "sourceConfigEndpoint": f"{base_url}/api/admin/source-config" if base_url else "/api/admin/source-config",
@@ -422,6 +423,7 @@ def build_auth_config() -> dict:
         "setupEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_SETUP_ENDPOINT", "http://127.0.0.1:8767/api/auth/setup"),
         "logoutEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_LOGOUT_ENDPOINT", "http://127.0.0.1:8767/api/auth/logout"),
         "resetEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_RESET_ENDPOINT", "http://127.0.0.1:8767/api/auth/reset-local"),
+        "publicContextEndpoint": os.getenv("YELLOW_DASHBOARD_PUBLIC_CONTEXT_ENDPOINT", "http://127.0.0.1:8767/api/public-context"),
         "datasetEndpoint": os.getenv("YELLOW_DASHBOARD_AUTH_DATASET_ENDPOINT", "http://127.0.0.1:8767/api/admin/dataset"),
         "campaignConfigEndpoint": os.getenv("YELLOW_DASHBOARD_CAMPAIGN_CONFIG_ENDPOINT", "http://127.0.0.1:8767/api/admin/campaign-config"),
         "sourceConfigEndpoint": os.getenv("YELLOW_DASHBOARD_SOURCE_CONFIG_ENDPOINT", "http://127.0.0.1:8767/api/admin/source-config"),
@@ -3135,7 +3137,7 @@ def build_fragment(
                       <div class="section-header">
                         <div>
                           <h2>כניסה למערכת הניהול</h2>
-                          <div class="text-small text-muted">כניסה באמצעות מייל מורשה מראש. בכניסה הראשונה תתבקשו להגדיר סיסמה אישית.</div>
+                          <div class="text-small text-muted">כניסה באמצעות מייל מורשה מראש. אם זו כניסה ראשונה, המערכת תעבור אוטומטית להגדרת סיסמה.</div>
                         </div>
                       </div>
                       <label class="form-label">
@@ -3148,7 +3150,7 @@ def build_fragment(
                           <input id="login-password" class="form-control" type="password" autocomplete="current-password" placeholder="הקלד/י סיסמה" />
                           <button id="login-password-toggle" class="button-ghost password-toggle" type="button" aria-label="הצג או הסתר סיסמה">הצג</button>
                         </div>
-                        <div class="text-small text-muted">בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.</div>
+                        <div id="login-password-setup-note" class="text-small text-muted" hidden style="display:none;">בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.</div>
                       </label>
                       <label id="login-password-confirm-label" class="form-label" hidden style="display:none;">
                         אימות סיסמה
@@ -3637,6 +3639,7 @@ def build_fragment(
                 loginForm: root.querySelector("#login-form"),
                 loginEmail: root.querySelector("#login-email"),
                 loginPassword: root.querySelector("#login-password"),
+                loginPasswordSetupNote: root.querySelector("#login-password-setup-note"),
                 loginPasswordConfirmLabel: root.querySelector("#login-password-confirm-label"),
                 loginPasswordConfirm: root.querySelector("#login-password-confirm"),
                 loginPasswordToggle: root.querySelector("#login-password-toggle"),
@@ -3780,6 +3783,10 @@ def build_fragment(
                   adminDatasetLoaded: false,
                   campaignConfigLoaded: false,
                   accessibleCampaigns: [],
+                  publicScope: {
+                    organizationId: "",
+                    campaignId: "",
+                  },
                   currentScope: {
                     organizationId: "",
                     campaignId: "",
@@ -4755,6 +4762,7 @@ def build_fragment(
 
               function getActiveCampaignIdentity(registry = state?.campaignRegistry, campaignId = state?.activeCampaignId || "") {
                 const normalized = normalizeCampaignRegistry(registry);
+                const serverScope = state?.auth?.currentScope && typeof state.auth.currentScope === "object" ? state.auth.currentScope : {};
                 const targetEntry =
                   normalized.campaigns.find((item) => item.id === String(campaignId || "").trim()) ||
                   normalized.campaigns.find((item) => item.id === normalized.activeCampaignId) ||
@@ -4768,13 +4776,13 @@ def build_fragment(
                 ).trim();
                 const campaignName = String(targetEntry?.name || basics.campaignName || "").trim();
                 const campaignSlug = String(
-                  targetEntry?.slug || basics.slug || normalizeUrlSlug(campaignName || "campaign")
+                  targetEntry?.slug || basics.slug || serverScope.campaignId || normalizeUrlSlug(campaignName || "campaign")
                 ).trim();
                 return {
-                  organizationId: String(organization.id || basics.organizationId || organizationSlug || "organization").trim(),
+                  organizationId: String(serverScope.organizationId || organization.id || basics.organizationId || organizationSlug || "organization").trim(),
                   organizationSlug,
                   organizationName: organizationName || "Organization",
-                  campaignId: String(targetEntry?.id || basics.id || campaignSlug || "campaign").trim(),
+                  campaignId: String(serverScope.campaignId || targetEntry?.id || basics.id || campaignSlug || "campaign").trim(),
                   campaignSlug,
                   campaignName: campaignName || "Campaign",
                 };
@@ -5002,7 +5010,9 @@ def build_fragment(
                 persistActiveCampaignLegacyState();
                 storeCampaignRegistry(state.campaignRegistry);
                 if (canUseBackendAuth() && isManagerAuthenticated()) {
-                  await loadProtectedManagerData(getActiveCampaignIdentity(nextRegistry, targetEntry.id));
+                  await loadProtectedManagerData(getActiveCampaignIdentity(nextRegistry, targetEntry.id), {
+                    includeCampaignBuilder: state.ui.adminTab === "design",
+                  });
                 }
                 if (options.message) {
                   setCampaignBuilderStatus(options.message, "success");
@@ -5505,18 +5515,130 @@ def build_fragment(
                 return getFallbackAdminEndpoint(kind);
               }
 
+              function buildScopedPublicDatasetEndpoint(scope = getActiveCampaignIdentity()) {
+                const organizationId = String(scope?.organizationId || "").trim();
+                const campaignId = String(scope?.campaignId || "").trim();
+                if (!organizationId || !campaignId) {
+                  return "";
+                }
+                const encodedOrganizationId = encodeURIComponent(organizationId);
+                const encodedCampaignId = encodeURIComponent(campaignId);
+                return buildAuthUrl(`/api/organizations/${encodedOrganizationId}/campaigns/${encodedCampaignId}/public-dataset`);
+              }
+
+              async function fetchPublicContext() {
+                const endpoint = String(AUTH_CONFIG?.publicContextEndpoint || "").trim();
+                if (!endpoint) {
+                  return null;
+                }
+                if (state?.auth?.publicScope?.organizationId && state?.auth?.publicScope?.campaignId) {
+                  return {
+                    organizationId: state.auth.publicScope.organizationId,
+                    campaignId: state.auth.publicScope.campaignId,
+                  };
+                }
+                try {
+                  const response = await fetch(endpoint, {
+                    method: "GET",
+                    headers: {
+                      "cache-control": "no-store",
+                    },
+                  });
+                  const payload = await response.json().catch(() => ({}));
+                  if (!response.ok) {
+                    return null;
+                  }
+                  const scope = resolvePreferredCampaignScope(payload, { organizationId: "", campaignId: "" });
+                  if (!scope.organizationId || !scope.campaignId) {
+                    return null;
+                  }
+                  applyServerScope(payload, scope);
+                  state.auth.publicScope = {
+                    organizationId: scope.organizationId,
+                    campaignId: scope.campaignId,
+                  };
+                  return scope;
+                } catch (_error) {
+                  return null;
+                }
+              }
+
               function applyServerScope(payload = {}, fallbackScope = getActiveCampaignIdentity()) {
-                const organizationId = String(payload?.organizationId || payload?.organization?.id || fallbackScope?.organizationId || "").trim();
-                const campaignId = String(payload?.campaignId || payload?.campaign?.id || payload?.activeCampaign?.campaignId || fallbackScope?.campaignId || "").trim();
+                const summaries = Array.isArray(payload?.accessibleCampaigns)
+                  ? payload.accessibleCampaigns
+                  : Array.isArray(payload?.portfolio)
+                    ? payload.portfolio
+                    : [];
+                const preferredScope = resolvePreferredCampaignScope(payload, fallbackScope);
+                const firstSummaryScope = summaries.length ? buildScopeFromCampaignSummary(summaries[0]) : { organizationId: "", campaignId: "" };
+                const organizationId = String(
+                  payload?.organizationId ||
+                  payload?.organization?.id ||
+                  payload?.activeCampaign?.organizationId ||
+                  preferredScope.organizationId ||
+                  firstSummaryScope.organizationId ||
+                  fallbackScope?.organizationId ||
+                  ""
+                ).trim();
+                const campaignId = String(
+                  payload?.campaignId ||
+                  payload?.campaign?.id ||
+                  payload?.activeCampaign?.campaignId ||
+                  preferredScope.campaignId ||
+                  firstSummaryScope.campaignId ||
+                  fallbackScope?.campaignId ||
+                  ""
+                ).trim();
                 state.auth.currentScope = {
                   organizationId,
                   campaignId,
                 };
-                if (Array.isArray(payload?.accessibleCampaigns)) {
-                  state.auth.accessibleCampaigns = payload.accessibleCampaigns;
-                } else if (Array.isArray(payload?.portfolio)) {
-                  state.auth.accessibleCampaigns = payload.portfolio;
+                state.auth.accessibleCampaigns = summaries;
+              }
+
+              function buildScopeFromCampaignSummary(summary = {}) {
+                return {
+                  organizationId: String(summary?.organizationId || summary?.organizationSlug || "").trim(),
+                  campaignId: String(summary?.campaignId || summary?.campaignSlug || "").trim(),
+                };
+              }
+
+              function resolvePreferredCampaignScope(payload = {}, fallbackScope = getActiveCampaignIdentity()) {
+                const directScope = {
+                  organizationId: String(payload?.organizationId || payload?.organization?.id || payload?.activeCampaign?.organizationId || "").trim(),
+                  campaignId: String(payload?.campaignId || payload?.campaign?.id || payload?.activeCampaign?.campaignId || "").trim(),
+                };
+                if (directScope.organizationId && directScope.campaignId) {
+                  return directScope;
                 }
+
+                const summaries = Array.isArray(payload?.accessibleCampaigns)
+                  ? payload.accessibleCampaigns
+                  : Array.isArray(payload?.portfolio)
+                    ? payload.portfolio
+                    : [];
+                if (summaries.length) {
+                  const fallbackOrg = String(fallbackScope?.organizationId || "").trim();
+                  const fallbackCampaign = String(fallbackScope?.campaignId || "").trim();
+                  const matchedSummary = summaries.find((summary) => {
+                    const scope = buildScopeFromCampaignSummary(summary);
+                    return (
+                      scope.organizationId &&
+                      scope.campaignId &&
+                      (!fallbackOrg || scope.organizationId === fallbackOrg) &&
+                      (!fallbackCampaign || scope.campaignId === fallbackCampaign)
+                    );
+                  });
+                  const summaryScope = buildScopeFromCampaignSummary(matchedSummary || summaries[0]);
+                  if (summaryScope.organizationId && summaryScope.campaignId) {
+                    return summaryScope;
+                  }
+                }
+
+                return {
+                  organizationId: String(fallbackScope?.organizationId || "").trim(),
+                  campaignId: String(fallbackScope?.campaignId || "").trim(),
+                };
               }
 
               function canUseLocalPasswordReset() {
@@ -5539,6 +5661,10 @@ def build_fragment(
                   if (!state.auth.setupMode) {
                     elements.loginPasswordConfirm.value = "";
                   }
+                }
+                if (elements.loginPasswordSetupNote) {
+                  elements.loginPasswordSetupNote.hidden = !state.auth.setupMode;
+                  elements.loginPasswordSetupNote.style.display = state.auth.setupMode ? "" : "none";
                 }
                 if (elements.loginButton) {
                   elements.loginButton.textContent = state.auth.setupMode ? "שמירת סיסמה וכניסה" : "כניסה לפאנל הניהול";
@@ -5574,10 +5700,15 @@ def build_fragment(
               function clearSessionState() {
                 state.session = null;
                 state.auth.accessibleCampaigns = [];
+                state.auth.publicScope = {
+                  organizationId: "",
+                  campaignId: "",
+                };
                 state.auth.currentScope = {
                   organizationId: "",
                   campaignId: "",
                 };
+                state.auth.campaignConfigLoaded = false;
                 setSetupMode(false);
                 clearSourceRefreshTimer();
                 restorePublicDataset();
@@ -5608,6 +5739,7 @@ def build_fragment(
 
               async function hydrateAuthSession() {
                 clearSessionState();
+                let preferredScope = { organizationId: "", campaignId: "" };
                 if (!canUseBackendAuth()) {
                   state.auth.backendAvailable = false;
                   setLoginMessage(getLocalAdminEntryHint(), "warning");
@@ -5615,12 +5747,26 @@ def build_fragment(
                   return;
                 }
                 try {
+                  const publicScope = await fetchPublicContext();
+                  if (publicScope?.organizationId && publicScope?.campaignId) {
+                    preferredScope = publicScope;
+                  }
+                } catch (_error) {
+                  preferredScope = { organizationId: "", campaignId: "" };
+                }
+                try {
                   const { response, payload } = await authRequest(AUTH_CONFIG.statusEndpoint);
                   state.auth.backendAvailable = response.ok;
                   if (response.ok && payload?.authenticated && payload?.email) {
                     setAuthenticatedSession(payload.email);
-                    applyServerScope(payload);
-                    await loadProtectedManagerData();
+                    const scope = resolvePreferredCampaignScope(
+                      payload,
+                      preferredScope.organizationId && preferredScope.campaignId
+                        ? preferredScope
+                        : getActiveCampaignIdentity()
+                    );
+                    applyServerScope(payload, scope);
+                    await loadProtectedManagerData(scope, { includeCampaignBuilder: false });
                     syncSourceAutoRefresh();
                   }
                 } catch (_error) {
@@ -5648,6 +5794,49 @@ def build_fragment(
                 state.sourceLabel = payload.sourceLabel || "קובץ בסיס מאובטח";
                 state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
                 state.auth.adminDatasetLoaded = true;
+                state.filters = getDefaultFilters(state.meta);
+                resetFilterOptions();
+                return true;
+              }
+
+              async function loadPublicDataset(scope = getActiveCampaignIdentity()) {
+                const fetchDataset = async (effectiveScope) => {
+                  const endpoint = buildScopedPublicDatasetEndpoint(effectiveScope);
+                  if (!endpoint) {
+                    return { ok: false, payload: {}, scope: effectiveScope };
+                  }
+                  const response = await fetch(endpoint, {
+                    method: "GET",
+                    headers: {
+                      "cache-control": "no-store",
+                    },
+                  });
+                  const payload = await response.json().catch(() => ({}));
+                  return {
+                    ok: response.ok && Array.isArray(payload?.rows) && !!payload?.meta,
+                    payload,
+                    scope: effectiveScope,
+                  };
+                };
+
+                let datasetResult = await fetchDataset(scope);
+                if (!datasetResult.ok) {
+                  const discoveredScope = await fetchPublicContext();
+                  if (discoveredScope) {
+                    datasetResult = await fetchDataset(discoveredScope);
+                  }
+                }
+                if (!datasetResult.ok) {
+                  return false;
+                }
+
+                const payload = datasetResult.payload;
+                applyServerScope(payload, datasetResult.scope);
+
+                state.rows = enrichRows(payload.rows, payload.meta);
+                state.meta = payload.meta;
+                state.sourceLabel = payload.sourceLabel || "קובץ בסיס ציבורי";
+                state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
                 state.filters = getDefaultFilters(state.meta);
                 resetFilterOptions();
                 return true;
@@ -5898,9 +6087,23 @@ def build_fragment(
                 }, refreshMinutes * 60 * 1000);
               }
 
-              async function loadProtectedManagerData(scope = getActiveCampaignIdentity()) {
-                await hydrateSourceConfig(scope);
-                await hydrateCampaignBuilderConfig(scope);
+              async function ensureCampaignBuilderConfigLoaded(scope = getActiveCampaignIdentity()) {
+                if (state.auth.campaignConfigLoaded) {
+                  return state.campaignBuilder;
+                }
+                return hydrateCampaignBuilderConfig(scope);
+              }
+
+              async function loadProtectedManagerData(scope = getActiveCampaignIdentity(), options = {}) {
+                const includeCampaignBuilder = Boolean(options.includeCampaignBuilder || state.ui.adminTab === "design");
+                if (includeCampaignBuilder) {
+                  await Promise.all([
+                    hydrateSourceConfig(scope),
+                    ensureCampaignBuilderConfigLoaded(scope),
+                  ]);
+                } else {
+                  await hydrateSourceConfig(scope);
+                }
                 if (state.sourceConfig.mode === "api") {
                   try {
                     return await refreshSourceDataFromApi({ silent: true, render: false, scope });
@@ -6123,6 +6326,21 @@ def build_fragment(
                   button.setAttribute("aria-selected", isActive ? "true" : "false");
                 });
                 if (nextTab === "design") {
+                  if (isManagerAuthenticated() && !state.auth.campaignConfigLoaded) {
+                    setCampaignBuilderStatus("טוענים את הגדרות הקמפיין מהשרת...", "warning");
+                    ensureCampaignBuilderConfigLoaded()
+                      .then(() => {
+                        renderAll();
+                      })
+                      .catch((error) => {
+                        setCampaignBuilderStatus(
+                          error?.message || "טעינת הגדרות הקמפיין נכשלה. מוצגות בינתיים ההגדרות המקומיות.",
+                          "warning"
+                        );
+                        renderCampaignDesigner();
+                      });
+                    return;
+                  }
                   renderCampaignDesigner();
                 }
               }
@@ -7018,9 +7236,14 @@ def build_fragment(
                 });
               }
 
+              function isResetDataState() {
+                return Number(state.meta?.rowCount || 0) === 0 && state.rows.length === 0 && state.compare.rows.length === 0;
+              }
+
               function setControlNote(filteredRows, prizeRows) {
                 const compareText = state.compare.rows.length ? ` | השוואה: ${state.compare.label} (${formatNumber(state.compare.rows.length)} רשומות)` : "";
-                elements.controlNote.textContent = `בסיס: ${state.sourceLabel} | חלון ברירת מחדל: ${state.meta.projectWindowLabel || "לא זוהה"} | מוצגות ${formatNumber(filteredRows.length)} עסקאות במסנן | פרסים מחושבים על ${formatNumber(prizeRows.length)} עסקאות בטווח הזמן הנבחר${compareText}${getActiveFilterSummary()}`;
+                const resetPrefix = isResetDataState() ? "מאופס | " : "";
+                elements.controlNote.textContent = `${resetPrefix}בסיס: ${state.sourceLabel} | חלון ברירת מחדל: ${state.meta.projectWindowLabel || "לא זוהה"} | מוצגות ${formatNumber(filteredRows.length)} עסקאות במסנן | פרסים מחושבים על ${formatNumber(prizeRows.length)} עסקאות בטווח הזמן הנבחר${compareText}${getActiveFilterSummary()}`;
               }
 
               function renderPublicHeroBadges(prizeRows) {
@@ -7028,12 +7251,13 @@ def build_fragment(
                 const topLeader = leaderboard[0];
                 const latestCreated = getLatestCreatedIso(prizeRows);
                 const total = sumAmount(prizeRows);
-                const campaignStatus = prizeRows.length ? "פעיל על בסיס הקובץ הנוכחי" : "ממתין לנתונים";
+                const resetState = isResetDataState();
+                const campaignStatus = resetState ? "מאופס" : (prizeRows.length ? "פעיל על בסיס הקובץ הנוכחי" : "ממתין לנתונים");
                 const sourceWindow = state.meta.projectWindowLabel || "לא זוהה";
                 const leaderValue = topLeader ? escapeHtml(topLeader.ambassador) : "טרם נקבע";
                 const leaderMeta = topLeader
                   ? `הוביל/ה עד כה עם ${escapeHtml(formatAmount(topLeader.total))}`
-                  : "ברגע שייקלטו נתונים יופיע כאן מוביל/ה נוכחי/ת";
+                  : (resetState ? "כל נתוני התרומות נוקו. אפשר להתחיל להזרים נתוני בדיקה חדשים." : "ברגע שייקלטו נתונים יופיע כאן מוביל/ה נוכחי/ת");
                 const updatedText = latestCreated ? escapeHtml(formatDateTime(latestCreated)) : "אין עדכון";
                 const publicBadges = [
                   `
@@ -7087,8 +7311,10 @@ def build_fragment(
                 const prizeTotal = sumAmount(prizeRows);
                 const ambassadorCount = new Set(prizeRows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך")).size;
                 const latestCreated = getLatestCreatedIso(filteredRows);
+                const resetState = isResetDataState();
                 renderBrandAssets();
                 const badges = [
+                  ...(resetState ? [`<span class="hero-badge">מאופס</span>`] : []),
                   `<span class="hero-badge">${escapeHtml(formatAmount(filteredTotal))} בתצוגה הפעילה</span>`,
                   `<span class="hero-badge">${escapeHtml(formatNumber(ambassadorCount))} שגרירים פעילים בטווח</span>`,
                   `<span class="hero-badge">טווח פרויקט: ${escapeHtml(state.meta.projectWindowLabel || "טווח לא זוהה")}</span>`,
@@ -7101,9 +7327,9 @@ def build_fragment(
                   badges.push(`<span class="hero-badge">עודכן לאחרונה: ${escapeHtml(formatDateTime(latestCreated))}</span>`);
                 }
                 elements.adminWindowLabel.textContent = state.meta.projectWindowLabel || "לא זוהה";
-                elements.adminLastUpdated.textContent = latestCreated ? formatDateTime(latestCreated) : "אין נתונים";
+                elements.adminLastUpdated.textContent = latestCreated ? formatDateTime(latestCreated) : (resetState ? "מאופס" : "אין נתונים");
                 elements.adminSourceFile.textContent = state.sourceLabel || "קובץ בסיס";
-                elements.adminRecordCount.textContent = formatNumber(filteredRows.length);
+                elements.adminRecordCount.textContent = resetState ? "מאופס" : formatNumber(filteredRows.length);
                 elements.heroBadges.innerHTML = badges.join("");
               }
 
@@ -9344,6 +9570,21 @@ def build_fragment(
                 `;
               }
 
+              function runRenderStep(label, callback) {
+                try {
+                  callback();
+                  return true;
+                } catch (error) {
+                  const message = error?.message || "Unknown render error";
+                  console.error(`[render:${label}]`, error);
+                  if (elements.controlNote) {
+                    elements.controlNote.textContent = `שגיאת תצוגה באזור ${label}: ${message}`;
+                    elements.controlNote.className = "status-note text-small is-error";
+                  }
+                  return false;
+                }
+              }
+
               function renderAll() {
                 syncFiltersFromInputs();
                 state.view.dailyMetric = elements.dailyMetric.value;
@@ -9352,28 +9593,30 @@ def build_fragment(
                 const filteredRows = getFilteredRows();
                 const compareRows = getComparisonRows();
                 const prizeRows = getPrizeScopeRows();
-                renderCampaignDesigner();
-                renderProjectPage();
-                renderBrandAssets();
-                refreshAccessUi();
-                updateTableVisibility();
-                renderActiveFilterSummary();
-                updateMetricToolbarState();
-                setControlNote(filteredRows, prizeRows);
-                renderPublicHeroBadges(prizeRows);
-                renderHeroBadges(filteredRows, prizeRows, compareRows);
-                renderMetrics(filteredRows);
-                renderGoalsBoard(filteredRows);
-                renderValidationBoard();
-                renderExecutiveBoard(filteredRows);
-                renderQualityBoard(filteredRows);
-                renderSegmentBoard(filteredRows);
-                renderComparisonBoard(filteredRows, compareRows);
-                renderPrizeBoard(prizeRows);
-                renderDailyChart(filteredRows);
-                renderHeatmap(filteredRows);
-                renderMovement(filteredRows);
-                renderTable(filteredRows);
+                runRenderStep("project-page", () => renderProjectPage());
+                runRenderStep("brand-assets", () => renderBrandAssets());
+                if (state.ui.page === "admin" && state.ui.adminTab === "design") {
+                  runRenderStep("campaign-designer", () => renderCampaignDesigner());
+                }
+                runRenderStep("access-ui", () => refreshAccessUi());
+                runRenderStep("table-visibility", () => updateTableVisibility());
+                runRenderStep("filter-summary", () => renderActiveFilterSummary());
+                runRenderStep("metric-toolbar", () => updateMetricToolbarState());
+                runRenderStep("control-note", () => setControlNote(filteredRows, prizeRows));
+                runRenderStep("public-hero", () => renderPublicHeroBadges(prizeRows));
+                runRenderStep("admin-hero", () => renderHeroBadges(filteredRows, prizeRows, compareRows));
+                runRenderStep("metrics", () => renderMetrics(filteredRows));
+                runRenderStep("goals", () => renderGoalsBoard(filteredRows));
+                runRenderStep("validation", () => renderValidationBoard());
+                runRenderStep("executive", () => renderExecutiveBoard(filteredRows));
+                runRenderStep("quality", () => renderQualityBoard(filteredRows));
+                runRenderStep("segments", () => renderSegmentBoard(filteredRows));
+                runRenderStep("comparison", () => renderComparisonBoard(filteredRows, compareRows));
+                runRenderStep("prizes", () => renderPrizeBoard(prizeRows));
+                runRenderStep("daily-chart", () => renderDailyChart(filteredRows));
+                runRenderStep("heatmap", () => renderHeatmap(filteredRows));
+                runRenderStep("movement", () => renderMovement(filteredRows));
+                runRenderStep("table", () => renderTable(filteredRows));
               }
 
               function bindEvents() {
@@ -9888,6 +10131,7 @@ def build_fragment(
                 }
 
                 elements.logoutButton.addEventListener("click", async () => {
+                  const publicScope = getActiveCampaignIdentity();
                   if (canUseBackendAuth() && state.auth.backendAvailable) {
                     try {
                       await authRequest(AUTH_CONFIG.logoutEndpoint, { method: "POST" });
@@ -9910,6 +10154,7 @@ def build_fragment(
                   setImportMessage(getDefaultPrizeStatusMessage());
                   resetFilterOptions();
                   renderSourceConfigControls();
+                  await loadPublicDataset(publicScope).catch(() => false);
                   setPage("project");
                   renderAll();
                 });
@@ -9952,8 +10197,43 @@ def build_fragment(
 
                     if (response.ok && payload?.authenticated && payload?.email) {
                       setAuthenticatedSession(payload.email);
+                      let effectivePayload = payload;
+                      let preferredScope = state?.auth?.publicScope?.organizationId && state?.auth?.publicScope?.campaignId
+                        ? {
+                            organizationId: state.auth.publicScope.organizationId,
+                            campaignId: state.auth.publicScope.campaignId,
+                          }
+                        : null;
+                      if (!preferredScope) {
+                        try {
+                          preferredScope = await fetchPublicContext();
+                        } catch (_publicScopeError) {
+                          preferredScope = null;
+                        }
+                      }
+                      const payloadHasScope =
+                        Array.isArray(payload?.accessibleCampaigns) &&
+                        typeof payload?.role === "string" &&
+                        typeof payload?.organizationSlug === "string";
+                      if (!payloadHasScope) {
+                        try {
+                          const { response: statusResponse, payload: statusPayload } = await authRequest(AUTH_CONFIG.statusEndpoint);
+                          if (statusResponse.ok && statusPayload?.authenticated && statusPayload?.email) {
+                            effectivePayload = statusPayload;
+                          }
+                        } catch (_statusError) {
+                          // If the follow-up session status request fails, continue with the login payload.
+                        }
+                      }
+                      const scope = resolvePreferredCampaignScope(
+                        effectivePayload,
+                        preferredScope?.organizationId && preferredScope?.campaignId
+                          ? preferredScope
+                          : getActiveCampaignIdentity()
+                      );
+                      applyServerScope(effectivePayload, scope);
                       try {
-                        await loadProtectedManagerData();
+                        await loadProtectedManagerData(scope, { includeCampaignBuilder: false });
                         syncSourceAutoRefresh();
                       } catch (datasetError) {
                         setImportMessage(datasetError?.message || "הכניסה הצליחה, אך טעינת הנתונים המוגנים נכשלה. אפשר להעלות קובץ עסקאות ידנית.", "warning");
@@ -10270,27 +10550,39 @@ def build_fragment(
                 });
               }
 
-              state.rows = enrichRows(state.rows, state.meta);
-              state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
-              state.prizeModel = normalizePrizeModel(state.prizeModel);
-              if (hasPrizeModelContent(state.prizeModel)) {
-                storePrizeModel(state.prizeModel);
+              try {
+                state.rows = enrichRows(state.rows, state.meta);
+                state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
+                state.prizeModel = normalizePrizeModel(state.prizeModel);
+                if (hasPrizeModelContent(state.prizeModel)) {
+                  storePrizeModel(state.prizeModel);
+                }
+                hydrateRulesPage();
+                resetFilterOptions();
+                if (elements.loginEmail) {
+                  elements.loginEmail.value = readStoredAdminEmail();
+                }
+                setSetupMode(false);
+                applyAmbassadorContextFromUrl();
+                await hydrateAuthSession();
+                if (!isManagerAuthenticated()) {
+                  await loadPublicDataset(getActiveCampaignIdentity()).catch(() => false);
+                }
+                setPage(state.session ? "admin" : "project");
+                setAdminTab(state.ui.adminTab);
+                setLoginMessage("");
+                setImportMessage(getDefaultPrizeStatusMessage());
+                renderSourceConfigControls();
+                bindEvents();
+                renderAll();
+              } catch (error) {
+                console.error("[bootstrap]", error);
+                const bootstrapMessage = error?.message || "Unknown bootstrap error";
+                root.insertAdjacentHTML(
+                  "beforeend",
+                  `<div style="position:relative;z-index:30;margin:24px auto;max-width:960px;padding:16px 20px;border-radius:18px;background:rgba(255,214,41,0.16);border-inline-start:4px solid #090B10;color:#111D4A;font-weight:700;">שגיאת אתחול: ${escapeHtml(bootstrapMessage)}</div>`
+                );
               }
-              hydrateRulesPage();
-              resetFilterOptions();
-              if (elements.loginEmail) {
-                elements.loginEmail.value = readStoredAdminEmail();
-              }
-              setSetupMode(false);
-              applyAmbassadorContextFromUrl();
-              await hydrateAuthSession();
-              setPage(state.session ? "admin" : "project");
-              setAdminTab(state.ui.adminTab);
-              setLoginMessage("");
-              setImportMessage(getDefaultPrizeStatusMessage());
-              renderSourceConfigControls();
-              bindEvents();
-              renderAll();
             })();
           </script>
         </div>

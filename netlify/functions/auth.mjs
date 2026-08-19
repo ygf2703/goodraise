@@ -2,6 +2,8 @@ import {
   changeManagerPassword,
   getAdminDataset,
   getAuthStatus,
+  getPublicContext,
+  getPublicDataset,
   getRuntimeHealth,
   jsonResponse,
   loginManager,
@@ -87,6 +89,10 @@ export default async (request) => {
   if (pathname === "/api/health" && request.method === "GET") {
     const payload = await getRuntimeHealth();
     return jsonResponse(payload.ok ? 200 : 503, payload);
+  }
+
+  if (pathname === "/api/public-context" && request.method === "GET") {
+    return getPublicContext();
   }
 
   if (pathname === "/api/auth/status" && request.method === "GET") {
@@ -207,6 +213,11 @@ export default async (request) => {
     }
   }
 
+  const scopedPublicDataset = matchScopedCampaignRoute(pathname, "/public-dataset");
+  if (scopedPublicDataset && request.method === "GET") {
+    return getPublicDataset(scopedPublicDataset);
+  }
+
   const scopedDataset = matchScopedCampaignRoute(pathname, "/dataset");
   if (scopedDataset && request.method === "GET") {
     return getAdminDataset(request, scopedDataset);
@@ -251,6 +262,7 @@ export default async (request) => {
 export const config = {
   path: [
     "/api/health",
+    "/api/public-context",
     "/api/auth/status",
     "/api/auth/login",
     "/api/auth/setup",

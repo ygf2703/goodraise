@@ -946,6 +946,104 @@ export async function getAdminDataset(request, scope = {}) {
   });
 }
 
+function buildPublicDatasetRows(rows = []) {
+  return rows.map((row) => ({
+    id: row?.id || "",
+    createdIso: row?.createdIso || "",
+    date: row?.date || "",
+    hour: Number(row?.hour || 0),
+    email: "",
+    donor: "מוסתר בצפייה ציבורית",
+    ambassador: row?.ambassador || "",
+    amount: Number(row?.amount || 0),
+    city: "",
+    status: row?.status || "",
+    chargeResult: "",
+  }));
+}
+
+export async function getPublicDataset(scope = {}) {
+  const organizationId = normalizeStableId(scope.organizationId || "");
+  const campaignId = normalizeStableId(scope.campaignId || "");
+  if (!organizationId || !campaignId) {
+    return failureResponse(400, "חסרים organizationId או campaignId לטעינת התצוגה הציבורית.");
+  }
+
+  const context = await buildCampaignContext(organizationId, campaignId);
+  if (!context?.dataset) {
+    return failureResponse(404, "מאגר הנתונים הציבורי לקמפיין המבוקש אינו זמין כרגע.");
+  }
+
+  return jsonResponse(200, {
+    organizationId: context.organization.id,
+    campaignId: context.campaign.id,
+    organization: context.organization,
+    campaign: context.campaign,
+    rows: buildPublicDatasetRows(Array.isArray(context.dataset.rows) ? context.dataset.rows : []),
+    meta: context.dataset.meta && typeof context.dataset.meta === "object" ? context.dataset.meta : {},
+    sourceLabel: context.dataset.sourceLabel || "קובץ בסיס ציבורי",
+    generatedAt: context.dataset.generatedAt || context.dataset.updatedAt || "",
+  });
+}
+
+export async function getPublicContext() {
+  const summaries = await listCampaignSummaries();
+  if (!summaries.length) {
+    return failureResponse(404, "לא נמצא קמפיין ציבורי פעיל להצגה כרגע.");
+  }
+
+  const ranked = [...summaries].sort((left, right) => {
+    const leftHasData = Number(left?.datasetRecordCount || 0) > 0 ? 1 : 0;
+    const rightHasData = Number(right?.datasetRecordCount || 0) > 0 ? 1 : 0;
+    if (rightHasData !== leftHasData) {
+      return rightHasData - leftHasData;
+    }
+    const countDiff = Number(right?.datasetRecordCount || 0) - Number(left?.datasetRecordCount || 0);
+    if (countDiff !== 0) {
+      return countDiff;
+    }
+    return String(right?.updatedAt || "").localeCompare(String(left?.updatedAt || ""));
+  });
+
+  const selected = ranked[0];
+  const organizationId = normalizeStableId(selected.organizationId || selected.organizationSlug || "");
+  const campaignId = normalizeStableId(selected.campaignId || selected.campaignSlug || "");
+  if (!organizationId || !campaignId) {
+    return failureResponse(404, "לא נמצא קמפיין ציבורי תקין להצגה כרגע.");
+  }
+
+  const [organization, campaign] = await Promise.all([
+    getOrganization(organizationId),
+    getCampaign(organizationId, campaignId),
+  ]);
+
+  return jsonResponse(200, {
+    organizationId,
+    campaignId,
+    organization:
+      organization || {
+        id: organizationId,
+        slug: normalizeSlug(selected.organizationSlug || organizationId, organizationId),
+        name: selected.organizationName || organizationId,
+        status: "active",
+      },
+    campaign:
+      campaign || {
+        id: campaignId,
+        organizationId,
+        slug: normalizeSlug(selected.campaignSlug || campaignId, campaignId),
+        name: selected.campaignName || campaignId,
+        status: selected.status || "draft",
+        target: Number(selected.target || 0),
+        currency: selected.currency || "ILS",
+        startAt: selected.startAt || "",
+        endAt: selected.endAt || "",
+        updatedAt: selected.updatedAt || "",
+      },
+    datasetRecordCount: Number(selected.datasetRecordCount || 0),
+  });
+}
+
 export async function loginManager({ email, password, request }) {
   const normalizedEmail = normalizeEmail(email);
   const store = getPersistence();

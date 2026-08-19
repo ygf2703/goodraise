@@ -775,8 +775,7 @@ export async function listCampaigns(organizationId = "") {
           o.slug AS organization_slug
         FROM goodraise.campaigns c
         JOIN goodraise.organizations o ON o.id = c.organization_id
-        WHERE c.app_id IS NOT NULL
-          AND ($1::uuid IS NULL OR c.organization_id = $1::uuid)
+        WHERE ($1::uuid IS NULL OR c.organization_id = $1::uuid)
         ORDER BY c.updated_at DESC, c.created_at DESC
       `,
       [orgRow?.id || null],
@@ -937,8 +936,7 @@ export async function listCampaignDatasets(organizationId = "") {
         FROM goodraise.campaign_datasets d
         JOIN goodraise.campaigns c ON c.id = d.campaign_id
         JOIN goodraise.organizations o ON o.id = d.organization_id
-        WHERE c.app_id IS NOT NULL
-          AND ($1::uuid IS NULL OR d.organization_id = $1::uuid)
+        WHERE ($1::uuid IS NULL OR d.organization_id = $1::uuid)
         ORDER BY d.updated_at DESC
       `,
       [orgRow?.id || null],

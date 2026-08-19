@@ -340,6 +340,12 @@ def parse_timestamp(value: str) -> datetime | None:
     raw = normalize_text(value)
     if not raw:
         return None
+    iso_candidate = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(iso_candidate)
+        return parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    except ValueError:
+        pass
     for pattern in ("%d/%m/%y %H:%M", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S"):
         try:
             return datetime.strptime(raw, pattern).replace(tzinfo=UTC)

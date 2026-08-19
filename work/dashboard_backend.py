@@ -10,12 +10,15 @@ import secrets
 import socket
 import sqlite3
 import re
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from time import monotonic
 from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
@@ -39,6 +42,7 @@ DATA_DIR = WORK_DIR / "data"
 OUTPUTS_DIR = ROOT_DIR / "outputs"
 NETLIFY_DATA_DIR = ROOT_DIR / "netlify" / "data"
 PLATFORM_STORE_PATH = DATA_DIR / "goodraise-platform-dev.json"
+LOCAL_DATABASE_URL_PATH = DATA_DIR / "goodraise-database-url.local.txt"
 ADMIN_DATASET_PATH = NETLIFY_DATA_DIR / "admin-dataset.json"
 SOURCE_CONFIG_PATH = DATA_DIR / "dashboard-source-config.json"
 CAMPAIGN_CONFIG_PATH = DATA_DIR / "dashboard-campaign-config.json"
@@ -118,6 +122,82 @@ ROLE_ORDER = {
     ROLE_PLATFORM_ADMIN: 5,
 }
 INGEST_API_KEY_HEADER = "X-GoodRaise-API-Key"
+_POSTGRES_SCHEMA_READY = False
+_POSTGRES_SCHEMA_LOCK = threading.Lock()
+_POSTGRES_MANAGER_SEED_SIGNATURE = ""
+_POSTGRES_MANAGER_SEED_LOCK = threading.Lock()
+_SQLITE_MANAGER_SEED_SIGNATURE = ""
+_SQLITE_MANAGER_SEED_LOCK = threading.Lock()
+_RUNTIME_CACHE: dict[str, dict[str, Any]] = {}
+_RUNTIME_CACHE_LOCK = threading.Lock()
+AUTH_CONTEXT_CACHE_TTL_SECONDS = 15.0
+PLATFORM_CACHE_TTL_SECONDS = 15.0
+
+
+def _clone_cache_value(value: Any) -> Any:
+    if isinstance(value, (dict, list)):
+        return _clone_json(value)
+    return value
+
+
+def _runtime_cache_get(key: str) -> Any:
+    now = monotonic()
+    with _RUNTIME_CACHE_LOCK:
+        entry = _RUNTIME_CACHE.get(key)
+        if not entry:
+            return None
+        if float(entry.get("expiresAt", 0.0) or 0.0) <= now:
+            _RUNTIME_CACHE.pop(key, None)
+            return None
+        return _clone_cache_value(entry.get("value"))
+
+
+def _runtime_cache_set(key: str, value: Any, ttl_seconds: float) -> Any:
+    expires_at = monotonic() + max(float(ttl_seconds or 0.0), 0.0)
+    cached_value = _clone_cache_value(value)
+    with _RUNTIME_CACHE_LOCK:
+        _RUNTIME_CACHE[key] = {
+            "value": cached_value,
+            "expiresAt": expires_at,
+        }
+    return _clone_cache_value(cached_value)
+
+
+def _runtime_cache_delete(key: str) -> None:
+    with _RUNTIME_CACHE_LOCK:
+        _RUNTIME_CACHE.pop(key, None)
+
+
+def _runtime_cache_clear_prefix(prefix: str) -> None:
+    with _RUNTIME_CACHE_LOCK:
+        for key in [item for item in _RUNTIME_CACHE.keys() if item.startswith(prefix)]:
+            _RUNTIME_CACHE.pop(key, None)
+
+
+def _manager_records_signature(records: list[dict[str, Any]]) -> str:
+    return json.dumps(records, ensure_ascii=False, sort_keys=True)
+
+
+def _invalidate_platform_runtime_cache(organization_id: str = "", campaign_id: str = "") -> None:
+    normalized_org = normalize_slug(organization_id, "") if organization_id else ""
+    normalized_campaign = normalize_slug(campaign_id, "") if campaign_id else ""
+    _runtime_cache_delete("platform:summaries")
+    _runtime_cache_delete("platform:public-context")
+    _runtime_cache_delete("platform:public-default-summary")
+    _runtime_cache_clear_prefix("auth-accessible:")
+    if normalized_org:
+        _runtime_cache_delete(f"platform:organization:{normalized_org}")
+    if normalized_org and normalized_campaign:
+        _runtime_cache_delete(f"platform:campaign:{normalized_org}:{normalized_campaign}")
+        _runtime_cache_delete(f"platform:campaign-config:{normalized_org}:{normalized_campaign}")
+        _runtime_cache_delete(f"platform:campaign-source:{normalized_org}:{normalized_campaign}")
+        _runtime_cache_delete(f"platform:campaign-dataset:{normalized_org}:{normalized_campaign}")
+        _runtime_cache_delete(f"platform:public-bundle:{normalized_org}:{normalized_campaign}")
+
+
+def _invalidate_auth_runtime_cache() -> None:
+    _runtime_cache_clear_prefix("auth-context:")
+    _runtime_cache_clear_prefix("auth-accessible:")
 
 
 def normalize_email(value: str) -> str:
@@ -400,28 +480,39 @@ def ensure_schema(connection: sqlite3.Connection) -> None:
 
 
 def seed_admins(connection: sqlite3.Connection) -> None:
-    created_at = isoformat_utc(utc_now())
-    for manager in load_manager_records():
-        connection.execute(
-            """
-            INSERT INTO admins (email, role, organization_slug, campaign_slugs, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(email) DO UPDATE SET
-                role = excluded.role,
-                organization_slug = excluded.organization_slug,
-                campaign_slugs = excluded.campaign_slugs,
-                is_active = excluded.is_active
-            """,
-            (
-                manager["email"],
-                manager["role"],
-                manager["organizationSlug"],
-                json.dumps(manager["campaignSlugs"], ensure_ascii=False),
-                1 if manager["isActive"] else 0,
-                created_at,
-            ),
-        )
-    connection.commit()
+    global _SQLITE_MANAGER_SEED_SIGNATURE
+    manager_records = load_manager_records()
+    signature = _manager_records_signature(manager_records)
+    if signature == _SQLITE_MANAGER_SEED_SIGNATURE:
+        return
+    with _SQLITE_MANAGER_SEED_LOCK:
+        if signature == _SQLITE_MANAGER_SEED_SIGNATURE:
+            return
+        created_at = isoformat_utc(utc_now())
+        for manager in manager_records:
+            connection.execute(
+                """
+                INSERT INTO admins (email, role, organization_slug, campaign_slugs, is_active, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(email) DO UPDATE SET
+                    role = excluded.role,
+                    organization_slug = excluded.organization_slug,
+                    campaign_slugs = excluded.campaign_slugs,
+                    is_active = excluded.is_active
+                """,
+                (
+                    manager["email"],
+                    manager["role"],
+                    manager["organizationSlug"],
+                    json.dumps(manager["campaignSlugs"], ensure_ascii=False),
+                    1 if manager["isActive"] else 0,
+                    created_at,
+                ),
+            )
+        connection.commit()
+        _SQLITE_MANAGER_SEED_SIGNATURE = signature
+        _invalidate_auth_runtime_cache()
+        return
 
 
 def initialize_database() -> None:
@@ -521,6 +612,17 @@ def get_admin_scope(admin: sqlite3.Row | dict[str, Any] | None) -> dict[str, Any
     }
 
 
+def build_admin_auth_context(email: str, admin: sqlite3.Row | dict[str, Any] | None, expires_at: str = "") -> dict[str, Any]:
+    scope = get_admin_scope(admin)
+    return {
+        "email": normalize_email(email),
+        "role": scope["role"],
+        "organizationSlug": scope["organizationSlug"],
+        "campaignSlugs": scope["campaignSlugs"],
+        "expiresAt": str(expires_at or "").strip(),
+    }
+
+
 def has_required_role(role: str, minimum_role: str) -> bool:
     return ROLE_ORDER.get(normalize_role(role, ROLE_VIEWER), 0) >= ROLE_ORDER.get(normalize_role(minimum_role, ROLE_PLATFORM_ADMIN), 0)
 
@@ -544,6 +646,7 @@ def update_admin_password(connection: sqlite3.Connection, email: str, password: 
 def delete_sessions_for_email(connection: sqlite3.Connection, email: str) -> None:
     connection.execute("DELETE FROM admin_sessions WHERE lower(admin_email) = ?", (normalize_email(email),))
     connection.commit()
+    _invalidate_auth_runtime_cache()
 
 
 def create_session(connection: sqlite3.Connection, email: str) -> str:
@@ -572,12 +675,17 @@ def create_session(connection: sqlite3.Connection, email: str) -> str:
         (isoformat_utc(created_at), normalize_email(email)),
     )
     connection.commit()
+    _invalidate_auth_runtime_cache()
+    context = get_authenticated_admin_context(connection, token)
+    if context:
+        _runtime_cache_set(f"auth-context:{token}", context, AUTH_CONTEXT_CACHE_TTL_SECONDS)
     return token
 
 
 def delete_session(connection: sqlite3.Connection, token: str) -> None:
     connection.execute("DELETE FROM admin_sessions WHERE token = ?", (token,))
     connection.commit()
+    _invalidate_auth_runtime_cache()
 
 
 def get_authenticated_admin_context(connection: sqlite3.Connection, token: str) -> dict[str, Any] | None:
@@ -614,47 +722,57 @@ def get_authenticated_email(connection: sqlite3.Connection, token: str) -> str |
 
 
 def seed_admins_postgres(connection: Any) -> None:
-    created_at = isoformat_utc(utc_now())
-    with connection.cursor() as cursor:
-        for manager in load_manager_records():
-            cursor.execute(
-                """
-                INSERT INTO goodraise.admin_users (
-                    id,
-                    email,
-                    role,
-                    organization_app_id,
-                    organization_slug,
-                    campaign_ids,
-                    campaign_slugs,
-                    is_active,
-                    created_at,
-                    updated_at
+    global _POSTGRES_MANAGER_SEED_SIGNATURE
+    manager_records = load_manager_records()
+    signature = _manager_records_signature(manager_records)
+    if signature == _POSTGRES_MANAGER_SEED_SIGNATURE:
+        return
+    with _POSTGRES_MANAGER_SEED_LOCK:
+        if signature == _POSTGRES_MANAGER_SEED_SIGNATURE:
+            return
+        created_at = isoformat_utc(utc_now())
+        with connection.cursor() as cursor:
+            for manager in manager_records:
+                cursor.execute(
+                    """
+                    INSERT INTO goodraise.admin_users (
+                        id,
+                        email,
+                        role,
+                        organization_app_id,
+                        organization_slug,
+                        campaign_ids,
+                        campaign_slugs,
+                        is_active,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (%s::uuid, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s)
+                    ON CONFLICT (email) DO UPDATE SET
+                        role = EXCLUDED.role,
+                        organization_app_id = EXCLUDED.organization_app_id,
+                        organization_slug = EXCLUDED.organization_slug,
+                        campaign_ids = EXCLUDED.campaign_ids,
+                        campaign_slugs = EXCLUDED.campaign_slugs,
+                        is_active = EXCLUDED.is_active,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        str(uuid.uuid4()),
+                        manager["email"],
+                        manager["role"],
+                        normalize_slug(manager.get("organizationSlug") or "", ""),
+                        normalize_slug(manager.get("organizationSlug") or "", ""),
+                        json.dumps([], ensure_ascii=False),
+                        json.dumps(manager.get("campaignSlugs", []), ensure_ascii=False),
+                        bool(manager.get("isActive", True)),
+                        created_at,
+                        created_at,
+                    ),
                 )
-                VALUES (%s::uuid, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s)
-                ON CONFLICT (email) DO UPDATE SET
-                    role = EXCLUDED.role,
-                    organization_app_id = EXCLUDED.organization_app_id,
-                    organization_slug = EXCLUDED.organization_slug,
-                    campaign_ids = EXCLUDED.campaign_ids,
-                    campaign_slugs = EXCLUDED.campaign_slugs,
-                    is_active = EXCLUDED.is_active,
-                    updated_at = EXCLUDED.updated_at
-                """,
-                (
-                    str(uuid.uuid4()),
-                    manager["email"],
-                    manager["role"],
-                    normalize_slug(manager.get("organizationSlug") or "", ""),
-                    normalize_slug(manager.get("organizationSlug") or "", ""),
-                    json.dumps([], ensure_ascii=False),
-                    json.dumps(manager.get("campaignSlugs", []), ensure_ascii=False),
-                    bool(manager.get("isActive", True)),
-                    created_at,
-                    created_at,
-                ),
-            )
-    connection.commit()
+        connection.commit()
+        _POSTGRES_MANAGER_SEED_SIGNATURE = signature
+        _invalidate_auth_runtime_cache()
 
 
 def get_admin_postgres(connection: Any, email: str) -> dict[str, Any] | None:
@@ -750,8 +868,12 @@ def create_session_postgres(connection: Any, email: str) -> str:
             WHERE lower(email) = lower(%s)
             """,
             (isoformat_utc(created_at), isoformat_utc(created_at), normalize_email(email)),
-        )
+    )
     connection.commit()
+    _invalidate_auth_runtime_cache()
+    context = get_authenticated_admin_context_postgres(connection, token)
+    if context:
+        _runtime_cache_set(f"auth-context:{token}", context, AUTH_CONTEXT_CACHE_TTL_SECONDS)
     return token
 
 
@@ -759,6 +881,7 @@ def delete_session_postgres(connection: Any, token: str) -> None:
     with connection.cursor() as cursor:
         cursor.execute("DELETE FROM goodraise.admin_sessions WHERE token = %s", (token,))
     connection.commit()
+    _invalidate_auth_runtime_cache()
 
 
 def delete_sessions_for_email_postgres(connection: Any, email: str) -> None:
@@ -773,6 +896,7 @@ def delete_sessions_for_email_postgres(connection: Any, email: str) -> None:
             (normalize_email(email),),
         )
     connection.commit()
+    _invalidate_auth_runtime_cache()
 
 
 def get_authenticated_admin_context_postgres(connection: Any, token: str) -> dict[str, Any] | None:
@@ -841,6 +965,7 @@ def reset_admin_password_postgres(connection: Any, email: str) -> None:
             (normalize_email(email),),
         )
     connection.commit()
+    _invalidate_auth_runtime_cache()
 
 
 def write_audit_event(event_type: str, email: str, detail: dict[str, Any] | None = None) -> None:
@@ -863,6 +988,10 @@ def build_set_cookie(token: str | None, max_age: int) -> str:
     morsel["httponly"] = True
     morsel["samesite"] = "Lax"
     morsel["max-age"] = max_age
+    expires_at = utc_now() + timedelta(seconds=max(max_age, 0))
+    if max_age <= 0:
+        expires_at = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    morsel["expires"] = format_datetime(expires_at, usegmt=True)
     if os.getenv("YELLOW_DASHBOARD_SECURE_COOKIES", "").strip().lower() in {"1", "true", "yes", "on"}:
         morsel["secure"] = True
     return cookie.output(header="").strip()
@@ -879,7 +1008,15 @@ def load_admin_dataset_payload() -> dict[str, Any] | None:
 
 
 def get_goodraise_database_url() -> str:
-    return str(os.getenv("GOODRAISE_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+    configured = str(os.getenv("GOODRAISE_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+    if configured:
+        return configured
+    try:
+        if LOCAL_DATABASE_URL_PATH.exists():
+            return LOCAL_DATABASE_URL_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    return ""
 
 
 def uses_postgres_platform_store() -> bool:
@@ -903,13 +1040,30 @@ def _ensure_postgres_platform_schema(connection: Any) -> None:
     connection.commit()
 
 
+def _ensure_postgres_platform_schema_ready() -> None:
+    global _POSTGRES_SCHEMA_READY
+    if _POSTGRES_SCHEMA_READY:
+        return
+    database_url = get_goodraise_database_url()
+    if not database_url or psycopg is None or relational_postgres is None:
+        raise RuntimeError("GOODRAISE_DATABASE_URL is not configured for platform persistence.")
+    with _POSTGRES_SCHEMA_LOCK:
+        if _POSTGRES_SCHEMA_READY:
+            return
+        connection = psycopg.connect(database_url)
+        try:
+            _ensure_postgres_platform_schema(connection)
+        finally:
+            connection.close()
+        _POSTGRES_SCHEMA_READY = True
+
+
 def _connect_postgres_platform() -> Any:
     database_url = get_goodraise_database_url()
     if not database_url or psycopg is None or relational_postgres is None:
         raise RuntimeError("GOODRAISE_DATABASE_URL is not configured for platform persistence.")
-    connection = psycopg.connect(database_url)
-    _ensure_postgres_platform_schema(connection)
-    return connection
+    _ensure_postgres_platform_schema_ready()
+    return psycopg.connect(database_url)
 
 
 def _find_postgres_organization(connection: Any, organization_id: str) -> dict[str, Any] | None:
@@ -940,9 +1094,7 @@ def _find_postgres_organization(connection: Any, organization_id: str) -> dict[s
 
 
 def _find_postgres_campaign(connection: Any, organization_id: str, campaign_id: str) -> dict[str, Any] | None:
-    organization = _find_postgres_organization(connection, organization_id)
-    if not organization:
-        return None
+    normalized_organization_id = normalize_slug(organization_id, "default-org")
     normalized_campaign_id = normalize_slug(campaign_id, "campaign")
     with connection.cursor() as cursor:
         cursor.execute(
@@ -959,14 +1111,27 @@ def _find_postgres_campaign(connection: Any, organization_id: str, campaign_id: 
                 c.ends_at,
                 c.created_at,
                 c.updated_at,
-                c.updated_by
+                c.updated_by,
+                o.app_id,
+                o.slug
             FROM goodraise.campaigns c
-            WHERE c.organization_id = %s::uuid
+            JOIN goodraise.organizations o ON o.id = c.organization_id
+            WHERE (o.app_id = %s OR o.slug = %s)
               AND (c.app_id = %s OR c.slug = %s)
-            ORDER BY CASE WHEN c.app_id = %s THEN 0 ELSE 1 END, c.updated_at DESC
+            ORDER BY
+                CASE WHEN o.app_id = %s THEN 0 ELSE 1 END,
+                CASE WHEN c.app_id = %s THEN 0 ELSE 1 END,
+                c.updated_at DESC
             LIMIT 1
             """,
-            (organization["dbId"], normalized_campaign_id, normalized_campaign_id, normalized_campaign_id),
+            (
+                normalized_organization_id,
+                normalized_organization_id,
+                normalized_campaign_id,
+                normalized_campaign_id,
+                normalized_organization_id,
+                normalized_campaign_id,
+            ),
         )
         row = cursor.fetchone()
     if not row:
@@ -984,7 +1149,7 @@ def _find_postgres_campaign(connection: Any, organization_id: str, campaign_id: 
         "createdAt": str(row[9].isoformat() if hasattr(row[9], "isoformat") else row[9] or ""),
         "updatedAt": str(row[10].isoformat() if hasattr(row[10], "isoformat") else row[10] or ""),
         "updatedBy": normalize_email(row[11] or ""),
-        "organizationId": organization["id"],
+        "organizationId": normalize_slug(row[12] or row[13] or normalized_organization_id, normalized_organization_id),
     }
 
 
@@ -1120,16 +1285,77 @@ def _upsert_postgres_campaign(connection: Any, value: dict[str, Any]) -> dict[st
 
 
 def _get_postgres_payload(connection: Any, table_name: str, organization_id: str, campaign_id: str) -> Any:
-    campaign = _find_postgres_campaign(connection, organization_id, campaign_id)
-    if not campaign:
-        return None
+    normalized_organization_id = normalize_slug(organization_id, "default-org")
+    normalized_campaign_id = normalize_slug(campaign_id, "campaign")
     with connection.cursor() as cursor:
         cursor.execute(
-            f"SELECT payload FROM goodraise.{table_name} WHERE campaign_id = %s::uuid LIMIT 1",
-            (campaign["dbId"],),
+            f"""
+            SELECT t.payload
+            FROM goodraise.{table_name} t
+            JOIN goodraise.campaigns c ON c.id = t.campaign_id
+            JOIN goodraise.organizations o ON o.id = c.organization_id
+            WHERE (o.app_id = %s OR o.slug = %s)
+              AND (c.app_id = %s OR c.slug = %s)
+            ORDER BY
+                CASE WHEN o.app_id = %s THEN 0 ELSE 1 END,
+                CASE WHEN c.app_id = %s THEN 0 ELSE 1 END,
+                t.updated_at DESC
+            LIMIT 1
+            """,
+            (
+                normalized_organization_id,
+                normalized_organization_id,
+                normalized_campaign_id,
+                normalized_campaign_id,
+                normalized_organization_id,
+                normalized_campaign_id,
+            ),
         )
         row = cursor.fetchone()
     return _postgres_json_load(row[0]) if row else None
+
+
+def _get_postgres_campaign_config_map(connection: Any, scopes: list[tuple[str, str]]) -> dict[tuple[str, str], dict[str, Any]]:
+    normalized_scopes = [
+        (
+            normalize_slug(organization_id, "default-org"),
+            normalize_slug(campaign_id, "campaign"),
+        )
+        for organization_id, campaign_id in scopes
+        if str(organization_id or "").strip() and str(campaign_id or "").strip()
+    ]
+    if not normalized_scopes:
+        return {}
+    conditions: list[str] = []
+    params: list[str] = []
+    for organization_id, campaign_id in normalized_scopes:
+        conditions.append("((o.app_id = %s OR o.slug = %s) AND (c.app_id = %s OR c.slug = %s))")
+        params.extend([organization_id, organization_id, campaign_id, campaign_id])
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT
+                o.app_id,
+                o.slug,
+                c.app_id,
+                c.slug,
+                cfg.payload
+            FROM goodraise.campaigns c
+            JOIN goodraise.organizations o ON o.id = c.organization_id
+            LEFT JOIN goodraise.campaign_configs cfg ON cfg.campaign_id = c.id
+            WHERE {" OR ".join(conditions)}
+            """,
+            tuple(params),
+        )
+        rows = cursor.fetchall()
+    config_map: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        organization_id = normalize_slug(row[0] or row[1], "default-org")
+        campaign_id = normalize_slug(row[2] or row[3], "campaign")
+        payload = _postgres_json_load(row[4])
+        if isinstance(payload, dict):
+            config_map[(organization_id, campaign_id)] = payload
+    return config_map
 
 
 def _upsert_postgres_payload(connection: Any, table_name: str, organization_id: str, campaign_id: str, value: dict[str, Any]) -> Any:
@@ -1212,23 +1438,30 @@ def write_platform_store(store: dict[str, Any]) -> None:
 
 def platform_get(key: str) -> Any:
     if uses_postgres_platform_store():
+        cache_key = f"platform:{key}"
+        cached = _runtime_cache_get(cache_key)
+        if cached is not None:
+            return cached
         try:
             with _connect_postgres_platform() as connection:
+                result = None
                 if key.startswith("organization:"):
                     organization_id = key.split(":", 1)[1]
-                    return _find_postgres_organization(connection, organization_id)
-                if key.startswith("campaign-config:"):
+                    result = _find_postgres_organization(connection, organization_id)
+                elif key.startswith("campaign-config:"):
                     _, organization_id, campaign_id = key.split(":", 2)
-                    return _get_postgres_payload(connection, "campaign_configs", organization_id, campaign_id)
-                if key.startswith("campaign-source:"):
+                    result = _get_postgres_payload(connection, "campaign_configs", organization_id, campaign_id)
+                elif key.startswith("campaign-source:"):
                     _, organization_id, campaign_id = key.split(":", 2)
-                    return _get_postgres_payload(connection, "campaign_sources", organization_id, campaign_id)
-                if key.startswith("campaign-dataset:"):
+                    result = _get_postgres_payload(connection, "campaign_sources", organization_id, campaign_id)
+                elif key.startswith("campaign-dataset:"):
                     _, organization_id, campaign_id = key.split(":", 2)
-                    return _get_postgres_payload(connection, "campaign_datasets", organization_id, campaign_id)
-                if key.startswith("campaign:"):
+                    result = _get_postgres_payload(connection, "campaign_datasets", organization_id, campaign_id)
+                elif key.startswith("campaign:"):
                     _, organization_id, campaign_id = key.split(":", 2)
-                    return _find_postgres_campaign(connection, organization_id, campaign_id)
+                    result = _find_postgres_campaign(connection, organization_id, campaign_id)
+                if result is not None:
+                    return _runtime_cache_set(cache_key, result, PLATFORM_CACHE_TTL_SECONDS)
         except Exception:
             return None
     return read_platform_store().get("items", {}).get(key)
@@ -1239,21 +1472,26 @@ def platform_set(key: str, value: Any) -> None:
         with _connect_postgres_platform() as connection:
             if key.startswith("organization:") and isinstance(value, dict):
                 _upsert_postgres_organization(connection, value)
+                _invalidate_platform_runtime_cache(value.get("id") or key.split(":", 1)[1], "")
                 return
             if key.startswith("campaign:") and isinstance(value, dict):
                 _upsert_postgres_campaign(connection, value)
+                _invalidate_platform_runtime_cache(value.get("organizationId") or key.split(":", 2)[1], value.get("id") or key.split(":", 2)[2])
                 return
             if key.startswith("campaign-config:") and isinstance(value, dict):
                 _, organization_id, campaign_id = key.split(":", 2)
                 _upsert_postgres_payload(connection, "campaign_configs", organization_id, campaign_id, value)
+                _invalidate_platform_runtime_cache(organization_id, campaign_id)
                 return
             if key.startswith("campaign-source:") and isinstance(value, dict):
                 _, organization_id, campaign_id = key.split(":", 2)
                 _upsert_postgres_payload(connection, "campaign_sources", organization_id, campaign_id, value)
+                _invalidate_platform_runtime_cache(organization_id, campaign_id)
                 return
             if key.startswith("campaign-dataset:") and isinstance(value, dict):
                 _, organization_id, campaign_id = key.split(":", 2)
                 _upsert_postgres_payload(connection, "campaign_datasets", organization_id, campaign_id, value)
+                _invalidate_platform_runtime_cache(organization_id, campaign_id)
                 return
     store = read_platform_store()
     store.setdefault("items", {})
@@ -1284,7 +1522,6 @@ def platform_list(prefix: str) -> list[tuple[str, Any]]:
                             c.updated_by
                         FROM goodraise.campaigns c
                         JOIN goodraise.organizations o ON o.id = c.organization_id
-                        WHERE c.app_id IS NOT NULL
                         ORDER BY c.updated_at DESC, c.created_at DESC
                         """
                     )
@@ -1364,8 +1601,169 @@ def get_platform_campaign_dataset(organization_id: str, campaign_id: str) -> dic
     return value if isinstance(value, dict) else None
 
 
+def get_platform_public_bundle(organization_id: str, campaign_id: str) -> dict[str, Any] | None:
+    cache_key = f"platform:public-bundle:{normalize_slug(organization_id, 'default-org')}:{normalize_slug(campaign_id, 'campaign')}"
+    cached = _runtime_cache_get(cache_key)
+    if isinstance(cached, dict):
+        return cached
+    organization = get_platform_organization(organization_id)
+    campaign = get_platform_campaign(organization_id, campaign_id)
+    payload = get_platform_campaign_dataset(organization_id, campaign_id)
+    if not organization or not campaign or not payload:
+        return None
+    bundle = {
+        "organization": organization,
+        "campaign": campaign,
+        "rows": payload.get("rows", []),
+        "meta": payload.get("meta", {}),
+        "sourceLabel": payload.get("sourceLabel", "קובץ בסיס ציבורי"),
+        "generatedAt": payload.get("generatedAt", ""),
+    }
+    return _runtime_cache_set(cache_key, bundle, PLATFORM_CACHE_TTL_SECONDS)
+
+
+def build_public_dataset_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    public_rows: list[dict[str, Any]] = []
+    for row in rows:
+        public_rows.append(
+            {
+                "id": row.get("id", ""),
+                "createdIso": row.get("createdIso", ""),
+                "date": row.get("date", ""),
+                "hour": int(row.get("hour", 0) or 0),
+                "email": "",
+                "donor": "מוסתר בצפייה ציבורית",
+                "ambassador": row.get("ambassador", ""),
+                "amount": float(row.get("amount", 0) or 0),
+                "city": "",
+                "status": row.get("status", ""),
+                "chargeResult": "",
+            }
+        )
+    return public_rows
+
+
+def get_legacy_active_campaign_dataset(organization_id: str, campaign_id: str) -> dict[str, Any] | None:
+    registry = load_campaign_config()
+    active_campaign_id = str(registry.get("activeCampaignId") or "").strip()
+    if not active_campaign_id:
+        return None
+
+    active_entry = next(
+        (
+            item
+            for item in registry.get("campaigns", [])
+            if isinstance(item, dict) and str(item.get("id") or "").strip() == active_campaign_id
+        ),
+        None,
+    )
+    if not active_entry:
+        return None
+
+    snapshot = active_entry.get("config") if isinstance(active_entry.get("config"), dict) else {}
+    basics = snapshot.get("basics") if isinstance(snapshot.get("basics"), dict) else {}
+    organization_snapshot = snapshot.get("organization") if isinstance(snapshot.get("organization"), dict) else {}
+    resolved_organization_id = normalize_slug(
+        basics.get("organizationId") or basics.get("organizationSlug") or organization_snapshot.get("id") or "default-org",
+        "default-org",
+    )
+    resolved_campaign_id = normalize_slug(
+        active_entry.get("id") or basics.get("id") or basics.get("slug") or "campaign-1",
+        "campaign-1",
+    )
+    if resolved_organization_id != organization_id or resolved_campaign_id != campaign_id:
+        return None
+
+    active_dataset = load_admin_dataset_payload() or {}
+    if not isinstance(active_dataset, dict) or not isinstance(active_dataset.get("rows"), list):
+        return None
+
+    organization = {
+        "id": resolved_organization_id,
+        "slug": normalize_slug(
+            organization_snapshot.get("slug") or basics.get("organizationSlug") or resolved_organization_id,
+            resolved_organization_id,
+        ),
+        "name": str(organization_snapshot.get("name") or basics.get("organizationName") or resolved_organization_id).strip()
+        or resolved_organization_id,
+        "status": str(organization_snapshot.get("status") or "active").strip().lower() or "active",
+    }
+    campaign = {
+        "id": resolved_campaign_id,
+        "organizationId": resolved_organization_id,
+        "slug": normalize_slug(basics.get("slug") or resolved_campaign_id, resolved_campaign_id),
+        "name": str(basics.get("campaignName") or active_entry.get("name") or resolved_campaign_id).strip() or resolved_campaign_id,
+        "status": str(basics.get("status") or "draft").strip().lower() or "draft",
+        "target": int(snapshot.get("goals", {}).get("campaignGoal") or basics.get("target") or 0),
+        "currency": str(basics.get("currency") or "ILS").strip().upper() or "ILS",
+    }
+    return {
+        "organization": organization,
+        "campaign": campaign,
+        "rows": active_dataset.get("rows", []),
+        "meta": active_dataset.get("meta", {}),
+        "sourceLabel": active_dataset.get("sourceLabel", "קובץ בסיס ציבורי"),
+        "generatedAt": active_dataset.get("generatedAt", ""),
+    }
+
+
 def list_platform_campaign_summaries() -> list[dict[str, Any]]:
     ensure_local_platform_seed_from_legacy()
+    if uses_postgres_platform_store():
+        cached = _runtime_cache_get("platform:summaries")
+        if isinstance(cached, list):
+            return cached
+        try:
+            with _connect_postgres_platform() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT
+                            o.app_id,
+                            o.slug,
+                            o.name,
+                            c.app_id,
+                            c.slug,
+                            c.name,
+                            c.status,
+                            c.target_amount,
+                            c.currency_code,
+                            c.starts_at,
+                            c.ends_at,
+                            c.updated_at,
+                            c.updated_by,
+                            COALESCE(d.row_count, 0)
+                        FROM goodraise.campaigns c
+                        JOIN goodraise.organizations o ON o.id = c.organization_id
+                        LEFT JOIN goodraise.campaign_datasets d ON d.campaign_id = c.id
+                        ORDER BY
+                            COALESCE(d.row_count, 0) DESC,
+                            c.updated_at DESC
+                        """
+                    )
+                    rows = cursor.fetchall()
+            summaries = [
+                {
+                    "organizationId": normalize_slug(row[0] or row[1], "default-org"),
+                    "organizationSlug": normalize_slug(row[1] or row[0], normalize_slug(row[0] or row[1], "default-org")),
+                    "organizationName": str(row[2] or row[0] or row[1] or "").strip() or normalize_slug(row[0] or row[1], "default-org"),
+                    "campaignId": normalize_slug(row[3] or row[4], "campaign"),
+                    "campaignSlug": normalize_slug(row[4] or row[3], normalize_slug(row[3] or row[4], "campaign")),
+                    "campaignName": str(row[5] or row[3] or row[4] or "").strip() or normalize_slug(row[3] or row[4], "campaign"),
+                    "status": str(row[6] or "draft").strip().lower() or "draft",
+                    "target": int(row[7] or 0),
+                    "currency": str(row[8] or "ILS").strip().upper() or "ILS",
+                    "startAt": str(row[9].isoformat() if hasattr(row[9], "isoformat") else row[9] or ""),
+                    "endAt": str(row[10].isoformat() if hasattr(row[10], "isoformat") else row[10] or ""),
+                    "updatedAt": str(row[11].isoformat() if hasattr(row[11], "isoformat") else row[11] or ""),
+                    "updatedBy": normalize_email(row[12] or ""),
+                    "datasetRecordCount": int(row[13] or 0),
+                }
+                for row in rows
+            ]
+            return _runtime_cache_set("platform:summaries", summaries, PLATFORM_CACHE_TTL_SECONDS)
+        except Exception:
+            return []
     summaries: list[dict[str, Any]] = []
     for _key, raw_campaign in platform_list("campaign:"):
         if not isinstance(raw_campaign, dict):
@@ -1395,23 +1793,58 @@ def list_platform_campaign_summaries() -> list[dict[str, Any]]:
                 "datasetRecordCount": len(rows),
             }
         )
-    return summaries
+    return sorted(
+        summaries,
+        key=lambda item: (
+            1 if int(item.get("datasetRecordCount") or 0) > 0 else 0,
+            int(item.get("datasetRecordCount") or 0),
+            str(item.get("updatedAt") or ""),
+        ),
+        reverse=True,
+    )
+
+
+def get_default_public_campaign_summary() -> dict[str, Any] | None:
+    cached_summary = _runtime_cache_get("platform:public-default-summary")
+    if isinstance(cached_summary, dict):
+        return cached_summary
+    summaries = list_platform_campaign_summaries()
+    if not summaries:
+        return None
+    ranked = sorted(
+        summaries,
+        key=lambda item: (
+            1 if int(item.get("datasetRecordCount") or 0) > 0 else 0,
+            int(item.get("datasetRecordCount") or 0),
+            str(item.get("updatedAt") or ""),
+        ),
+        reverse=True,
+    )
+    selected = ranked[0] if ranked else None
+    if isinstance(selected, dict):
+        return _runtime_cache_set("platform:public-default-summary", selected, PLATFORM_CACHE_TTL_SECONDS)
+    return selected
 
 
 def get_accessible_campaign_summaries(auth_context: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not auth_context:
         return []
     role = normalize_role(auth_context.get("role"), ROLE_VIEWER)
+    organization_slug = normalize_slug(auth_context.get("organizationSlug") or "", "")
+    allowed_campaigns = sorted(
+        {
+            normalize_slug(item)
+            for item in auth_context.get("campaignSlugs", [])
+            if str(item or "").strip()
+        }
+    )
+    cache_key = f"auth-accessible:{role}:{organization_slug}:{'|'.join(allowed_campaigns)}"
+    cached_summaries = _runtime_cache_get(cache_key)
+    if isinstance(cached_summaries, list):
+        return cached_summaries
     summaries = list_platform_campaign_summaries()
     if role == ROLE_PLATFORM_ADMIN:
-        return summaries
-
-    organization_slug = normalize_slug(auth_context.get("organizationSlug") or "", "")
-    allowed_campaigns = {
-        normalize_slug(item)
-        for item in auth_context.get("campaignSlugs", [])
-        if str(item or "").strip()
-    }
+        return _runtime_cache_set(cache_key, summaries, AUTH_CONTEXT_CACHE_TTL_SECONDS)
 
     filtered: list[dict[str, Any]] = []
     for item in summaries:
@@ -1424,14 +1857,31 @@ def get_accessible_campaign_summaries(auth_context: dict[str, Any] | None) -> li
             continue
         if item["campaignId"] in allowed_campaigns or item["campaignSlug"] in allowed_campaigns:
             filtered.append(item)
-    return filtered
+    return _runtime_cache_set(cache_key, filtered, AUTH_CONTEXT_CACHE_TTL_SECONDS)
 
 
 def build_campaign_registry_for_accessible(auth_context: dict[str, Any], active_campaign_id: str = "") -> dict[str, Any]:
     summaries = get_accessible_campaign_summaries(auth_context)
+    prefetched_configs: dict[tuple[str, str], dict[str, Any]] = {}
+    if uses_postgres_platform_store() and summaries:
+        try:
+            with _connect_postgres_platform() as connection:
+                prefetched_configs = _get_postgres_campaign_config_map(
+                    connection,
+                    [(item["organizationId"], item["campaignId"]) for item in summaries],
+                )
+                for (organization_id, campaign_id), payload in prefetched_configs.items():
+                    if isinstance(payload, dict):
+                        _runtime_cache_set(
+                            f"platform:{campaign_config_key(organization_id, campaign_id)}",
+                            payload,
+                            PLATFORM_CACHE_TTL_SECONDS,
+                        )
+        except Exception:
+            prefetched_configs = {}
     campaigns: list[dict[str, Any]] = []
     for item in summaries:
-        config = get_platform_campaign_config(item["organizationId"], item["campaignId"]) or {
+        config = prefetched_configs.get((item["organizationId"], item["campaignId"])) or get_platform_campaign_config(item["organizationId"], item["campaignId"]) or {
             "organization": {
                 "id": item["organizationId"],
                 "slug": item["organizationSlug"],
@@ -2121,6 +2571,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     server_version = "YellowDashboardBackend/1.0"
     SCOPED_CAMPAIGN_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)$")
     SCOPED_DATASET_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/dataset$")
+    SCOPED_PUBLIC_DATASET_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/public-dataset$")
     SCOPED_SOURCE_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source$")
     SCOPED_SOURCE_REFRESH_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source/refresh$")
     SCOPED_INGEST_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/ingest$")
@@ -2173,6 +2624,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/health":
             self.handle_health()
+            return
+        if parsed.path == "/api/public-context":
+            self.handle_public_context()
             return
         if parsed.path == "/api/auth/status":
             self.handle_auth_status()
@@ -2262,6 +2716,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             )
             return True
 
+        public_dataset_match = self.SCOPED_PUBLIC_DATASET_RE.match(path)
+        if method == "GET" and public_dataset_match:
+            self.handle_scoped_public_dataset(
+                normalize_slug(public_dataset_match.group(1), "default-org"),
+                normalize_slug(public_dataset_match.group(2), "campaign"),
+            )
+            return True
+
         source_match = self.SCOPED_SOURCE_RE.match(path)
         if source_match:
             organization_id = normalize_slug(source_match.group(1), "default-org")
@@ -2311,14 +2773,31 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         token = self.get_session_token()
         if not token:
             return None
+        cache_key = f"auth-context:{token}"
+        cached = _runtime_cache_get(cache_key)
+        if isinstance(cached, dict):
+            return cached
+        auth_context: dict[str, Any] | None = None
+        auth_context: dict[str, Any] | None = None
+        auth_context: dict[str, Any] | None = None
+        auth_context: dict[str, Any] | None = None
+        auth_context: dict[str, Any] | None = None
         if uses_postgres_platform_store():
             with _connect_postgres_platform() as connection:
                 seed_admins_postgres(connection)
-                return get_authenticated_admin_context_postgres(connection, token)
+                context = get_authenticated_admin_context_postgres(connection, token)
+                if context:
+                    return _runtime_cache_set(cache_key, context, AUTH_CONTEXT_CACHE_TTL_SECONDS)
+                _runtime_cache_delete(cache_key)
+                return None
         with get_connection() as connection:
             ensure_schema(connection)
             seed_admins(connection)
-            return get_authenticated_admin_context(connection, token)
+            context = get_authenticated_admin_context(connection, token)
+            if context:
+                return _runtime_cache_set(cache_key, context, AUTH_CONTEXT_CACHE_TTL_SECONDS)
+            _runtime_cache_delete(cache_key)
+            return None
 
     def require_authenticated_admin(self, minimum_role: str = ROLE_VIEWER) -> dict[str, Any] | None:
         context = self.get_auth_context()
@@ -2531,6 +3010,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             for item in auth_context.get("accessibleCampaigns", [])
             if item.get("organizationId") == auth_context["organizationId"]
         ]
+        accessible_campaigns = get_accessible_campaign_summaries(auth_context) if auth_context else []
+        accessible_campaigns = get_accessible_campaign_summaries(auth_context) if auth_context else []
+        accessible_campaigns = get_accessible_campaign_summaries(auth_context) if auth_context else []
+        accessible_campaigns = get_accessible_campaign_summaries(auth_context) if auth_context else []
         self.respond_json(
             HTTPStatus.OK,
             {
@@ -2567,6 +3050,96 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             },
         )
         self.audit("dataset_view", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"])
+
+    def _handle_scoped_public_dataset_legacy(self, organization_id: str, campaign_id: str) -> None:
+        organization = get_platform_organization(organization_id)
+        campaign = get_platform_campaign(organization_id, campaign_id)
+        payload = get_platform_campaign_dataset(organization_id, campaign_id)
+        if not organization or not campaign or not payload:
+            legacy_payload = get_legacy_active_campaign_dataset(organization_id, campaign_id)
+            if not legacy_payload:
+                self.respond_json(HTTPStatus.NOT_FOUND, {"message": "מאגר הנתונים הציבורי לקמפיין המבוקש אינו זמין כרגע."})
+                return
+            organization = legacy_payload["organization"]
+            campaign = legacy_payload["campaign"]
+            payload = legacy_payload
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "organizationId": organization_id,
+                "campaignId": campaign_id,
+                "organization": organization,
+                "campaign": campaign,
+                "rows": build_public_dataset_rows(payload.get("rows", [])),
+                "meta": payload.get("meta", {}),
+                "sourceLabel": payload.get("sourceLabel", "קובץ בסיס ציבורי"),
+                "generatedAt": payload.get("generatedAt", ""),
+            },
+        )
+
+    def handle_scoped_public_dataset(self, organization_id: str, campaign_id: str) -> None:
+        public_bundle = get_platform_public_bundle(organization_id, campaign_id)
+        if not public_bundle:
+            legacy_payload = get_legacy_active_campaign_dataset(organization_id, campaign_id)
+            if not legacy_payload:
+                self.respond_json(HTTPStatus.NOT_FOUND, {"message": "×ž××’×¨ ×”× ×ª×•× ×™× ×”×¦×™×‘×•×¨×™ ×œ×§×ž×¤×™×™×Ÿ ×”×ž×‘×•×§×© ××™× ×• ×–×ž×™×Ÿ ×›×¨×’×¢."})
+                return
+            public_bundle = legacy_payload
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "organizationId": organization_id,
+                "campaignId": campaign_id,
+                "organization": public_bundle["organization"],
+                "campaign": public_bundle["campaign"],
+                "rows": build_public_dataset_rows(public_bundle.get("rows", [])),
+                "meta": public_bundle.get("meta", {}),
+                "sourceLabel": public_bundle.get("sourceLabel", "×§×•×‘×¥ ×‘×¡×™×¡ ×¦×™×‘×•×¨×™"),
+                "generatedAt": public_bundle.get("generatedAt", ""),
+            },
+        )
+
+    def handle_public_context(self) -> None:
+        cached_payload = _runtime_cache_get("platform:public-context")
+        if isinstance(cached_payload, dict):
+            self.respond_json(HTTPStatus.OK, cached_payload)
+            return
+        summary = get_default_public_campaign_summary()
+        if not summary:
+            self.respond_json(HTTPStatus.NOT_FOUND, {"message": "לא נמצא קמפיין ציבורי פעיל להצגה כרגע."})
+            return
+        organization_id = normalize_slug(summary.get("organizationId"), "default-org")
+        campaign_id = normalize_slug(summary.get("campaignId"), "campaign")
+        organization = {
+            "id": organization_id,
+            "slug": normalize_slug(summary.get("organizationSlug") or organization_id, organization_id),
+            "name": str(summary.get("organizationName") or organization_id).strip() or organization_id,
+            "status": "active",
+        }
+        campaign = {
+            "id": campaign_id,
+            "organizationId": organization_id,
+            "slug": normalize_slug(summary.get("campaignSlug") or campaign_id, campaign_id),
+            "name": str(summary.get("campaignName") or campaign_id).strip() or campaign_id,
+            "status": str(summary.get("status") or "draft").strip().lower() or "draft",
+            "target": int(summary.get("target") or 0),
+            "currency": str(summary.get("currency") or "ILS").strip().upper() or "ILS",
+            "startAt": str(summary.get("startAt") or "").strip(),
+            "endAt": str(summary.get("endAt") or "").strip(),
+            "updatedAt": str(summary.get("updatedAt") or "").strip(),
+            "updatedBy": normalize_email(summary.get("updatedBy") or ""),
+        }
+        payload = {
+            "organizationId": organization_id,
+            "campaignId": campaign_id,
+            "organization": organization,
+            "campaign": campaign,
+            "datasetRecordCount": int(summary.get("datasetRecordCount") or 0),
+        }
+        self.respond_json(
+            HTTPStatus.OK,
+            _runtime_cache_set("platform:public-context", payload, PLATFORM_CACHE_TTL_SECONDS),
+        )
 
     def handle_scoped_source_config(self, organization_id: str, campaign_id: str) -> None:
         auth_context = self.resolve_scoped_access(ROLE_CAMPAIGN_MANAGER, organization_id=organization_id, campaign_id=campaign_id, allow_default=False)
@@ -3130,6 +3703,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש למלא גם מייל וגם סיסמה."})
             return
 
+        auth_context: dict[str, Any] | None = None
         if uses_postgres_platform_store():
             with _connect_postgres_platform() as connection:
                 seed_admins_postgres(connection)
@@ -3154,6 +3728,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה שגויה. נסו שוב."})
                     return
                 token = create_session_postgres(connection, email)
+                auth_context = get_authenticated_admin_context_postgres(connection, token) or build_admin_auth_context(email, admin)
         else:
             with get_connection() as connection:
                 ensure_schema(connection)
@@ -3179,12 +3754,19 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה שגויה. נסו שוב."})
                     return
                 token = create_session(connection, email)
+                auth_context = get_authenticated_admin_context(connection, token) or build_admin_auth_context(email, admin)
 
+        accessible_campaigns = get_accessible_campaign_summaries(auth_context) if auth_context else []
         self.respond_json(
             HTTPStatus.OK,
             {
                 "authenticated": True,
                 "email": email,
+                "role": auth_context["role"] if auth_context else "",
+                "organizationSlug": auth_context["organizationSlug"] if auth_context else "",
+                "campaignSlugs": auth_context["campaignSlugs"] if auth_context else [],
+                "accessibleCampaigns": accessible_campaigns,
+                "sessionExpiresAt": auth_context["expiresAt"] if auth_context else "",
                 "message": "הכניסה הצליחה. הדשבורד הניהולי נפתח.",
             },
             extra_headers=[("Set-Cookie", build_set_cookie(token, SESSION_DURATION_HOURS * 60 * 60))],
@@ -3205,6 +3787,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש לבחור סיסמה באורך 8 תווים לפחות."})
             return
 
+        auth_context: dict[str, Any] | None = None
         if uses_postgres_platform_store():
             with _connect_postgres_platform() as connection:
                 seed_admins_postgres(connection)
@@ -3223,6 +3806,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     return
                 update_admin_password_postgres(connection, email, password)
                 token = create_session_postgres(connection, email)
+                auth_context = get_authenticated_admin_context_postgres(connection, token) or build_admin_auth_context(email, admin)
         else:
             with get_connection() as connection:
                 ensure_schema(connection)
@@ -3242,12 +3826,19 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     return
                 update_admin_password(connection, email, password)
                 token = create_session(connection, email)
+                auth_context = get_authenticated_admin_context(connection, token) or build_admin_auth_context(email, admin)
 
+        accessible_campaigns = get_accessible_campaign_summaries(auth_context) if auth_context else []
         self.respond_json(
             HTTPStatus.OK,
             {
                 "authenticated": True,
                 "email": email,
+                "role": auth_context["role"] if auth_context else "",
+                "organizationSlug": auth_context["organizationSlug"] if auth_context else "",
+                "campaignSlugs": auth_context["campaignSlugs"] if auth_context else [],
+                "accessibleCampaigns": accessible_campaigns,
+                "sessionExpiresAt": auth_context["expiresAt"] if auth_context else "",
                 "message": "הסיסמה נשמרה והגישה לפאנל הניהול נפתחה.",
             },
             extra_headers=[("Set-Cookie", build_set_cookie(token, SESSION_DURATION_HOURS * 60 * 60))],
