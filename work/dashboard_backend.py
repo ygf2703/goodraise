@@ -10,6 +10,7 @@ import secrets
 import socket
 import sqlite3
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -46,6 +47,9 @@ LOCAL_ACCESS_CONTROL_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_ACCESS_CONTROL_JSON", str(CONFIG_DIR / "dashboard-access.local.json"))
 ).resolve()
 EXAMPLE_ACCESS_CONTROL_PATH = (CONFIG_DIR / "dashboard-access.example.json").resolve()
+LOCAL_INGEST_KEY_PATH = Path(
+    os.getenv("GOODRAISE_INGEST_KEY_JSON", str(CONFIG_DIR / "goodraise-ingest.local.json"))
+).resolve()
 DB_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_AUTH_DB_PATH", str(DATA_DIR / "dashboard-auth.sqlite3"))
 ).resolve()
@@ -275,7 +279,45 @@ def load_ingest_api_keys() -> list[str]:
             return [item.strip() for item in raw_plural.split(",") if item.strip()]
 
     raw_single = os.getenv("GOODRAISE_INGEST_API_KEY", "").strip()
-    return [raw_single] if raw_single else []
+    if raw_single:
+        return [raw_single]
+
+    if LOCAL_INGEST_KEY_PATH.exists():
+        try:
+            payload = json.loads(LOCAL_INGEST_KEY_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+        file_keys = payload.get("apiKeys")
+        if isinstance(file_keys, list):
+            keys = [str(item).strip() for item in file_keys if str(item).strip()]
+            if keys:
+                return keys
+        legacy_key = str(payload.get("apiKey") or "").strip()
+        if legacy_key:
+            return [legacy_key]
+    return []
+
+
+def ensure_local_ingest_api_key_file() -> list[str]:
+    configured_keys = load_ingest_api_keys()
+    if configured_keys:
+        return configured_keys
+
+    generated_key = secrets.token_urlsafe(32)
+    LOCAL_INGEST_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LOCAL_INGEST_KEY_PATH.write_text(
+        json.dumps(
+            {
+                "apiKeys": [generated_key],
+                "createdAt": isoformat_utc(utc_now()),
+                "note": "Local ingest API key for GoodRaise external event simulation.",
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return [generated_key]
 
 
 def extract_ingest_api_key(headers: Any) -> str:
@@ -383,6 +425,11 @@ def seed_admins(connection: sqlite3.Connection) -> None:
 
 
 def initialize_database() -> None:
+    ensure_local_ingest_api_key_file()
+    if uses_postgres_platform_store():
+        with _connect_postgres_platform() as connection:
+            seed_admins_postgres(connection)
+        return
     with get_connection() as connection:
         ensure_schema(connection)
         seed_admins(connection)
@@ -566,6 +613,236 @@ def get_authenticated_email(connection: sqlite3.Connection, token: str) -> str |
     return normalize_email(context["email"]) if context else None
 
 
+def seed_admins_postgres(connection: Any) -> None:
+    created_at = isoformat_utc(utc_now())
+    with connection.cursor() as cursor:
+        for manager in load_manager_records():
+            cursor.execute(
+                """
+                INSERT INTO goodraise.admin_users (
+                    id,
+                    email,
+                    role,
+                    organization_app_id,
+                    organization_slug,
+                    campaign_ids,
+                    campaign_slugs,
+                    is_active,
+                    created_at,
+                    updated_at
+                )
+                VALUES (%s::uuid, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s)
+                ON CONFLICT (email) DO UPDATE SET
+                    role = EXCLUDED.role,
+                    organization_app_id = EXCLUDED.organization_app_id,
+                    organization_slug = EXCLUDED.organization_slug,
+                    campaign_ids = EXCLUDED.campaign_ids,
+                    campaign_slugs = EXCLUDED.campaign_slugs,
+                    is_active = EXCLUDED.is_active,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (
+                    str(uuid.uuid4()),
+                    manager["email"],
+                    manager["role"],
+                    normalize_slug(manager.get("organizationSlug") or "", ""),
+                    normalize_slug(manager.get("organizationSlug") or "", ""),
+                    json.dumps([], ensure_ascii=False),
+                    json.dumps(manager.get("campaignSlugs", []), ensure_ascii=False),
+                    bool(manager.get("isActive", True)),
+                    created_at,
+                    created_at,
+                ),
+            )
+    connection.commit()
+
+
+def get_admin_postgres(connection: Any, email: str) -> dict[str, Any] | None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                email,
+                role,
+                organization_app_id,
+                organization_slug,
+                campaign_slugs,
+                password_hash,
+                is_active,
+                password_set_at,
+                last_login_at
+            FROM goodraise.admin_users
+            WHERE lower(email) = lower(%s)
+            LIMIT 1
+            """,
+            (normalize_email(email),),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    campaign_slugs = row[4]
+    if isinstance(campaign_slugs, list):
+        campaign_slugs_json = json.dumps(campaign_slugs, ensure_ascii=False)
+    else:
+        campaign_slugs_json = str(campaign_slugs or "[]")
+    return {
+        "email": normalize_email(row[0] or ""),
+        "role": normalize_role(row[1], ROLE_PLATFORM_ADMIN),
+        "organization_slug": normalize_slug(row[3] or row[2] or "", "default-org"),
+        "campaign_slugs": campaign_slugs_json,
+        "password_hash": row[5] or "",
+        "is_active": bool(row[6]),
+        "password_set_at": row[7].isoformat() if hasattr(row[7], "isoformat") else str(row[7] or ""),
+        "last_login_at": row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8] or ""),
+    }
+
+
+def update_admin_password_postgres(connection: Any, email: str, password: str) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE goodraise.admin_users
+            SET password_hash = %s,
+                password_set_at = %s,
+                updated_at = %s
+            WHERE lower(email) = lower(%s)
+            """,
+            (
+                hash_password(password),
+                isoformat_utc(utc_now()),
+                isoformat_utc(utc_now()),
+                normalize_email(email),
+            ),
+        )
+    connection.commit()
+
+
+def cleanup_expired_sessions_postgres(connection: Any) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute("DELETE FROM goodraise.admin_sessions WHERE expires_at <= NOW()")
+    connection.commit()
+
+
+def create_session_postgres(connection: Any, email: str) -> str:
+    cleanup_expired_sessions_postgres(connection)
+    token = secrets.token_urlsafe(32)
+    created_at = utc_now()
+    expires_at = created_at + timedelta(hours=SESSION_DURATION_HOURS)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT id::text FROM goodraise.admin_users WHERE lower(email) = lower(%s) LIMIT 1",
+            (normalize_email(email),),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise RuntimeError(f"Admin user not found for session creation: {email}")
+        cursor.execute(
+            """
+            INSERT INTO goodraise.admin_sessions (token, admin_user_id, created_at, expires_at)
+            VALUES (%s, %s::uuid, %s, %s)
+            """,
+            (token, str(row[0]), isoformat_utc(created_at), isoformat_utc(expires_at)),
+        )
+        cursor.execute(
+            """
+            UPDATE goodraise.admin_users
+            SET last_login_at = %s, updated_at = %s
+            WHERE lower(email) = lower(%s)
+            """,
+            (isoformat_utc(created_at), isoformat_utc(created_at), normalize_email(email)),
+        )
+    connection.commit()
+    return token
+
+
+def delete_session_postgres(connection: Any, token: str) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute("DELETE FROM goodraise.admin_sessions WHERE token = %s", (token,))
+    connection.commit()
+
+
+def delete_sessions_for_email_postgres(connection: Any, email: str) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            DELETE FROM goodraise.admin_sessions
+            WHERE admin_user_id IN (
+                SELECT id FROM goodraise.admin_users WHERE lower(email) = lower(%s)
+            )
+            """,
+            (normalize_email(email),),
+        )
+    connection.commit()
+
+
+def get_authenticated_admin_context_postgres(connection: Any, token: str) -> dict[str, Any] | None:
+    cleanup_expired_sessions_postgres(connection)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                u.email,
+                s.expires_at,
+                u.role,
+                u.organization_slug,
+                u.campaign_slugs
+            FROM goodraise.admin_sessions s
+            JOIN goodraise.admin_users u ON u.id = s.admin_user_id
+            WHERE s.token = %s AND u.is_active = TRUE
+            LIMIT 1
+            """,
+            (token,),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    raw_campaigns = row[4]
+    if isinstance(raw_campaigns, list):
+        campaign_slugs = normalize_campaign_scope(raw_campaigns)
+    else:
+        try:
+            campaign_slugs = normalize_campaign_scope(json.loads(str(raw_campaigns or "[]")))
+        except json.JSONDecodeError:
+            campaign_slugs = []
+    return {
+        "email": normalize_email(row[0] or ""),
+        "role": normalize_role(row[2], ROLE_PLATFORM_ADMIN),
+        "organizationSlug": normalize_slug(row[3] or "", "default-org"),
+        "campaignSlugs": campaign_slugs,
+        "expiresAt": row[1].isoformat() if hasattr(row[1], "isoformat") else str(row[1] or ""),
+    }
+
+
+def get_authenticated_email_postgres(connection: Any, token: str) -> str | None:
+    context = get_authenticated_admin_context_postgres(connection, token)
+    return normalize_email(context["email"]) if context else None
+
+
+def reset_admin_password_postgres(connection: Any, email: str) -> None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            UPDATE goodraise.admin_users
+            SET password_hash = NULL,
+                password_set_at = NULL,
+                last_login_at = NULL,
+                updated_at = %s
+            WHERE lower(email) = lower(%s)
+            """,
+            (isoformat_utc(utc_now()), normalize_email(email)),
+        )
+        cursor.execute(
+            """
+            DELETE FROM goodraise.admin_sessions
+            WHERE admin_user_id IN (
+                SELECT id FROM goodraise.admin_users WHERE lower(email) = lower(%s)
+            )
+            """,
+            (normalize_email(email),),
+        )
+    connection.commit()
+
+
 def write_audit_event(event_type: str, email: str, detail: dict[str, Any] | None = None) -> None:
     ensure_data_dir()
     event = {
@@ -601,6 +878,321 @@ def load_admin_dataset_payload() -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def get_goodraise_database_url() -> str:
+    return str(os.getenv("GOODRAISE_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+
+
+def uses_postgres_platform_store() -> bool:
+    return bool(get_goodraise_database_url() and psycopg is not None and relational_postgres is not None)
+
+
+def _postgres_json_load(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return None
+    return value
+
+
+def _ensure_postgres_platform_schema(connection: Any) -> None:
+    if relational_postgres is None:
+        raise RuntimeError("Relational PostgreSQL helpers are not available.")
+    with connection.cursor() as cursor:
+        cursor.execute(relational_postgres.SCHEMA_SQL)
+    connection.commit()
+
+
+def _connect_postgres_platform() -> Any:
+    database_url = get_goodraise_database_url()
+    if not database_url or psycopg is None or relational_postgres is None:
+        raise RuntimeError("GOODRAISE_DATABASE_URL is not configured for platform persistence.")
+    connection = psycopg.connect(database_url)
+    _ensure_postgres_platform_schema(connection)
+    return connection
+
+
+def _find_postgres_organization(connection: Any, organization_id: str) -> dict[str, Any] | None:
+    normalized_id = normalize_slug(organization_id, "default-org")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id::text, app_id, slug, name, status, created_at, updated_at
+            FROM goodraise.organizations
+            WHERE app_id = %s OR slug = %s
+            ORDER BY CASE WHEN app_id = %s THEN 0 ELSE 1 END, updated_at DESC
+            LIMIT 1
+            """,
+            (normalized_id, normalized_id, normalized_id),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "dbId": str(row[0]),
+        "id": str(row[1] or row[2] or normalized_id),
+        "slug": str(row[2] or normalized_id),
+        "name": str(row[3] or normalized_id),
+        "status": str(row[4] or "active"),
+        "createdAt": str(row[5].isoformat() if hasattr(row[5], "isoformat") else row[5] or ""),
+        "updatedAt": str(row[6].isoformat() if hasattr(row[6], "isoformat") else row[6] or ""),
+    }
+
+
+def _find_postgres_campaign(connection: Any, organization_id: str, campaign_id: str) -> dict[str, Any] | None:
+    organization = _find_postgres_organization(connection, organization_id)
+    if not organization:
+        return None
+    normalized_campaign_id = normalize_slug(campaign_id, "campaign")
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                c.id::text,
+                c.app_id,
+                c.slug,
+                c.name,
+                c.status,
+                c.target_amount,
+                c.currency_code,
+                c.starts_at,
+                c.ends_at,
+                c.created_at,
+                c.updated_at,
+                c.updated_by
+            FROM goodraise.campaigns c
+            WHERE c.organization_id = %s::uuid
+              AND (c.app_id = %s OR c.slug = %s)
+            ORDER BY CASE WHEN c.app_id = %s THEN 0 ELSE 1 END, c.updated_at DESC
+            LIMIT 1
+            """,
+            (organization["dbId"], normalized_campaign_id, normalized_campaign_id, normalized_campaign_id),
+        )
+        row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        "dbId": str(row[0]),
+        "id": str(row[1] or row[2] or normalized_campaign_id),
+        "slug": str(row[2] or normalized_campaign_id),
+        "name": str(row[3] or normalized_campaign_id),
+        "status": str(row[4] or "draft"),
+        "target": int(row[5] or 0),
+        "currency": str(row[6] or "ILS"),
+        "startAt": str(row[7].isoformat() if hasattr(row[7], "isoformat") else row[7] or ""),
+        "endAt": str(row[8].isoformat() if hasattr(row[8], "isoformat") else row[8] or ""),
+        "createdAt": str(row[9].isoformat() if hasattr(row[9], "isoformat") else row[9] or ""),
+        "updatedAt": str(row[10].isoformat() if hasattr(row[10], "isoformat") else row[10] or ""),
+        "updatedBy": normalize_email(row[11] or ""),
+        "organizationId": organization["id"],
+    }
+
+
+def _upsert_postgres_organization(connection: Any, value: dict[str, Any]) -> dict[str, Any]:
+    normalized_id = normalize_slug(value.get("id"), "default-org")
+    normalized_slug = normalize_slug(value.get("slug") or normalized_id, normalized_id)
+    existing = _find_postgres_organization(connection, normalized_id)
+    with connection.cursor() as cursor:
+        if existing:
+            cursor.execute(
+                """
+                UPDATE goodraise.organizations
+                SET app_id = %s,
+                    slug = %s,
+                    name = %s,
+                    status = %s,
+                    updated_at = %s
+                WHERE id = %s::uuid
+                """,
+                (
+                    normalized_id,
+                    normalized_slug,
+                    str(value.get("name") or normalized_id).strip() or normalized_id,
+                    str(value.get("status") or "active").strip().lower() or "active",
+                    str(value.get("updatedAt") or isoformat_utc(utc_now())),
+                    existing["dbId"],
+                ),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO goodraise.organizations (id, app_id, slug, name, status, created_at, updated_at)
+                VALUES (%s::uuid, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    normalized_id,
+                    normalized_slug,
+                    str(value.get("name") or normalized_id).strip() or normalized_id,
+                    str(value.get("status") or "active").strip().lower() or "active",
+                    str(value.get("createdAt") or isoformat_utc(utc_now())),
+                    str(value.get("updatedAt") or isoformat_utc(utc_now())),
+                ),
+            )
+    connection.commit()
+    return _find_postgres_organization(connection, normalized_id) or {
+        "id": normalized_id,
+        "slug": normalized_slug,
+        "name": str(value.get("name") or normalized_id).strip() or normalized_id,
+        "status": str(value.get("status") or "active").strip().lower() or "active",
+    }
+
+
+def _upsert_postgres_campaign(connection: Any, value: dict[str, Any]) -> dict[str, Any]:
+    organization = _upsert_postgres_organization(
+        connection,
+        {
+            "id": value.get("organizationId"),
+            "slug": value.get("organizationId"),
+            "name": value.get("organizationId"),
+            "status": "active",
+            "createdAt": value.get("createdAt") or isoformat_utc(utc_now()),
+            "updatedAt": value.get("updatedAt") or isoformat_utc(utc_now()),
+        },
+    )
+    normalized_campaign_id = normalize_slug(value.get("id"), "campaign")
+    normalized_slug = normalize_slug(value.get("slug") or normalized_campaign_id, normalized_campaign_id)
+    existing = _find_postgres_campaign(connection, organization["id"], normalized_campaign_id)
+    with connection.cursor() as cursor:
+        if existing:
+            cursor.execute(
+                """
+                UPDATE goodraise.campaigns
+                SET app_id = %s,
+                    slug = %s,
+                    name = %s,
+                    status = %s,
+                    target_amount = %s,
+                    currency_code = %s,
+                    starts_at = NULLIF(%s, '')::timestamptz,
+                    ends_at = NULLIF(%s, '')::timestamptz,
+                    updated_by = %s,
+                    updated_at = %s
+                WHERE id = %s::uuid
+                """,
+                (
+                    normalized_campaign_id,
+                    normalized_slug,
+                    str(value.get("name") or normalized_campaign_id).strip() or normalized_campaign_id,
+                    str(value.get("status") or "draft").strip().lower() or "draft",
+                    int(value.get("target") or 0),
+                    str(value.get("currency") or "ILS").strip().upper() or "ILS",
+                    str(value.get("startAt") or ""),
+                    str(value.get("endAt") or ""),
+                    normalize_email(value.get("updatedBy") or ""),
+                    str(value.get("updatedAt") or isoformat_utc(utc_now())),
+                    existing["dbId"],
+                ),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO goodraise.campaigns (
+                    id, organization_id, app_id, slug, name, status, target_amount, currency_code, starts_at, ends_at, updated_by, created_at, updated_at
+                )
+                VALUES (
+                    %s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, NULLIF(%s, '')::timestamptz, NULLIF(%s, '')::timestamptz, %s, %s, %s
+                )
+                """,
+                (
+                    str(uuid.uuid4()),
+                    organization["dbId"],
+                    normalized_campaign_id,
+                    normalized_slug,
+                    str(value.get("name") or normalized_campaign_id).strip() or normalized_campaign_id,
+                    str(value.get("status") or "draft").strip().lower() or "draft",
+                    int(value.get("target") or 0),
+                    str(value.get("currency") or "ILS").strip().upper() or "ILS",
+                    str(value.get("startAt") or ""),
+                    str(value.get("endAt") or ""),
+                    normalize_email(value.get("updatedBy") or ""),
+                    str(value.get("createdAt") or isoformat_utc(utc_now())),
+                    str(value.get("updatedAt") or isoformat_utc(utc_now())),
+                ),
+            )
+    connection.commit()
+    return _find_postgres_campaign(connection, organization["id"], normalized_campaign_id) or {
+        "id": normalized_campaign_id,
+        "organizationId": organization["id"],
+        "slug": normalized_slug,
+        "name": str(value.get("name") or normalized_campaign_id).strip() or normalized_campaign_id,
+    }
+
+
+def _get_postgres_payload(connection: Any, table_name: str, organization_id: str, campaign_id: str) -> Any:
+    campaign = _find_postgres_campaign(connection, organization_id, campaign_id)
+    if not campaign:
+        return None
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"SELECT payload FROM goodraise.{table_name} WHERE campaign_id = %s::uuid LIMIT 1",
+            (campaign["dbId"],),
+        )
+        row = cursor.fetchone()
+    return _postgres_json_load(row[0]) if row else None
+
+
+def _upsert_postgres_payload(connection: Any, table_name: str, organization_id: str, campaign_id: str, value: dict[str, Any]) -> Any:
+    organization = _find_postgres_organization(connection, organization_id)
+    campaign = _find_postgres_campaign(connection, organization_id, campaign_id)
+    if not organization or not campaign:
+        raise RuntimeError(f"Missing platform scope for {organization_id}/{campaign_id}.")
+    payload_json = json.dumps(_clone_json(value), ensure_ascii=False)
+    row_count = len(value.get("rows", [])) if isinstance(value.get("rows"), list) else 0
+    generated_at = str(value.get("generatedAt") or value.get("updatedAt") or isoformat_utc(utc_now()))
+    updated_at = str(value.get("updatedAt") or value.get("meta", {}).get("lastSavedAt") or isoformat_utc(utc_now()))
+    updated_by = normalize_email(value.get("meta", {}).get("lastSavedBy") or value.get("updatedBy") or "")
+    has_secret = bool(
+        isinstance(value.get("api"), dict) and str(value.get("api", {}).get("bearerToken") or "").strip()
+    )
+    with connection.cursor() as cursor:
+        if table_name == "campaign_configs":
+            cursor.execute(
+                """
+                INSERT INTO goodraise.campaign_configs (id, organization_id, campaign_id, payload, revision, updated_at, updated_by)
+                VALUES (%s::uuid, %s::uuid, %s::uuid, %s::jsonb, 1, %s, %s)
+                ON CONFLICT (campaign_id) DO UPDATE SET
+                    payload = EXCLUDED.payload,
+                    revision = goodraise.campaign_configs.revision + 1,
+                    updated_at = EXCLUDED.updated_at,
+                    updated_by = EXCLUDED.updated_by
+                RETURNING payload
+                """,
+                (str(uuid.uuid4()), organization["dbId"], campaign["dbId"], payload_json, updated_at, updated_by),
+            )
+        elif table_name == "campaign_sources":
+            cursor.execute(
+                """
+                INSERT INTO goodraise.campaign_sources (id, organization_id, campaign_id, payload, has_secret, updated_at, updated_by)
+                VALUES (%s::uuid, %s::uuid, %s::uuid, %s::jsonb, %s, %s, %s)
+                ON CONFLICT (campaign_id) DO UPDATE SET
+                    payload = EXCLUDED.payload,
+                    has_secret = EXCLUDED.has_secret,
+                    updated_at = EXCLUDED.updated_at,
+                    updated_by = EXCLUDED.updated_by
+                RETURNING payload
+                """,
+                (str(uuid.uuid4()), organization["dbId"], campaign["dbId"], payload_json, has_secret, updated_at, updated_by),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO goodraise.campaign_datasets (id, organization_id, campaign_id, payload, row_count, generated_at, updated_at)
+                VALUES (%s::uuid, %s::uuid, %s::uuid, %s::jsonb, %s, %s, %s)
+                ON CONFLICT (campaign_id) DO UPDATE SET
+                    payload = EXCLUDED.payload,
+                    row_count = EXCLUDED.row_count,
+                    generated_at = EXCLUDED.generated_at,
+                    updated_at = EXCLUDED.updated_at
+                RETURNING payload
+                """,
+                (str(uuid.uuid4()), organization["dbId"], campaign["dbId"], payload_json, row_count, generated_at, updated_at),
+            )
+        row = cursor.fetchone()
+    connection.commit()
+    return _postgres_json_load(row[0]) if row else _clone_json(value)
+
+
 def read_platform_store() -> dict[str, Any]:
     if not PLATFORM_STORE_PATH.exists():
         return {"items": {}}
@@ -619,10 +1211,50 @@ def write_platform_store(store: dict[str, Any]) -> None:
 
 
 def platform_get(key: str) -> Any:
+    if uses_postgres_platform_store():
+        try:
+            with _connect_postgres_platform() as connection:
+                if key.startswith("organization:"):
+                    organization_id = key.split(":", 1)[1]
+                    return _find_postgres_organization(connection, organization_id)
+                if key.startswith("campaign-config:"):
+                    _, organization_id, campaign_id = key.split(":", 2)
+                    return _get_postgres_payload(connection, "campaign_configs", organization_id, campaign_id)
+                if key.startswith("campaign-source:"):
+                    _, organization_id, campaign_id = key.split(":", 2)
+                    return _get_postgres_payload(connection, "campaign_sources", organization_id, campaign_id)
+                if key.startswith("campaign-dataset:"):
+                    _, organization_id, campaign_id = key.split(":", 2)
+                    return _get_postgres_payload(connection, "campaign_datasets", organization_id, campaign_id)
+                if key.startswith("campaign:"):
+                    _, organization_id, campaign_id = key.split(":", 2)
+                    return _find_postgres_campaign(connection, organization_id, campaign_id)
+        except Exception:
+            return None
     return read_platform_store().get("items", {}).get(key)
 
 
 def platform_set(key: str, value: Any) -> None:
+    if uses_postgres_platform_store():
+        with _connect_postgres_platform() as connection:
+            if key.startswith("organization:") and isinstance(value, dict):
+                _upsert_postgres_organization(connection, value)
+                return
+            if key.startswith("campaign:") and isinstance(value, dict):
+                _upsert_postgres_campaign(connection, value)
+                return
+            if key.startswith("campaign-config:") and isinstance(value, dict):
+                _, organization_id, campaign_id = key.split(":", 2)
+                _upsert_postgres_payload(connection, "campaign_configs", organization_id, campaign_id, value)
+                return
+            if key.startswith("campaign-source:") and isinstance(value, dict):
+                _, organization_id, campaign_id = key.split(":", 2)
+                _upsert_postgres_payload(connection, "campaign_sources", organization_id, campaign_id, value)
+                return
+            if key.startswith("campaign-dataset:") and isinstance(value, dict):
+                _, organization_id, campaign_id = key.split(":", 2)
+                _upsert_postgres_payload(connection, "campaign_datasets", organization_id, campaign_id, value)
+                return
     store = read_platform_store()
     store.setdefault("items", {})
     store["items"][key] = _clone_json(value)
@@ -630,6 +1262,59 @@ def platform_set(key: str, value: Any) -> None:
 
 
 def platform_list(prefix: str) -> list[tuple[str, Any]]:
+    if uses_postgres_platform_store() and prefix == "campaign:":
+        try:
+            with _connect_postgres_platform() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT
+                            o.app_id,
+                            o.slug,
+                            c.app_id,
+                            c.slug,
+                            c.name,
+                            c.status,
+                            c.target_amount,
+                            c.currency_code,
+                            c.starts_at,
+                            c.ends_at,
+                            c.created_at,
+                            c.updated_at,
+                            c.updated_by
+                        FROM goodraise.campaigns c
+                        JOIN goodraise.organizations o ON o.id = c.organization_id
+                        WHERE c.app_id IS NOT NULL
+                        ORDER BY c.updated_at DESC, c.created_at DESC
+                        """
+                    )
+                    rows = cursor.fetchall()
+                items: list[tuple[str, Any]] = []
+                for row in rows:
+                    organization_id = str(row[0] or row[1] or "default-org")
+                    campaign_id = str(row[2] or row[3] or "campaign")
+                    items.append(
+                        (
+                            campaign_key(organization_id, campaign_id),
+                            {
+                                "id": campaign_id,
+                                "organizationId": organization_id,
+                                "slug": str(row[3] or campaign_id),
+                                "name": str(row[4] or campaign_id),
+                                "status": str(row[5] or "draft"),
+                                "target": int(row[6] or 0),
+                                "currency": str(row[7] or "ILS"),
+                                "startAt": str(row[8].isoformat() if hasattr(row[8], "isoformat") else row[8] or ""),
+                                "endAt": str(row[9].isoformat() if hasattr(row[9], "isoformat") else row[9] or ""),
+                                "createdAt": str(row[10].isoformat() if hasattr(row[10], "isoformat") else row[10] or ""),
+                                "updatedAt": str(row[11].isoformat() if hasattr(row[11], "isoformat") else row[11] or ""),
+                                "updatedBy": normalize_email(row[12] or ""),
+                            },
+                        )
+                    )
+                return items
+        except Exception:
+            return []
     items = read_platform_store().get("items", {})
     return [(key, value) for key, value in items.items() if key.startswith(prefix)]
 
@@ -1626,6 +2311,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         token = self.get_session_token()
         if not token:
             return None
+        if uses_postgres_platform_store():
+            with _connect_postgres_platform() as connection:
+                seed_admins_postgres(connection)
+                return get_authenticated_admin_context_postgres(connection, token)
         with get_connection() as connection:
             ensure_schema(connection)
             seed_admins(connection)
@@ -1652,12 +2341,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         auth_db_exists = DB_PATH.exists()
         persistence_ok = False
         try:
-            with get_connection() as connection:
-                ensure_schema(connection)
-                seed_admins(connection)
-                connection.execute("SELECT 1").fetchone()
-                persistence_ok = True
-        except sqlite3.Error:
+            if uses_postgres_platform_store():
+                with _connect_postgres_platform() as connection:
+                    seed_admins_postgres(connection)
+                    with connection.cursor() as cursor:
+                        cursor.execute("SELECT 1")
+                        cursor.fetchone()
+                    persistence_ok = True
+            else:
+                with get_connection() as connection:
+                    ensure_schema(connection)
+                    seed_admins(connection)
+                    connection.execute("SELECT 1").fetchone()
+                    persistence_ok = True
+        except Exception:
             persistence_ok = False
 
         return {
@@ -1670,7 +2367,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             },
             "persistence": {
                 "status": "ok" if persistence_ok else "error",
-                "authDatabaseReady": auth_db_exists,
+                "authDatabaseReady": True if uses_postgres_platform_store() else auth_db_exists,
+                "authDatabaseType": "postgresql" if uses_postgres_platform_store() else "sqlite",
                 "campaignConfigReady": campaign_config_exists,
             },
             "dataSource": {
@@ -2056,7 +2754,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     connection,
                     organization_id,
                     campaign_id,
-                    payload,
+                    payload.get("record") if isinstance(payload.get("record"), dict) else payload,
                     source_label=source_label,
                     imported_by="external-api",
                     request_reference=request_reference,
@@ -2432,31 +3130,55 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש למלא גם מייל וגם סיסמה."})
             return
 
-        with get_connection() as connection:
-            ensure_schema(connection)
-            seed_admins(connection)
-            admin = get_admin(connection, email)
-            if not admin or not bool(admin["is_active"]):
-                self.respond_json(
-                    HTTPStatus.FORBIDDEN,
-                    {"message": "המייל שהוזן אינו מורשה לגישה לפאנל הניהול."},
-                )
-                return
-            if not admin["password_hash"]:
-                self.respond_json(
-                    HTTPStatus.CONFLICT,
-                    {
-                        "message": "זו כניסה ראשונה עבור המייל הזה. יש להגדיר סיסמה אישית לפני כניסה.",
-                        "code": "setup_required",
-                        "setupRequired": True,
-                    },
-                )
-                return
-            if not verify_password(password, str(admin["password_hash"])):
-                self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה שגויה. נסו שוב."})
-                return
-
-            token = create_session(connection, email)
+        if uses_postgres_platform_store():
+            with _connect_postgres_platform() as connection:
+                seed_admins_postgres(connection)
+                admin = get_admin_postgres(connection, email)
+                if not admin or not bool(admin["is_active"]):
+                    self.respond_json(
+                        HTTPStatus.FORBIDDEN,
+                        {"message": "המייל שהוזן אינו מורשה לגישה לפאנל הניהול."},
+                    )
+                    return
+                if not admin["password_hash"]:
+                    self.respond_json(
+                        HTTPStatus.CONFLICT,
+                        {
+                            "message": "זו כניסה ראשונה עבור המייל הזה. יש להגדיר סיסמה אישית לפני כניסה.",
+                            "code": "setup_required",
+                            "setupRequired": True,
+                        },
+                    )
+                    return
+                if not verify_password(password, str(admin["password_hash"])):
+                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה שגויה. נסו שוב."})
+                    return
+                token = create_session_postgres(connection, email)
+        else:
+            with get_connection() as connection:
+                ensure_schema(connection)
+                seed_admins(connection)
+                admin = get_admin(connection, email)
+                if not admin or not bool(admin["is_active"]):
+                    self.respond_json(
+                        HTTPStatus.FORBIDDEN,
+                        {"message": "המייל שהוזן אינו מורשה לגישה לפאנל הניהול."},
+                    )
+                    return
+                if not admin["password_hash"]:
+                    self.respond_json(
+                        HTTPStatus.CONFLICT,
+                        {
+                            "message": "זו כניסה ראשונה עבור המייל הזה. יש להגדיר סיסמה אישית לפני כניסה.",
+                            "code": "setup_required",
+                            "setupRequired": True,
+                        },
+                    )
+                    return
+                if not verify_password(password, str(admin["password_hash"])):
+                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה שגויה. נסו שוב."})
+                    return
+                token = create_session(connection, email)
 
         self.respond_json(
             HTTPStatus.OK,
@@ -2483,25 +3205,43 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש לבחור סיסמה באורך 8 תווים לפחות."})
             return
 
-        with get_connection() as connection:
-            ensure_schema(connection)
-            seed_admins(connection)
-            admin = get_admin(connection, email)
-            if not admin or not bool(admin["is_active"]):
-                self.respond_json(
-                    HTTPStatus.FORBIDDEN,
-                    {"message": "המייל שהוזן אינו מורשה להגדיר גישת מנהל."},
-                )
-                return
-            if admin["password_hash"]:
-                self.respond_json(
-                    HTTPStatus.CONFLICT,
-                    {"message": "כבר הוגדרה סיסמה עבור המייל הזה. ניתן לעבור למסך הכניסה הרגיל."},
-                )
-                return
-
-            update_admin_password(connection, email, password)
-            token = create_session(connection, email)
+        if uses_postgres_platform_store():
+            with _connect_postgres_platform() as connection:
+                seed_admins_postgres(connection)
+                admin = get_admin_postgres(connection, email)
+                if not admin or not bool(admin["is_active"]):
+                    self.respond_json(
+                        HTTPStatus.FORBIDDEN,
+                        {"message": "המייל שהוזן אינו מורשה להגדיר גישת מנהל."},
+                    )
+                    return
+                if admin["password_hash"]:
+                    self.respond_json(
+                        HTTPStatus.CONFLICT,
+                        {"message": "כבר הוגדרה סיסמה עבור המייל הזה. ניתן לעבור למסך הכניסה הרגיל."},
+                    )
+                    return
+                update_admin_password_postgres(connection, email, password)
+                token = create_session_postgres(connection, email)
+        else:
+            with get_connection() as connection:
+                ensure_schema(connection)
+                seed_admins(connection)
+                admin = get_admin(connection, email)
+                if not admin or not bool(admin["is_active"]):
+                    self.respond_json(
+                        HTTPStatus.FORBIDDEN,
+                        {"message": "המייל שהוזן אינו מורשה להגדיר גישת מנהל."},
+                    )
+                    return
+                if admin["password_hash"]:
+                    self.respond_json(
+                        HTTPStatus.CONFLICT,
+                        {"message": "כבר הוגדרה סיסמה עבור המייל הזה. ניתן לעבור למסך הכניסה הרגיל."},
+                    )
+                    return
+                update_admin_password(connection, email, password)
+                token = create_session(connection, email)
 
         self.respond_json(
             HTTPStatus.OK,
@@ -2517,9 +3257,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         token = self.get_session_token()
         auth_context = self.get_auth_context()
         if token:
-            with get_connection() as connection:
-                ensure_schema(connection)
-                delete_session(connection, token)
+            if uses_postgres_platform_store():
+                with _connect_postgres_platform() as connection:
+                    delete_session_postgres(connection, token)
+            else:
+                with get_connection() as connection:
+                    ensure_schema(connection)
+                    delete_session(connection, token)
 
         self.respond_json(
             HTTPStatus.OK,
@@ -2551,16 +3295,27 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "הסיסמה החדשה חייבת לכלול לפחות 8 תווים."})
             return
 
-        with get_connection() as connection:
-            ensure_schema(connection)
-            seed_admins(connection)
-            admin = get_admin(connection, auth_context["email"])
-            if not admin or not admin["password_hash"] or not verify_password(current_password, str(admin["password_hash"])):
-                self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה הנוכחית שגויה."})
-                return
-            update_admin_password(connection, auth_context["email"], new_password)
-            delete_sessions_for_email(connection, auth_context["email"])
-            token = create_session(connection, auth_context["email"])
+        if uses_postgres_platform_store():
+            with _connect_postgres_platform() as connection:
+                seed_admins_postgres(connection)
+                admin = get_admin_postgres(connection, auth_context["email"])
+                if not admin or not admin["password_hash"] or not verify_password(current_password, str(admin["password_hash"])):
+                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה הנוכחית שגויה."})
+                    return
+                update_admin_password_postgres(connection, auth_context["email"], new_password)
+                delete_sessions_for_email_postgres(connection, auth_context["email"])
+                token = create_session_postgres(connection, auth_context["email"])
+        else:
+            with get_connection() as connection:
+                ensure_schema(connection)
+                seed_admins(connection)
+                admin = get_admin(connection, auth_context["email"])
+                if not admin or not admin["password_hash"] or not verify_password(current_password, str(admin["password_hash"])):
+                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה הנוכחית שגויה."})
+                    return
+                update_admin_password(connection, auth_context["email"], new_password)
+                delete_sessions_for_email(connection, auth_context["email"])
+                token = create_session(connection, auth_context["email"])
 
         self.respond_json(
             HTTPStatus.OK,
@@ -2579,29 +3334,41 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש להזין מייל מנהל/ת כדי לאפס סיסמה."})
             return
 
-        with get_connection() as connection:
-            ensure_schema(connection)
-            seed_admins(connection)
-            admin = get_admin(connection, email)
-            if not admin or not bool(admin["is_active"]):
-                self.respond_json(
-                    HTTPStatus.FORBIDDEN,
-                    {"message": "המייל שהוזן אינו מורשה לאיפוס במערכת הניהול המקומית."},
+        if uses_postgres_platform_store():
+            with _connect_postgres_platform() as connection:
+                seed_admins_postgres(connection)
+                admin = get_admin_postgres(connection, email)
+                if not admin or not bool(admin["is_active"]):
+                    self.respond_json(
+                        HTTPStatus.FORBIDDEN,
+                        {"message": "המייל שהוזן אינו מורשה לאיפוס במערכת הניהול המקומית."},
+                    )
+                    return
+                reset_admin_password_postgres(connection, email)
+        else:
+            with get_connection() as connection:
+                ensure_schema(connection)
+                seed_admins(connection)
+                admin = get_admin(connection, email)
+                if not admin or not bool(admin["is_active"]):
+                    self.respond_json(
+                        HTTPStatus.FORBIDDEN,
+                        {"message": "המייל שהוזן אינו מורשה לאיפוס במערכת הניהול המקומית."},
+                    )
+                    return
+                connection.execute(
+                    """
+                    UPDATE admins
+                    SET password_hash = NULL, password_set_at = NULL, last_login_at = NULL
+                    WHERE lower(email) = ?
+                    """,
+                    (normalize_email(email),),
                 )
-                return
-            connection.execute(
-                """
-                UPDATE admins
-                SET password_hash = NULL, password_set_at = NULL, last_login_at = NULL
-                WHERE lower(email) = ?
-                """,
-                (normalize_email(email),),
-            )
-            connection.execute(
-                "DELETE FROM admin_sessions WHERE lower(admin_email) = ?",
-                (normalize_email(email),),
-            )
-            connection.commit()
+                connection.execute(
+                    "DELETE FROM admin_sessions WHERE lower(admin_email) = ?",
+                    (normalize_email(email),),
+                )
+                connection.commit()
 
         self.respond_json(
             HTTPStatus.OK,

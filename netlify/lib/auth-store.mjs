@@ -1,4 +1,4 @@
-import { pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
+import { pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,12 +35,100 @@ const PASSWORD_ITERATIONS = 200_000;
 const MAX_AUTH_ATTEMPTS = 5;
 const AUTH_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_LOCKOUT_MS = 20 * 60 * 1000;
+const POSTGRES_AUTH_SCHEMA_SQL = `
+CREATE SCHEMA IF NOT EXISTS goodraise;
+
+CREATE TABLE IF NOT EXISTS goodraise.admin_users (
+  id UUID PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL DEFAULT 'platform_admin',
+  organization_app_id TEXT NOT NULL DEFAULT '',
+  organization_slug TEXT NOT NULL DEFAULT '',
+  campaign_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  campaign_slugs JSONB NOT NULL DEFAULT '[]'::jsonb,
+  password_hash TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  password_set_at TIMESTAMPTZ,
+  last_login_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.admin_sessions (
+  token TEXT PRIMARY KEY,
+  admin_user_id UUID NOT NULL REFERENCES goodraise.admin_users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_users_role ON goodraise.admin_users(role);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_user ON goodraise.admin_sessions(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON goodraise.admin_sessions(expires_at);
+`;
+
+let postgresPoolPromise = null;
+let postgresSchemaPromise = null;
 
 function getPersistence() {
   return createPlatformStore({
     storeName: STORE_NAME,
     devStorePath: DEV_STORE_PATH,
   });
+}
+
+function getDatabaseUrl() {
+  return String(process.env.GOODRAISE_DATABASE_URL || process.env.DATABASE_URL || "").trim();
+}
+
+function usesPostgresAuthStore() {
+  return Boolean(getDatabaseUrl());
+}
+
+async function getPostgresPool() {
+  if (!postgresPoolPromise) {
+    postgresPoolPromise = import("pg").then(({ Pool }) => {
+      const connectionString = getDatabaseUrl();
+      if (!connectionString) {
+        throw new Error("GOODRAISE_DATABASE_URL is not configured.");
+      }
+      return new Pool({
+        connectionString,
+        max: 4,
+        idleTimeoutMillis: 10_000,
+        connectionTimeoutMillis: 10_000,
+      });
+    });
+  }
+  return postgresPoolPromise;
+}
+
+async function ensurePostgresAuthSchema() {
+  if (!usesPostgresAuthStore()) {
+    return;
+  }
+  if (!postgresSchemaPromise) {
+    postgresSchemaPromise = (async () => {
+      const pool = await getPostgresPool();
+      const client = await pool.connect();
+      try {
+        await client.query(POSTGRES_AUTH_SCHEMA_SQL);
+      } finally {
+        client.release();
+      }
+    })();
+  }
+  return postgresSchemaPromise;
+}
+
+async function withPostgresClient(callback) {
+  await ensurePostgresAuthSchema();
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
+  try {
+    return await callback(client);
+  } finally {
+    client.release();
+  }
 }
 
 function toMillis(value) {
@@ -292,6 +380,52 @@ async function ensureNotRateLimited(store, email, clientAddress) {
 }
 
 async function ensureAdminSeed(store) {
+  if (usesPostgresAuthStore()) {
+    const createdAt = isoNow();
+    const managers = await loadManagerRecords();
+    await withPostgresClient(async (client) => {
+      for (const manager of managers) {
+        await client.query(
+          `
+            INSERT INTO goodraise.admin_users (
+              id,
+              email,
+              role,
+              organization_app_id,
+              organization_slug,
+              campaign_ids,
+              campaign_slugs,
+              is_active,
+              created_at,
+              updated_at
+            )
+            VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10)
+            ON CONFLICT (email) DO UPDATE SET
+              role = EXCLUDED.role,
+              organization_app_id = EXCLUDED.organization_app_id,
+              organization_slug = EXCLUDED.organization_slug,
+              campaign_ids = EXCLUDED.campaign_ids,
+              campaign_slugs = EXCLUDED.campaign_slugs,
+              is_active = EXCLUDED.is_active,
+              updated_at = EXCLUDED.updated_at
+          `,
+          [
+            randomUUID(),
+            manager.email,
+            manager.role,
+            manager.organizationId || "",
+            manager.organizationSlug || "",
+            JSON.stringify(manager.campaignIds || []),
+            JSON.stringify(manager.campaignSlugs || []),
+            manager.isActive !== false,
+            createdAt,
+            createdAt,
+          ],
+        );
+      }
+    });
+    return;
+  }
   const createdAt = isoNow();
   for (const manager of await loadManagerRecords()) {
     const existing = await store.getJSON(adminKey(manager.email));
@@ -311,16 +445,131 @@ async function ensureAdminSeed(store) {
   }
 }
 
+function normalizeAdminRecord(record) {
+  if (!record) {
+    return null;
+  }
+  return {
+    email: normalizeEmail(record.email),
+    role: normalizeRole(record.role, ROLE_PLATFORM_ADMIN),
+    organizationId: normalizeStableId(record.organizationAppId || record.organizationId || ""),
+    organizationSlug: normalizeSlug(record.organizationSlug || ""),
+    campaignIds: Array.isArray(record.campaignIds) ? record.campaignIds.map((item) => normalizeStableId(item)).filter(Boolean) : [],
+    campaignSlugs: Array.isArray(record.campaignSlugs) ? record.campaignSlugs.map((item) => normalizeSlug(item)).filter(Boolean) : [],
+    isActive: record.isActive !== false,
+    createdAt: record.createdAt || "",
+    updatedAt: record.updatedAt || "",
+    passwordHash: String(record.passwordHash || ""),
+    passwordSetAt: record.passwordSetAt || "",
+    lastLoginAt: record.lastLoginAt || "",
+  };
+}
+
 async function getAdminRecord(store, email) {
   await ensureAdminSeed(store);
+  if (usesPostgresAuthStore()) {
+    return withPostgresClient(async (client) => {
+      const result = await client.query(
+        `
+          SELECT
+            email,
+            role,
+            organization_app_id,
+            organization_slug,
+            campaign_ids,
+            campaign_slugs,
+            password_hash,
+            is_active,
+            created_at,
+            updated_at,
+            password_set_at,
+            last_login_at
+          FROM goodraise.admin_users
+          WHERE lower(email) = lower($1)
+          LIMIT 1
+        `,
+        [normalizeEmail(email)],
+      );
+      const row = result.rows[0];
+      if (!row) {
+        return null;
+      }
+      return normalizeAdminRecord({
+        email: row.email,
+        role: row.role,
+        organizationAppId: row.organization_app_id,
+        organizationSlug: row.organization_slug,
+        campaignIds: row.campaign_ids || [],
+        campaignSlugs: row.campaign_slugs || [],
+        passwordHash: row.password_hash || "",
+        isActive: row.is_active !== false,
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at || ""),
+        updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at || ""),
+        passwordSetAt: row.password_set_at instanceof Date ? row.password_set_at.toISOString() : String(row.password_set_at || ""),
+        lastLoginAt: row.last_login_at instanceof Date ? row.last_login_at.toISOString() : String(row.last_login_at || ""),
+      });
+    });
+  }
   return store.getJSON(adminKey(email));
 }
 
 async function saveAdminRecord(store, record) {
+  if (usesPostgresAuthStore()) {
+    const normalized = normalizeAdminRecord(record);
+    if (!normalized) {
+      return;
+    }
+    await withPostgresClient(async (client) => {
+      await client.query(
+        `
+          UPDATE goodraise.admin_users
+          SET role = $2,
+              organization_app_id = $3,
+              organization_slug = $4,
+              campaign_ids = $5::jsonb,
+              campaign_slugs = $6::jsonb,
+              password_hash = $7,
+              is_active = $8,
+              updated_at = $9,
+              password_set_at = NULLIF($10, '')::timestamptz,
+              last_login_at = NULLIF($11, '')::timestamptz
+          WHERE lower(email) = lower($1)
+        `,
+        [
+          normalized.email,
+          normalized.role,
+          normalized.organizationId || "",
+          normalized.organizationSlug || "",
+          JSON.stringify(normalized.campaignIds || []),
+          JSON.stringify(normalized.campaignSlugs || []),
+          normalized.passwordHash || null,
+          normalized.isActive !== false,
+          isoNow(),
+          normalized.passwordSetAt || "",
+          normalized.lastLoginAt || "",
+        ],
+      );
+    });
+    return;
+  }
   await store.setJSON(adminKey(record.email), record);
 }
 
 async function deleteSessionsForEmail(store, email) {
+  if (usesPostgresAuthStore()) {
+    await withPostgresClient(async (client) => {
+      await client.query(
+        `
+          DELETE FROM goodraise.admin_sessions
+          WHERE admin_user_id IN (
+            SELECT id FROM goodraise.admin_users WHERE lower(email) = lower($1)
+          )
+        `,
+        [normalizeEmail(email)],
+      );
+    });
+    return;
+  }
   const sessions = await store.listJSON("session:");
   for (const item of sessions) {
     if (normalizeEmail(item?.value?.adminEmail) === normalizeEmail(email)) {
@@ -333,6 +582,31 @@ async function getSessionRecord(store, token) {
   if (!token) {
     return null;
   }
+  if (usesPostgresAuthStore()) {
+    return withPostgresClient(async (client) => {
+      await client.query("DELETE FROM goodraise.admin_sessions WHERE expires_at <= NOW()");
+      const result = await client.query(
+        `
+          SELECT s.token, u.email AS admin_email, s.created_at, s.expires_at
+          FROM goodraise.admin_sessions s
+          JOIN goodraise.admin_users u ON u.id = s.admin_user_id
+          WHERE s.token = $1 AND u.is_active = TRUE
+          LIMIT 1
+        `,
+        [token],
+      );
+      const row = result.rows[0];
+      if (!row) {
+        return null;
+      }
+      return {
+        token: row.token,
+        adminEmail: normalizeEmail(row.admin_email || ""),
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at || ""),
+        expiresAt: row.expires_at instanceof Date ? row.expires_at.toISOString() : String(row.expires_at || ""),
+      };
+    });
+  }
   const record = await store.getJSON(sessionKey(token));
   if (!record) {
     return null;
@@ -342,6 +616,48 @@ async function getSessionRecord(store, token) {
     return null;
   }
   return record;
+}
+
+async function createSessionRecord(store, email, token, createdAt, expiresAt) {
+  if (usesPostgresAuthStore()) {
+    await withPostgresClient(async (client) => {
+      const result = await client.query(
+        "SELECT id::text FROM goodraise.admin_users WHERE lower(email) = lower($1) LIMIT 1",
+        [normalizeEmail(email)],
+      );
+      const adminUserId = result.rows[0]?.id;
+      if (!adminUserId) {
+        throw new Error(`Admin user not found for session creation: ${email}`);
+      }
+      await client.query(
+        `
+          INSERT INTO goodraise.admin_sessions (token, admin_user_id, created_at, expires_at)
+          VALUES ($1, $2::uuid, $3, $4)
+        `,
+        [token, adminUserId, createdAt, expiresAt],
+      );
+    });
+    return;
+  }
+  await store.setJSON(sessionKey(token), {
+    token,
+    adminEmail: normalizeEmail(email),
+    createdAt,
+    expiresAt,
+  });
+}
+
+async function deleteSessionRecord(store, token) {
+  if (!token) {
+    return;
+  }
+  if (usesPostgresAuthStore()) {
+    await withPostgresClient(async (client) => {
+      await client.query("DELETE FROM goodraise.admin_sessions WHERE token = $1", [token]);
+    });
+    return;
+  }
+  await store.delete(sessionKey(token));
 }
 
 export function getSessionToken(request) {
@@ -545,7 +861,12 @@ export async function resolveScopedAccess(request, options = {}) {
 export async function getRuntimeHealth() {
   const store = getPersistence();
   await ensureAdminSeed(store);
-  const sessions = await store.listJSON("session:");
+  const sessions = usesPostgresAuthStore()
+    ? await withPostgresClient(async (client) => {
+        const result = await client.query("SELECT COUNT(*)::int AS total FROM goodraise.admin_sessions WHERE expires_at > NOW()");
+        return Array.from({ length: Number(result.rows[0]?.total || 0) }, () => null);
+      })
+    : await store.listJSON("session:");
   const managers = await loadManagerRecords();
   const summaries = await listCampaignSummaries();
   const migration = await ensureMultiTenantMigration();
@@ -690,12 +1011,7 @@ export async function loginManager({ email, password, request }) {
   admin.lastLoginAt = now;
   await clearFailedAttempts(store, normalizedEmail, clientAddress);
   await saveAdminRecord(store, admin);
-  await store.setJSON(sessionKey(token), {
-    token,
-    adminEmail: normalizedEmail,
-    createdAt: now,
-    expiresAt,
-  });
+  await createSessionRecord(store, normalizedEmail, token, now, expiresAt);
   await recordAuditEvent(store, {
     type: "login_success",
     email: normalizedEmail,
@@ -772,12 +1088,7 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
   admin.lastLoginAt = now;
   await clearFailedAttempts(store, normalizedEmail, clientAddress);
   await saveAdminRecord(store, admin);
-  await store.setJSON(sessionKey(token), {
-    token,
-    adminEmail: normalizedEmail,
-    createdAt: now,
-    expiresAt,
-  });
+  await createSessionRecord(store, normalizedEmail, token, now, expiresAt);
   await recordAuditEvent(store, {
     type: "setup_success",
     email: normalizedEmail,
@@ -809,7 +1120,7 @@ export async function logoutManager(request) {
   const store = getPersistence();
   const session = await getSessionRecord(store, token);
   if (token) {
-    await store.delete(sessionKey(token));
+    await deleteSessionRecord(store, token);
   }
   await recordAuditEvent(store, {
     type: "logout",
@@ -851,12 +1162,7 @@ export async function changeManagerPassword({ request, currentPassword, newPassw
   await deleteSessionsForEmail(store, baseAccess.auth.email);
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000).toISOString();
-  await store.setJSON(sessionKey(token), {
-    token,
-    adminEmail: baseAccess.auth.email,
-    createdAt: isoNow(),
-    expiresAt,
-  });
+  await createSessionRecord(store, baseAccess.auth.email, token, isoNow(), expiresAt);
   await appendAuditEvent({
     user: baseAccess.auth.email,
     role: baseAccess.auth.role,

@@ -71,10 +71,31 @@ Repository responsibilities:
 
 Current storage backends:
 
+- PostgreSQL when `GOODRAISE_DATABASE_URL` is configured
 - Netlify Blobs in hosted mode
 - local JSON dev store in verification/local hosted emulation
 
 The UI and intelligence layer do not need to know whether data is coming from Blobs today or SQL/Postgres later.
+
+When PostgreSQL is active, the setup layer is stored through:
+
+- `goodraise.organizations`
+- `goodraise.campaigns`
+- `goodraise.campaign_configs`
+- `goodraise.campaign_sources`
+- `goodraise.campaign_datasets`
+
+Manager identity and session persistence can also move into PostgreSQL through:
+
+- `goodraise.admin_users`
+- `goodraise.admin_sessions`
+
+This means the same database can now hold both:
+
+- campaign setup state
+- manager access state
+
+The repository layer maps the existing app-facing `organizationId` and `campaignId` onto relational rows through `app_id` plus slug resolution, so existing runtime paths keep working while the persistence backend becomes relational.
 
 ## Record Key Strategy
 

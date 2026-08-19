@@ -1,8 +1,13 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { normalizeEmail } from "./multi-tenant-model.mjs";
 
 let postgresPoolPromise = null;
+const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const LOCAL_INGEST_KEY_PATH = resolve(ROOT_DIR, "work", "config", "goodraise-ingest.local.json");
 
 const CSV_FIELD_NAMES = [
   "id",
@@ -359,7 +364,45 @@ function getConfiguredApiKeys() {
       return plural.split(",").map((item) => item.trim()).filter(Boolean);
     }
   }
-  return singular ? [singular] : [];
+  if (singular) {
+    return [singular];
+  }
+  if (existsSync(LOCAL_INGEST_KEY_PATH)) {
+    try {
+      const parsed = JSON.parse(readFileSync(LOCAL_INGEST_KEY_PATH, "utf8"));
+      if (Array.isArray(parsed?.apiKeys)) {
+        const keys = parsed.apiKeys.map((item) => String(item || "").trim()).filter(Boolean);
+        if (keys.length) {
+          return keys;
+        }
+      }
+      const legacyKey = String(parsed?.apiKey || "").trim();
+      if (legacyKey) {
+        return [legacyKey];
+      }
+    } catch {}
+  }
+  if (!process.env.NETLIFY) {
+    const generatedKey = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+    try {
+      mkdirSync(dirname(LOCAL_INGEST_KEY_PATH), { recursive: true });
+      writeFileSync(
+        LOCAL_INGEST_KEY_PATH,
+        JSON.stringify(
+          {
+            apiKeys: [generatedKey],
+            createdAt: new Date().toISOString(),
+            note: "Local ingest API key for GoodRaise external event simulation.",
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      return [generatedKey];
+    } catch {}
+  }
+  return [];
 }
 
 function readPresentedApiKey(request) {

@@ -36,6 +36,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Public project page with branded hero, flexible story content, configurable image or video, preset donation amounts, donor details, and handoff to an external payment provider
 - Manager-side campaign designer for local styling control over colors, typography, hero media, CTAs, and preset donation cards
 - Guided multi-step `Campaign Builder` with campaign basics, branding, donation setup, ambassadors, teams, goals, permissions, review, draft autosave, multi-campaign registry, active-campaign switching, and duplicate-campaign flow
+- `Campaign Builder` can persist its setup layer in PostgreSQL when `GOODRAISE_DATABASE_URL` is configured, with JSON fallback for local/dev environments without a database
 - Ambassador directory upload (`full_name`, `email`, `phone`, `nickname`) with personal GoodRaise-style links in the format `https://goodraise.netlify.app/{projectSlug}/{nickname}`
 - Public prize page with podium, prize tiers, and live competition summary
 - Public campaign snapshot hero with immediate KPI-style status cards
@@ -51,6 +52,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - File upload for prize model from Excel or CSV
 - Filters for ambassador, project day, exact date, date range, exact hour, hour range, donor name, and amount range
 - Local backend with SQLite admin table, first-password setup, login session, and logout
+- Manager/user persistence can run from PostgreSQL when `GOODRAISE_DATABASE_URL` is configured, including first-password setup, stored password hashes, and active sessions
 - Local backend role metadata with foundation roles for `platform_admin`, `organization_admin`, `campaign_manager`, `analyst`, and `viewer`
 - Local backend parity for campaign-scoped `/api/organizations/:orgId/campaigns/:campaignId/*` routes with server-side scope enforcement
 - Local password-change flow for authenticated managers
@@ -87,7 +89,7 @@ The app receives campaign export files and turns them into an active dashboard t
   Default public-facing media asset for the project donation page.
 - `work/content/project-page-default.md`
   Default markdown story shown on the public project page.
-- Ambassador link generation is configured from the manager-side Design & Media tab and stored locally in the browser until a backend persistence layer is added.
+- Campaign Builder state is persisted server-side through `netlify/lib/campaign-repositories.mjs`, with PostgreSQL as the preferred backing store and a local JSON fallback for environments without a database URL.
 - `work/samples/sample-source.csv`
   Synthetic sample dataset for portable builds and CI.
 - `work/config/dashboard-access.example.json`
@@ -169,13 +171,24 @@ Important:
 - Legacy `netlify/data/admin-dataset.json` is no longer the canonical hosted storage model. Protected hosted datasets are now persisted per campaign and served only after an authenticated admin session.
 - In local mode, manager auth is stored in `work/data/dashboard-auth.sqlite3`.
 - In local mode, source-API connection settings are stored in `work/data/dashboard-source-config.json`.
-- In local mode, campaign-builder state is stored in `work/data/dashboard-campaign-config.json`.
+- In local mode without PostgreSQL, campaign-builder state falls back to `work/data/dashboard-campaign-config.json` and `work/data/goodraise-platform-dev.json`.
+- When `GOODRAISE_DATABASE_URL` is configured, campaign-builder state is stored in PostgreSQL tables:
+  - `goodraise.organizations`
+  - `goodraise.campaigns`
+  - `goodraise.campaign_configs`
+  - `goodraise.campaign_sources`
+  - `goodraise.campaign_datasets`
+- When `GOODRAISE_DATABASE_URL` is configured, manager auth is also stored in PostgreSQL tables:
+  - `goodraise.admin_users`
+  - `goodraise.admin_sessions`
 - In local mode, audit events are appended to `work/data/dashboard-audit-log.jsonl`.
 - In Netlify mode, manager auth is stored through Netlify Functions plus Netlify Blobs persistence.
 - In Netlify mode, campaign-builder and source-API configuration are also persisted server-side and are not exposed in the public app shell.
+- If PostgreSQL is available in Netlify, the same campaign setup records use PostgreSQL as the source of truth instead of the local JSON/blob development store.
 - Netlify deploys include CSP, frame protection, content-type hardening, referrer policy, and basic auth rate limiting.
 - External real-time ingestion into PostgreSQL is available through a campaign-scoped `POST /api/organizations/:orgId/campaigns/:campaignId/ingest` endpoint protected by an API key.
 - Recommended local override file: `work/config/dashboard-access.local.json` (ignored from git).
+- Recommended local ingest key file: `work/config/goodraise-ingest.local.json` (ignored from git). If no ingest key is configured in env, the local backend creates this file automatically on startup and loads the key from it.
 - Real manager emails are intentionally excluded from tracked source. Supply them through `work/config/dashboard-access.local.json` locally or `YELLOW_DASHBOARD_MANAGER_EMAILS` in deployment.
 
 Ignored from git:
@@ -271,6 +284,15 @@ What the importer does:
 - preserves the CSV structure in `goodraise.transactions_csv_raw` with the exact source columns
 - creates normalized relational tables for `organizations`, `campaigns`, `import_batches`, `donors`, `ambassadors`, `rewards`, and `transactions`
 - links every imported transaction to an organization, campaign, donor, ambassador, reward, and import batch where relevant
+- shares the same database with the campaign setup layer, so builder configuration and transactional campaign data can live under one relational source of truth
+
+The same database can now also persist the GoodRaise setup layer in:
+
+- `goodraise.organizations`
+- `goodraise.campaigns`
+- `goodraise.campaign_configs`
+- `goodraise.campaign_sources`
+- `goodraise.campaign_datasets`
 
 Required environment variable:
 

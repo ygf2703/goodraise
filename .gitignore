@@ -4,6 +4,7 @@ work/source.csv
 work/prizes.xlsx
 work/prizes.csv
 work/config/dashboard-access.local.json
+work/config/goodraise-ingest.local.json
 work/data/*
 !work/data/.gitkeep
 netlify/data/*

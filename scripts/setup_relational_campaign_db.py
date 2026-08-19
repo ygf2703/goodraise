@@ -65,8 +65,10 @@ CREATE SCHEMA IF NOT EXISTS goodraise;
 
 CREATE TABLE IF NOT EXISTS goodraise.organizations (
     id UUID PRIMARY KEY,
+    app_id TEXT,
     slug TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -74,9 +76,12 @@ CREATE TABLE IF NOT EXISTS goodraise.organizations (
 CREATE TABLE IF NOT EXISTS goodraise.campaigns (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    app_id TEXT,
     slug TEXT NOT NULL,
     name TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft',
+    target_amount NUMERIC(14, 2) NOT NULL DEFAULT 0,
+    updated_by TEXT NOT NULL DEFAULT '',
     source_filename TEXT,
     source_checksum_sha256 TEXT,
     starts_at TIMESTAMPTZ,
@@ -207,7 +212,65 @@ CREATE TABLE IF NOT EXISTS goodraise.transactions_csv_raw (
     PRIMARY KEY (import_batch_id, source_row_number)
 );
 
+CREATE TABLE IF NOT EXISTS goodraise.campaign_configs (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    revision BIGINT NOT NULL DEFAULT 1,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by TEXT NOT NULL DEFAULT '',
+    UNIQUE (campaign_id)
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.campaign_sources (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    has_secret BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_by TEXT NOT NULL DEFAULT '',
+    UNIQUE (campaign_id)
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.campaign_datasets (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+    campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    row_count INTEGER NOT NULL DEFAULT 0,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (campaign_id)
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.admin_users (
+    id UUID PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL DEFAULT 'platform_admin',
+    organization_app_id TEXT NOT NULL DEFAULT '',
+    organization_slug TEXT NOT NULL DEFAULT '',
+    campaign_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    campaign_slugs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    password_hash TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    password_set_at TIMESTAMPTZ,
+    last_login_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS goodraise.admin_sessions (
+    token TEXT PRIMARY KEY,
+    admin_user_id UUID NOT NULL REFERENCES goodraise.admin_users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_campaigns_org ON goodraise.campaigns(organization_id);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_organizations_app_id ON goodraise.organizations(app_id) WHERE app_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_campaigns_org_app_id ON goodraise.campaigns(organization_id, app_id) WHERE app_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_import_batches_campaign ON goodraise.import_batches(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_ambassadors_campaign ON goodraise.ambassadors(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_rewards_campaign ON goodraise.rewards(campaign_id);
@@ -215,6 +278,12 @@ CREATE INDEX IF NOT EXISTS idx_transactions_campaign_time ON goodraise.transacti
 CREATE INDEX IF NOT EXISTS idx_transactions_donor ON goodraise.transactions(donor_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_ambassador ON goodraise.transactions(ambassador_id);
 CREATE INDEX IF NOT EXISTS idx_raw_campaign ON goodraise.transactions_csv_raw(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_configs_campaign ON goodraise.campaign_configs(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_sources_campaign ON goodraise.campaign_sources(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_datasets_campaign ON goodraise.campaign_datasets(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_admin_users_role ON goodraise.admin_users(role);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_user ON goodraise.admin_sessions(admin_user_id);
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON goodraise.admin_sessions(expires_at);
 ALTER TABLE goodraise.transactions ADD COLUMN IF NOT EXISTS canonical_event_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_campaign_canonical_event_key ON goodraise.transactions(campaign_id, canonical_event_key);
 """
