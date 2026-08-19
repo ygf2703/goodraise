@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { getCampaignDataset, saveCampaignDataset } from "./campaign-repositories.mjs";
 import { normalizeEmail } from "./multi-tenant-model.mjs";
 
 let postgresPoolPromise = null;
@@ -270,6 +271,19 @@ function sha256(value) {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
 function normalizeExternalRecord(payload = {}) {
   const record = payload && typeof payload.record === "object" && !Array.isArray(payload.record) ? payload.record : payload;
   const normalized = Object.fromEntries(CSV_FIELD_NAMES.map((field) => [field, ""]));
@@ -330,25 +344,84 @@ function buildCanonicalEventKey(record) {
     return sha256(`source-id:${sourceId}`);
   }
   return sha256(
-    JSON.stringify(
-      {
-        created_at: normalizeText(record.created_at),
-        email: normalizeEmail(record.email),
-        phone: normalizePhone(record.phone),
-        full_name: normalizeText(record.full_name),
-        total: normalizeText(record.total),
-        currencyname: normalizeText(record.currencyname),
-        ambassador_email: normalizeEmail(record["Ambassador email"]),
-        charge_result: normalizeText(record.charge_result),
-        charged_success: normalizeText(record.charged_success),
-      },
-      Object.keys(record).sort(),
-    ),
+    stableStringify({
+      created_at: normalizeText(record.created_at),
+      email: normalizeEmail(record.email),
+      phone: normalizePhone(record.phone),
+      full_name: normalizeText(record.full_name),
+      total: normalizeText(record.total),
+      currencyname: normalizeText(record.currencyname),
+      ambassador_email: normalizeEmail(record["Ambassador email"]),
+      charge_result: normalizeText(record.charge_result),
+      charged_success: normalizeText(record.charged_success),
+    }),
   );
 }
 
 function buildSourceTransactionKey(record) {
   return buildCanonicalEventKey(record);
+}
+
+function buildDatasetMeta(rows) {
+  const uniqueDates = [...new Set(rows.map((row) => row.date).filter(Boolean))].sort();
+  const defaultFrom = uniqueDates[0] || "";
+  const defaultTo = uniqueDates[uniqueDates.length - 1] || "";
+  return {
+    uniqueDates,
+    projectDates: uniqueDates,
+    defaultFrom,
+    defaultTo,
+    minDate: defaultFrom,
+    maxDate: defaultTo,
+    rowCount: rows.length,
+    projectWindowLabel: defaultFrom && defaultTo ? `${defaultFrom} עד ${defaultTo}` : "",
+  };
+}
+
+function buildDatasetRow(record) {
+  const occurredAt = parseTimestamp(record.created_at);
+  const createdIso = occurredAt instanceof Date && !Number.isNaN(occurredAt.getTime()) ? occurredAt.toISOString().slice(0, 16) : "";
+  return {
+    id: normalizeText(record.id) || sha256(`dataset-row:${normalizeText(record.created_at)}|${normalizeEmail(record.email)}|${normalizeText(record.total)}`),
+    createdIso,
+    date: createdIso.slice(0, 10),
+    hour: occurredAt instanceof Date && !Number.isNaN(occurredAt.getTime()) ? occurredAt.getUTCHours() : 0,
+    email: normalizeEmail(record.email),
+    donor: normalizeText(record.full_name) || "ללא שם",
+    ambassador: normalizeText(record["Ambassador name"]) || "ללא שיוך",
+    amount: parseDecimal(record.total) ?? 0,
+    city: normalizeText(record.city) || "ללא עיר",
+    status: parseBoolean(record.charged_success) ? "success" : "failed",
+    chargeResult: normalizeText(record.charge_result),
+  };
+}
+
+async function syncCampaignDatasetSnapshot(scope, record, sourceLabel) {
+  const organizationKey = scope.organization_slug;
+  const campaignKey = scope.campaign_slug;
+  const currentDataset = (await getCampaignDataset(organizationKey, campaignKey)) || {
+    rows: [],
+    meta: {},
+    sourceLabel: "",
+    generatedAt: "",
+    updatedAt: "",
+  };
+  const nextRow = buildDatasetRow(record);
+  const nextRows = [nextRow, ...((Array.isArray(currentDataset.rows) ? currentDataset.rows : []).filter((row) => String(row?.id || "").trim() !== nextRow.id))].sort((left, right) =>
+    String(right?.createdIso || "").localeCompare(String(left?.createdIso || "")),
+  );
+  await saveCampaignDataset(organizationKey, campaignKey, {
+    ...currentDataset,
+    rows: nextRows,
+    meta: buildDatasetMeta(nextRows),
+    sourceLabel: String(currentDataset.sourceLabel || sourceLabel || "external-api").trim(),
+    generatedAt: currentDataset.generatedAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  return {
+    rowCount: nextRows.length,
+    sourceLabel: String(currentDataset.sourceLabel || sourceLabel || "external-api").trim(),
+  };
 }
 
 function getConfiguredApiKeys() {
@@ -648,16 +721,13 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
   const sourceTransactionKey = buildSourceTransactionKey(record);
   const importBatchId = randomUUID();
   const importChecksum = sha256(
-    JSON.stringify(
-      {
-        requestReference,
-        sourceLabel,
-        record,
-        transactionKey: sourceTransactionKey,
-        importBatchId,
-      },
-      Object.keys(record).sort(),
-    ),
+    stableStringify({
+      requestReference,
+      sourceLabel,
+      record,
+      transactionKey: sourceTransactionKey,
+      importBatchId,
+    }),
   );
 
   const pool = await getPostgresPool();
@@ -674,6 +744,7 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
     const existingTransaction = await findExistingTransactionByCanonicalKey(client, scope.campaign_id, canonicalEventKey);
     if (existingTransaction) {
       await client.query("COMMIT");
+      const datasetState = await syncCampaignDatasetSnapshot(scope, record, sourceLabel);
       return {
         ok: true,
         duplicate: true,
@@ -694,6 +765,7 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
           sourceLabel,
           requestReference,
         },
+        dataset: datasetState,
         transaction: {
           id: existingTransaction.id,
           sourceId: normalizeText(record.id) || "",
@@ -873,6 +945,7 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
     );
 
     await client.query("COMMIT");
+    const datasetState = await syncCampaignDatasetSnapshot(scope, record, sourceLabel);
     return {
       ok: true,
       duplicate: false,
@@ -893,6 +966,7 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
         sourceLabel,
         requestReference,
       },
+      dataset: datasetState,
       transaction: {
         id: transactionId,
         sourceId: normalizeText(record.id) || "",

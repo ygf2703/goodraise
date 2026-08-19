@@ -1088,6 +1088,98 @@ def build_live_csv_row(record: dict[str, str], source_row_number: int = 1) -> Cs
     )
 
 
+def build_dataset_meta(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    unique_dates = sorted({str(row.get("date") or "").strip() for row in rows if str(row.get("date") or "").strip()})
+    default_from = unique_dates[0] if unique_dates else ""
+    default_to = unique_dates[-1] if unique_dates else ""
+    return {
+        "uniqueDates": unique_dates,
+        "projectDates": unique_dates,
+        "defaultFrom": default_from,
+        "defaultTo": default_to,
+        "minDate": default_from,
+        "maxDate": default_to,
+        "rowCount": len(rows),
+        "projectWindowLabel": f"{default_from} עד {default_to}" if default_from and default_to else "",
+    }
+
+
+def build_dataset_row(record: dict[str, str]) -> dict[str, Any]:
+    occurred_at = parse_timestamp(record.get("created_at", ""))
+    created_iso = occurred_at.strftime("%Y-%m-%dT%H:%M") if occurred_at else ""
+    return {
+        "id": normalize_text(record.get("id", "")) or build_sha256(
+            f"dataset-row:{normalize_text(record.get('created_at', ''))}|{normalize_email(record.get('email', ''))}|{normalize_text(record.get('total', ''))}"
+        ),
+        "createdIso": created_iso,
+        "date": created_iso[:10],
+        "hour": occurred_at.hour if occurred_at else 0,
+        "ambassador": normalize_text(record.get("Ambassador name", "")) or "ללא שיוך",
+        "donor": normalize_text(record.get("full_name", "")) or "ללא שם",
+        "email": normalize_email(record.get("email", "")),
+        "amount": float(parse_decimal(record.get("total", "")) or 0),
+        "city": normalize_text(record.get("city", "")) or "ללא עיר",
+        "status": "success" if parse_bool(record.get("charged_success", "")) else "failed",
+        "chargeResult": normalize_text(record.get("charge_result", "")),
+    }
+
+
+def sync_campaign_dataset_snapshot(
+    cursor: psycopg.Cursor[Any],
+    scope: dict[str, Any],
+    record: dict[str, str],
+    source_label: str,
+) -> dict[str, Any]:
+    cursor.execute(
+        """
+        SELECT payload
+        FROM goodraise.campaign_datasets
+        WHERE campaign_id = %s
+        LIMIT 1
+        """,
+        (scope["campaign_id"],),
+    )
+    existing_row = cursor.fetchone()
+    existing_payload = existing_row[0] if existing_row and isinstance(existing_row[0], dict) else {}
+    current_rows = existing_payload.get("rows") if isinstance(existing_payload.get("rows"), list) else []
+    next_row = build_dataset_row(record)
+    next_rows = [next_row, *[row for row in current_rows if str(row.get("id", "")).strip() != next_row["id"]]]
+    next_rows.sort(key=lambda row: str(row.get("createdIso") or ""), reverse=True)
+    next_payload = {
+        "organizationId": existing_payload.get("organizationId") or scope["organization_slug"],
+        "campaignId": existing_payload.get("campaignId") or scope["campaign_slug"],
+        "rows": next_rows,
+        "meta": build_dataset_meta(next_rows),
+        "sourceLabel": str(existing_payload.get("sourceLabel") or source_label or "external-api").strip(),
+        "generatedAt": existing_payload.get("generatedAt") or datetime.now(UTC).isoformat(),
+        "updatedAt": datetime.now(UTC).isoformat(),
+    }
+    cursor.execute(
+        """
+        INSERT INTO goodraise.campaign_datasets (id, organization_id, campaign_id, payload, row_count, generated_at, updated_at)
+        VALUES (%s::uuid, %s::uuid, %s::uuid, %s::jsonb, %s, %s, %s)
+        ON CONFLICT (campaign_id) DO UPDATE SET
+            payload = EXCLUDED.payload,
+            row_count = EXCLUDED.row_count,
+            generated_at = EXCLUDED.generated_at,
+            updated_at = EXCLUDED.updated_at
+        """,
+        (
+            str(uuid.uuid4()),
+            str(scope["organization_id"]),
+            str(scope["campaign_id"]),
+            json.dumps(next_payload, ensure_ascii=False),
+            len(next_rows),
+            next_payload["generatedAt"],
+            next_payload["updatedAt"],
+        ),
+    )
+    return {
+        "rowCount": len(next_rows),
+        "sourceLabel": next_payload["sourceLabel"],
+    }
+
+
 def ingest_external_record(
     connection: psycopg.Connection[Any],
     organization_identifier: str,
@@ -1134,6 +1226,7 @@ def ingest_external_record(
         )
         existing_transaction = cursor.fetchone()
         if existing_transaction:
+            dataset_state = sync_campaign_dataset_snapshot(cursor, scope, normalized_record, source_label)
             connection.commit()
             return {
                 "organizationId": str(scope["organization_id"]),
@@ -1142,6 +1235,7 @@ def ingest_external_record(
                 "campaignSlug": scope["campaign_slug"],
                 "transactionId": str(existing_transaction[0]),
                 "importBatchId": str(existing_transaction[1]),
+                "dataset": dataset_state,
                 "sourceTransactionKey": live_row.source_transaction_key,
                 "currencyCode": normalize_text(normalized_record.get("currencyname") or scope.get("currency_code") or ""),
                 "totalAmount": str(live_row.total_amount) if live_row.total_amount is not None else "",
@@ -1198,6 +1292,7 @@ def ingest_external_record(
             currency_code,
         )
         insert_raw_row(cursor, import_batch_id, scope["organization_id"], scope["campaign_id"], transaction_id, live_row)
+        dataset_state = sync_campaign_dataset_snapshot(cursor, scope, normalized_record, source_label)
         connection.commit()
 
     return {
@@ -1207,6 +1302,7 @@ def ingest_external_record(
         "campaignSlug": scope["campaign_slug"],
         "transactionId": str(transaction_id),
         "importBatchId": str(import_batch_id),
+        "dataset": dataset_state,
         "sourceTransactionKey": live_row.source_transaction_key,
         "currencyCode": currency_code,
         "totalAmount": str(live_row.total_amount) if live_row.total_amount is not None else "",
