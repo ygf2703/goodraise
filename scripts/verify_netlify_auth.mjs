@@ -1,4 +1,5 @@
 import authHandler from "../netlify/functions/auth.mjs";
+import healthHandler from "../netlify/functions/health.mjs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -154,6 +155,12 @@ async function main() {
   try {
     await resetStores();
     await seedScopedCampaignDataset();
+
+    const healthResponse = await healthHandler(new Request("http://localhost/.netlify/functions/health"));
+    const healthPayload = await readJson(healthResponse);
+    assert(healthResponse.status === 200, "Health function should respond with 200 in the local verification flow.");
+    assert(healthPayload?.ok === true, "Health function should return an ok payload.");
+    assert(healthPayload?.service === "goodraise-multi-tenant-auth", "Health function should expose the runtime service name.");
 
     const statusBefore = await authHandler(new Request("http://localhost/api/auth/status"));
     const statusBeforePayload = await readJson(statusBefore);
