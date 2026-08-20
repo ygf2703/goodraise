@@ -5594,6 +5594,7 @@ def build_fragment(
                   campaignId,
                 };
                 state.auth.accessibleCampaigns = summaries;
+                syncActiveCampaignRegistryWithScope(state.auth.currentScope);
               }
 
               function buildScopeFromCampaignSummary(summary = {}) {
@@ -5601,6 +5602,98 @@ def build_fragment(
                   organizationId: String(summary?.organizationId || summary?.organizationSlug || "").trim(),
                   campaignId: String(summary?.campaignId || summary?.campaignSlug || "").trim(),
                 };
+              }
+
+              function getCampaignStatusPriority(status) {
+                switch (String(status || "").trim().toLowerCase()) {
+                  case "live":
+                    return 40;
+                  case "completed":
+                    return 32;
+                  case "scheduled":
+                    return 18;
+                  case "paused":
+                    return 8;
+                  case "draft":
+                    return 0;
+                  case "archived":
+                    return -20;
+                  default:
+                    return 0;
+                }
+              }
+
+              function scoreCampaignSummary(summary = {}, fallbackScope = {}) {
+                const scope = buildScopeFromCampaignSummary(summary);
+                if (!scope.organizationId || !scope.campaignId) {
+                  return Number.NEGATIVE_INFINITY;
+                }
+
+                const fallbackOrganizationId = String(fallbackScope?.organizationId || "").trim();
+                const fallbackCampaignId = String(fallbackScope?.campaignId || "").trim();
+                const currentProjectSlug = getCampaignProjectSlug();
+                const activeRegistryEntry = getCampaignRegistryActiveEntry();
+                const activeRegistrySlug = normalizeUrlSlug(
+                  activeRegistryEntry?.slug ||
+                  activeRegistryEntry?.config?.basics?.slug ||
+                  ""
+                );
+                const summaryCampaignSlug = normalizeUrlSlug(summary?.campaignSlug || summary?.slug || "");
+                const rowCount = Number(summary?.rowCount ?? summary?.datasetRecordCount ?? 0) || 0;
+                const raised = Number(summary?.raised ?? 0) || 0;
+                let score = 0;
+
+                if (
+                  fallbackOrganizationId &&
+                  fallbackCampaignId &&
+                  scope.organizationId === fallbackOrganizationId &&
+                  scope.campaignId === fallbackCampaignId
+                ) {
+                  score += 80;
+                }
+                if (summaryCampaignSlug && currentProjectSlug && summaryCampaignSlug === currentProjectSlug) {
+                  score += 260;
+                }
+                if (summaryCampaignSlug && activeRegistrySlug && summaryCampaignSlug === activeRegistrySlug) {
+                  score += 120;
+                }
+                if (rowCount > 0) {
+                  score += 220 + Math.min(rowCount, 500);
+                }
+                if (raised > 0) {
+                  score += 140 + Math.min(raised, 1000000) / 1000;
+                }
+                score += getCampaignStatusPriority(summary?.status);
+                return score;
+              }
+
+              function syncActiveCampaignRegistryWithScope(scope = state?.auth?.currentScope) {
+                const organizationId = String(scope?.organizationId || "").trim();
+                const campaignId = String(scope?.campaignId || "").trim();
+                if (!organizationId || !campaignId) {
+                  return;
+                }
+                const normalized = normalizeCampaignRegistry(state.campaignRegistry);
+                const matchedEntry = normalized.campaigns.find((item) => {
+                  const basics = item?.config?.basics && typeof item.config.basics === "object" ? item.config.basics : {};
+                  const candidateIds = [
+                    item?.id,
+                    item?.slug,
+                    basics?.id,
+                    basics?.slug,
+                  ]
+                    .map((value) => String(value || "").trim())
+                    .filter(Boolean);
+                  return candidateIds.includes(campaignId);
+                });
+                if (!matchedEntry || normalized.activeCampaignId === matchedEntry.id) {
+                  return;
+                }
+                normalized.activeCampaignId = matchedEntry.id;
+                state.campaignRegistry = normalized;
+                state.activeCampaignId = matchedEntry.id;
+                persistActiveCampaignLegacyState();
+                storeCampaignRegistry(normalized);
               }
 
               function resolvePreferredCampaignScope(payload = {}, fallbackScope = getActiveCampaignIdentity()) {
@@ -5618,18 +5711,13 @@ def build_fragment(
                     ? payload.portfolio
                     : [];
                 if (summaries.length) {
-                  const fallbackOrg = String(fallbackScope?.organizationId || "").trim();
-                  const fallbackCampaign = String(fallbackScope?.campaignId || "").trim();
-                  const matchedSummary = summaries.find((summary) => {
-                    const scope = buildScopeFromCampaignSummary(summary);
-                    return (
-                      scope.organizationId &&
-                      scope.campaignId &&
-                      (!fallbackOrg || scope.organizationId === fallbackOrg) &&
-                      (!fallbackCampaign || scope.campaignId === fallbackCampaign)
-                    );
-                  });
-                  const summaryScope = buildScopeFromCampaignSummary(matchedSummary || summaries[0]);
+                  const rankedSummaries = [...summaries]
+                    .map((summary) => ({
+                      summary,
+                      score: scoreCampaignSummary(summary, fallbackScope),
+                    }))
+                    .sort((left, right) => right.score - left.score);
+                  const summaryScope = buildScopeFromCampaignSummary(rankedSummaries[0]?.summary || summaries[0]);
                   if (summaryScope.organizationId && summaryScope.campaignId) {
                     return summaryScope;
                   }
