@@ -11,6 +11,10 @@ import {
 import { fetchConfiguredSource } from "./source-store.mjs";
 import { hasConfiguredRelationalIngest, ingestCampaignRecords } from "./postgres-ingest.mjs";
 
+// Bump this only when accepted source formats change. It makes a previously
+// rejected but unchanged sheet eligible for one safe re-processing pass.
+const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-23-google-formats-v1";
+
 function normalizeGoogleSheetsSyncState(config, patch = {}) {
   return normalizeSourceConfig(
     {
@@ -72,7 +76,8 @@ export async function syncCampaignSourceOnce({
     normalized.mode === "google_sheets" &&
     !force &&
     String(normalized.googleSheets.lastChecksum || "").trim() &&
-    String(normalized.googleSheets.lastChecksum || "").trim() === String(fetched.contentHash || "").trim()
+    String(normalized.googleSheets.lastChecksum || "").trim() === String(fetched.contentHash || "").trim() &&
+    String(normalized.googleSheets.lastNormalizerVersion || "").trim() === GOOGLE_SHEETS_NORMALIZER_VERSION
   ) {
     await persistGoogleSheetsSyncState(
       organizationId,
@@ -135,6 +140,7 @@ export async function syncCampaignSourceOnce({
         lastSyncedAt: fetched.fetchedAt,
         lastSuccessfulSyncAt: fetched.fetchedAt,
         lastChecksum: fetched.contentHash,
+        lastNormalizerVersion: GOOGLE_SHEETS_NORMALIZER_VERSION,
         lastRowCount: syncResult?.dataset?.rowCount ?? fetched.rows.length,
         lastStatus: "success",
         lastMessage: syncResult?.skippedInvalidRows

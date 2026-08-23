@@ -228,6 +228,7 @@ export function defaultSourceConfig() {
       lastSyncedAt: "",
       lastSuccessfulSyncAt: "",
       lastChecksum: "",
+      lastNormalizerVersion: "",
       lastRowCount: 0,
       lastStatus: "idle",
       lastMessage: "",
@@ -296,6 +297,9 @@ export function normalizeSourceConfig(rawConfig, existingConfig = null) {
         googleSheetsCandidate.lastSuccessfulSyncAt || existingGoogleSheets.lastSuccessfulSyncAt || "",
       ).trim(),
       lastChecksum: String(googleSheetsCandidate.lastChecksum || existingGoogleSheets.lastChecksum || "").trim(),
+      lastNormalizerVersion: String(
+        googleSheetsCandidate.lastNormalizerVersion || existingGoogleSheets.lastNormalizerVersion || "",
+      ).trim(),
       lastRowCount: normalizePositiveInteger(
         googleSheetsCandidate.lastRowCount,
         normalizePositiveInteger(existingGoogleSheets.lastRowCount, defaults.googleSheets.lastRowCount),
