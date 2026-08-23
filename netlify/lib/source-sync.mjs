@@ -122,9 +122,11 @@ export async function syncCampaignSourceOnce({
         lastSyncedAt: fetched.fetchedAt,
         lastSuccessfulSyncAt: fetched.fetchedAt,
         lastChecksum: fetched.contentHash,
-        lastRowCount: fetched.rows.length,
+        lastRowCount: syncResult?.dataset?.rowCount ?? fetched.rows.length,
         lastStatus: "success",
-        lastMessage: `סונכרנו ${fetched.rows.length} רשומות מ-Google Sheets.`,
+        lastMessage: syncResult?.skippedInvalidRows
+          ? `סונכרנו ${syncResult.processedCount} תרומות מ-Google Sheets. ${syncResult.skippedInvalidRows} שורות ללא תאריך או סכום נדחו.`
+          : `סונכרנו ${syncResult?.processedCount ?? fetched.rows.length} רשומות מ-Google Sheets.`,
         lastSourceLabel: fetched.sourceLabel,
       },
       updatedBy,
@@ -138,15 +140,18 @@ export async function syncCampaignSourceOnce({
     campaignId,
     sourceLabel: fetched.sourceLabel,
     fetchedAt: fetched.fetchedAt,
-    rowCount: fetched.rows.length,
+    rowCount: syncResult?.dataset?.rowCount ?? fetched.rows.length,
     processedCount: syncResult?.processedCount ?? fetched.rawRows.length,
+    skippedInvalidRows: syncResult?.skippedInvalidRows ?? 0,
     dataset: syncResult?.dataset || {
       rowCount: fetched.rows.length,
       sourceLabel: fetched.sourceLabel,
     },
     message:
       normalized.mode === "google_sheets"
-        ? `סונכרנו ${fetched.rows.length} רשומות מ-Google Sheets.`
+        ? syncResult?.skippedInvalidRows
+          ? `סונכרנו ${syncResult.processedCount} תרומות מ-Google Sheets. ${syncResult.skippedInvalidRows} שורות ללא תאריך או סכום נדחו.`
+          : `סונכרנו ${syncResult?.processedCount ?? fetched.rows.length} רשומות מ-Google Sheets.`
         : "הנתונים נמשכו ונשמרו בהצלחה ממערכת המקור.",
   };
 }

@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS goodraise.import_batches (
     raw_row_count INTEGER NOT NULL DEFAULT 0,
     imported_row_count INTEGER NOT NULL DEFAULT 0,
     skipped_blank_rows INTEGER NOT NULL DEFAULT 0,
+    skipped_invalid_rows INTEGER NOT NULL DEFAULT 0,
     imported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     imported_by TEXT NOT NULL DEFAULT 'external-api',
     notes TEXT,
@@ -212,6 +213,7 @@ CREATE TABLE IF NOT EXISTS goodraise.transactions_csv_raw (
 
 ALTER TABLE goodraise.transactions ADD COLUMN IF NOT EXISTS canonical_event_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_campaign_canonical_event_key ON goodraise.transactions(campaign_id, canonical_event_key);
+ALTER TABLE goodraise.import_batches ADD COLUMN IF NOT EXISTS skipped_invalid_rows INTEGER NOT NULL DEFAULT 0;
 
 ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS nickname TEXT;
@@ -410,6 +412,19 @@ function validateExternalRecordEncoding(record) {
 
 function isBlankRecord(record) {
   return Object.values(record).every((value) => !normalizeText(value));
+}
+
+// A row that only names an ambassador is not a donation. Requiring a usable
+// timestamp and amount prevents registration or layout rows from polluting the
+// campaign transaction ledger.
+export function getDonationRecordValidationError(record) {
+  if (!parseTimestamp(record.created_at)) {
+    return "A donation record must include a valid created_at timestamp.";
+  }
+  if (parseDecimal(record.total) === null) {
+    return "A donation record must include a numeric total amount.";
+  }
+  return "";
 }
 
 function buildDonorKey(record) {
@@ -1013,6 +1028,10 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
   if (isBlankRecord(record)) {
     throw new IngestHttpError(400, "Payload must include a non-empty record object.");
   }
+  const donationValidationError = getDonationRecordValidationError(record);
+  if (donationValidationError) {
+    throw new IngestHttpError(400, donationValidationError);
+  }
 
   const sourceLabel = normalizeText(payload.sourceLabel || payload.source || "external-api") || "external-api";
   const requestReference = normalizeText(payload.requestId || payload.externalReference || payload.reference || "");
@@ -1296,14 +1315,23 @@ export async function ingestCampaignRecords({
   requestReference = "",
   records = [],
 }) {
-  const normalizedRecords = Array.isArray(records)
-    ? records
-        .map((record) => normalizeExternalRecord(record || {}))
-        .filter((record) => {
-          validateExternalRecordEncoding(record);
-          return !isBlankRecord(record);
-        })
-    : [];
+  const sourceRecords = Array.isArray(records) ? records : [];
+  const normalizedRecords = [];
+  let skippedBlankRows = 0;
+  let skippedInvalidRows = 0;
+  for (const rawRecord of sourceRecords) {
+    const record = normalizeExternalRecord(rawRecord || {});
+    validateExternalRecordEncoding(record);
+    if (isBlankRecord(record)) {
+      skippedBlankRows += 1;
+      continue;
+    }
+    if (getDonationRecordValidationError(record)) {
+      skippedInvalidRows += 1;
+      continue;
+    }
+    normalizedRecords.push(record);
+  }
 
   const pool = await getPostgresPool();
   const client = await pool.connect();
@@ -1340,10 +1368,11 @@ export async function ingestCampaignRecords({
           raw_row_count,
           imported_row_count,
           skipped_blank_rows,
+          skipped_invalid_rows,
           imported_by,
           notes
         )
-        VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::jsonb, $7, $8, $9, $10, $11)
+        VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12)
       `,
       [
         importBatchId,
@@ -1352,9 +1381,10 @@ export async function ingestCampaignRecords({
         `${normalizeText(sourceLabel) || "google-sheets"}.csv`,
         importChecksum,
         JSON.stringify(CSV_FIELD_NAMES),
+        sourceRecords.length,
         normalizedRecords.length,
-        normalizedRecords.length,
-        0,
+        skippedBlankRows,
+        skippedInvalidRows,
         normalizeText(importedBy) || "google-sheets-sync",
         requestReference ? `request_reference=${requestReference}` : "",
       ],
@@ -1548,10 +1578,14 @@ export async function ingestCampaignRecords({
       id: importBatchId,
       sourceLabel,
       requestReference,
-      rawRowCount: normalizedRecords.length,
+      rawRowCount: sourceRecords.length,
+      skippedBlankRows,
+      skippedInvalidRows,
     },
     dataset,
     processedCount: normalizedRecords.length,
+    skippedBlankRows,
+    skippedInvalidRows,
   };
 }
 

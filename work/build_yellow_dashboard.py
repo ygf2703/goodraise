@@ -6703,15 +6703,18 @@ def build_fragment(
               }
 
               function formatDate(value) {
-                return value ? dateFormatter.format(new Date(`${value}T00:00:00`)) : "";
+                const date = value ? new Date(`${value}T00:00:00`) : null;
+                return date && Number.isFinite(date.getTime()) ? dateFormatter.format(date) : "";
               }
 
               function formatShortDate(value) {
-                return value ? dateShortFormatter.format(new Date(`${value}T00:00:00`)) : "";
+                const date = value ? new Date(`${value}T00:00:00`) : null;
+                return date && Number.isFinite(date.getTime()) ? dateShortFormatter.format(date) : "";
               }
 
               function formatDateTime(value) {
-                return value ? dateTimeFormatter.format(new Date(value)) : "";
+                const date = value ? new Date(value) : null;
+                return date && Number.isFinite(date.getTime()) ? dateTimeFormatter.format(date) : "";
               }
 
               function formatHourLabel(value) {
@@ -6719,7 +6722,8 @@ def build_fragment(
               }
 
               function getWeekdayLabel(dateString) {
-                return weekdayFormatter.format(new Date(`${dateString}T00:00:00`));
+                const date = dateString ? new Date(`${dateString}T00:00:00`) : null;
+                return date && Number.isFinite(date.getTime()) ? weekdayFormatter.format(date) : "";
               }
 
               function normalizeSearchToken(value) {
