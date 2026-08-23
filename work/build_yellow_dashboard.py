@@ -2218,6 +2218,95 @@ def build_fragment(
               gap: var(--space-4);
             }
 
+            #yellow-dashboard-root .prize-page-layout {
+              display: grid;
+              grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+              gap: var(--space-5);
+              align-items: start;
+            }
+
+            #yellow-dashboard-root .prize-ambassador-sidebar {
+              position: sticky;
+              top: calc(var(--space-5) + 76px);
+              display: grid;
+              gap: var(--space-3);
+              padding: var(--space-4);
+              border: 1px solid var(--border-light);
+              border-radius: var(--radius-lg);
+              background: rgba(246, 247, 250, 0.92);
+            }
+
+            #yellow-dashboard-root .prize-directory-head {
+              display: grid;
+              gap: var(--space-1);
+            }
+
+            #yellow-dashboard-root .prize-directory-head h4 {
+              margin: 0;
+              color: var(--navy-950);
+              font-size: 1.08rem;
+            }
+
+            #yellow-dashboard-root .prize-directory-search {
+              inline-size: 100%;
+              min-height: 42px;
+              padding: 0.55rem 0.75rem;
+              border: 1px solid var(--border-light);
+              border-radius: var(--radius-sm);
+              background: var(--white);
+              color: var(--graphite);
+              font: inherit;
+            }
+
+            #yellow-dashboard-root .prize-directory-search:focus-visible {
+              outline: 3px solid rgba(255, 214, 41, 0.55);
+              outline-offset: 2px;
+              border-color: var(--navy-700);
+            }
+
+            #yellow-dashboard-root .prize-directory-list {
+              display: grid;
+              gap: var(--space-2);
+              max-block-size: min(62vh, 720px);
+              overflow: auto;
+              padding-inline-end: var(--space-1);
+            }
+
+            #yellow-dashboard-root .prize-directory-item {
+              display: grid;
+              grid-template-columns: auto minmax(0, 1fr) auto;
+              gap: var(--space-2);
+              align-items: center;
+              padding: 0.7rem 0.75rem;
+              border: 1px solid rgba(17, 29, 74, 0.08);
+              border-radius: var(--radius-md);
+              background: var(--white);
+            }
+
+            #yellow-dashboard-root .prize-directory-rank {
+              min-inline-size: 27px;
+              color: var(--navy-700);
+              font-size: 0.84rem;
+              font-weight: 800;
+              font-variant-numeric: tabular-nums;
+            }
+
+            #yellow-dashboard-root .prize-directory-name {
+              overflow: hidden;
+              color: var(--navy-950);
+              font-weight: 700;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            #yellow-dashboard-root .prize-directory-amount {
+              color: var(--navy-900);
+              font-size: 0.93rem;
+              font-weight: 800;
+              font-variant-numeric: tabular-nums;
+              white-space: nowrap;
+            }
+
             #yellow-dashboard-root .daily-winner-card {
               display: grid;
               gap: var(--space-3);
@@ -2790,6 +2879,14 @@ def build_fragment(
                 grid-template-columns: 1fr;
               }
 
+              #yellow-dashboard-root .prize-page-layout {
+                grid-template-columns: 1fr;
+              }
+
+              #yellow-dashboard-root .prize-ambassador-sidebar {
+                position: static;
+              }
+
               #yellow-dashboard-root .place-card--1 {
                 transform: none;
               }
@@ -2981,10 +3078,21 @@ def build_fragment(
 
                 <section class="page-panel app-card app-card--elevated">
                   <div class="public-panel-header">
-                    <h3>פודיום, מדרגות פרס וזוכים חיים</h3>
+                    <h3>פודיום, מדרגות פרס ומצב אמת</h3>
                     <div id="prize-summary" class="text-small text-muted"></div>
                   </div>
-                  <div id="prize-board" class="prize-shell"></div>
+                  <div class="prize-page-layout">
+                    <div id="prize-board" class="prize-shell"></div>
+                    <aside class="prize-ambassador-sidebar" aria-label="דירוג שגרירים">
+                      <div class="prize-directory-head">
+                        <h4>דירוג שגרירים</h4>
+                        <div class="text-small text-muted">מוצגים שגרירים עם גיוס של ₪20 ומעלה.</div>
+                      </div>
+                      <label class="visually-hidden" for="prize-ambassador-search">חיפוש שגריר/ה לפי שם</label>
+                      <input id="prize-ambassador-search" class="prize-directory-search" type="search" placeholder="חיפוש לפי שם" autocomplete="off" />
+                      <div id="prize-ambassador-directory" class="prize-directory-list" aria-live="polite"></div>
+                    </aside>
+                  </div>
                 </section>
               </section>
 
@@ -3767,6 +3875,8 @@ def build_fragment(
                 comparisonSummary: root.querySelector("#comparison-summary"),
                 prizeBoard: root.querySelector("#prize-board"),
                 prizeSummary: root.querySelector("#prize-summary"),
+                prizeAmbassadorSearch: root.querySelector("#prize-ambassador-search"),
+                prizeAmbassadorDirectory: root.querySelector("#prize-ambassador-directory"),
                 dailyChart: root.querySelector("#daily-chart"),
                 dailyTooltip: root.querySelector("#daily-tooltip"),
                 dailySummary: root.querySelector("#daily-chart-summary"),
@@ -3861,6 +3971,7 @@ def build_fragment(
                 ui: {
                   page: "project",
                   tableExpanded: false,
+                  prizeAmbassadorSearch: "",
                   adminTab: "insights",
                   campaignBuilderStep: 1,
                   campaignSettingsStatus: {
@@ -8267,6 +8378,8 @@ def build_fragment(
                 const dailyWinners = computeDailyWinners(prizeRows);
                 const { placeWinners, tiers, prizeModel, selectedFocus } = standings;
 
+                renderPrizeAmbassadorDirectory(standings.leaderboard);
+
                 elements.prizeSummary.textContent = selectedFocus
                   ? `${selectedFocus.ambassador}: ${formatAmount(selectedFocus.total)} | פרס פעיל: ${selectedFocus.currentPrize}${selectedFocus.nextPrize ? ` | חסרים ${formatAmount(selectedFocus.gap)} ל-${selectedFocus.nextPrize}` : " | נמצא במדרגה העליונה"}`
                   : `${formatNumber(standings.leaderboard.length)} שגרירים מדורגים בטווח הזמן הנבחר`;
@@ -8450,6 +8563,34 @@ def build_fragment(
                   : `<div class="empty-state">לא נטענה טבלת פרסים תקפה. אפשר להעלות קובץ פרסים חדש ב-CSV או Excel.</div>`;
 
                 elements.prizeBoard.innerHTML = `${podiumMarkup}${dailyWinnersMarkup}${tiersMarkup}`;
+              }
+
+              function renderPrizeAmbassadorDirectory(leaderboard) {
+                if (!elements.prizeAmbassadorDirectory) {
+                  return;
+                }
+                const search = normalizeSearchToken(state.ui.prizeAmbassadorSearch);
+                const eligible = (Array.isArray(leaderboard) ? leaderboard : []).filter((entry) => Number(entry.total || 0) >= 20);
+                const matches = eligible.filter((entry) => !search || normalizeSearchToken(entry.ambassador).includes(search));
+
+                if (elements.prizeAmbassadorSearch && elements.prizeAmbassadorSearch.value !== state.ui.prizeAmbassadorSearch) {
+                  elements.prizeAmbassadorSearch.value = state.ui.prizeAmbassadorSearch;
+                }
+
+                elements.prizeAmbassadorDirectory.innerHTML = matches.length
+                  ? matches
+                      .map((entry) => {
+                        const rank = eligible.findIndex((candidate) => candidate.ambassador === entry.ambassador) + 1;
+                        return `
+                          <article class="prize-directory-item">
+                            <span class="prize-directory-rank">${escapeHtml(String(rank))}</span>
+                            <span class="prize-directory-name" title="${escapeAttribute(entry.ambassador)}">${escapeHtml(entry.ambassador)}</span>
+                            <span class="prize-directory-amount">${escapeHtml(formatAmount(entry.total))}</span>
+                          </article>
+                        `;
+                      })
+                      .join("")
+                  : `<div class="empty-state">${search ? "לא נמצאו שגרירים בשם המבוקש." : "עדיין אין שגרירים עם גיוס של ₪20 ומעלה."}</div>`;
               }
 
               function createSvg(width, height, ariaLabel) {
@@ -10917,6 +11058,13 @@ def build_fragment(
                     } catch (error) {
                       setSourceConfigStatus(error?.message || "משיכת הנתונים מהמערכת החיצונית נכשלה.", "error");
                     }
+                  });
+                }
+
+                if (elements.prizeAmbassadorSearch) {
+                  elements.prizeAmbassadorSearch.addEventListener("input", () => {
+                    state.ui.prizeAmbassadorSearch = elements.prizeAmbassadorSearch.value;
+                    renderPrizeAmbassadorDirectory(computePrizeStandings(getPrizeScopeRows()).leaderboard);
                   });
                 }
 
