@@ -6348,7 +6348,10 @@ def build_fragment(
                     throw new Error(payload?.message || "משיכת הנתונים ממערכת המקור נכשלה.");
                   }
                   applyServerScope(payload, scope);
-                  if (payload?.payload || Array.isArray(payload?.rows)) {
+                  // Source sync persists Google Sheets rows server-side and returns an
+                  // empty compatibility array. Only parse an inline payload when one
+                  // was explicitly provided; otherwise reload the scoped dataset.
+                  if (Object.prototype.hasOwnProperty.call(payload || {}, "payload")) {
                     const ingested = ingestApiRefreshPayload(payload);
                     state.validation.base = ingested.validation;
                     if (hasBlockingValidation(ingested.validation)) {
