@@ -37,7 +37,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Manager-side campaign designer for local styling control over colors, typography, hero media, CTAs, and preset donation cards
 - Guided multi-step `Campaign Builder` with campaign basics, branding, donation setup, ambassadors, teams, goals, permissions, review, draft autosave, multi-campaign registry, active-campaign switching, and duplicate-campaign flow
 - `Campaign Builder` can persist its setup layer in PostgreSQL when `GOODRAISE_DATABASE_URL` is configured, with JSON fallback for local/dev environments without a database
-- Ambassador directory upload (`full_name`, `email`, `phone`, `nickname`) with personal GoodRaise-style links in the format `https://goodraise.netlify.app/{projectSlug}/{nickname}`. `nickname` is optional when an email exists; GoodRaise derives it from the portion before `@` and prevents duplicate personal-link slugs.
+- Ambassador directory upload supports both the compact GoodRaise CSV and the Hebrew registration-form export. Registration records persist per campaign in PostgreSQL, including referral, phone, prior-ambassador status, registration source, age/terms acknowledgements, and registration timestamp. `nickname` is optional when an email exists; GoodRaise derives it from the portion before `@` and prevents duplicate personal-link slugs.
 - Public prize page with podium, prize tiers, and live competition summary
 - Public campaign snapshot hero with immediate KPI-style status cards
 - Daily winners / "Olim LaDeshe" section across the configured campaign schedule
@@ -197,6 +197,7 @@ Important:
 - If PostgreSQL is available in Netlify, the same campaign setup records use PostgreSQL as the source of truth instead of the local JSON/blob development store.
 - Netlify deploys include CSP, frame protection, content-type hardening, referrer policy, and basic auth rate limiting.
 - External real-time ingestion into PostgreSQL is available through a campaign-scoped `POST /api/organizations/:orgId/campaigns/:campaignId/ingest` endpoint protected by an API key.
+- Authenticated campaign managers can import ambassador registration rows through `POST /api/organizations/:orgId/campaigns/:campaignId/ambassadors/import`; the import is campaign-scoped and deduplicates by email or nickname.
 - Google Sheets private access can be supplied through `GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON` or `GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON_PATH`. Public published sheets can work without credentials through CSV export mode.
 - Prelaunch reset scheduling can be configured through `work/config/prelaunch-reset.local.json` locally or the matching `GOODRAISE_PRELAUNCH_RESET_*` environment variables in deployment.
 - Recommended local override file: `work/config/dashboard-access.local.json` (ignored from git).

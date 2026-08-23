@@ -138,6 +138,17 @@ CREATE TABLE IF NOT EXISTS goodraise.ambassadors (
     full_name TEXT,
     email TEXT,
     email_normalized TEXT,
+    phone TEXT,
+    nickname TEXT,
+    referred_by TEXT,
+    was_ambassador_before BOOLEAN,
+    registration_source TEXT,
+    is_over_18 BOOLEAN,
+    understands_not_packing BOOLEAN,
+    terms_accepted BOOLEAN,
+    registered_at TIMESTAMPTZ,
+    registered_at_raw TEXT,
+    registration_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (campaign_id, ambassador_key)
@@ -286,6 +297,17 @@ CREATE INDEX IF NOT EXISTS idx_admin_sessions_user ON goodraise.admin_sessions(a
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON goodraise.admin_sessions(expires_at);
 ALTER TABLE goodraise.transactions ADD COLUMN IF NOT EXISTS canonical_event_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_campaign_canonical_event_key ON goodraise.transactions(campaign_id, canonical_event_key);
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS nickname TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS referred_by TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS was_ambassador_before BOOLEAN;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS registration_source TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS is_over_18 BOOLEAN;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS understands_not_packing BOOLEAN;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS registered_at TIMESTAMPTZ;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS registered_at_raw TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS registration_payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 """
 
 

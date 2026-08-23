@@ -125,6 +125,17 @@ CREATE TABLE IF NOT EXISTS goodraise.ambassadors (
     full_name TEXT,
     email TEXT,
     email_normalized TEXT,
+    phone TEXT,
+    nickname TEXT,
+    referred_by TEXT,
+    was_ambassador_before BOOLEAN,
+    registration_source TEXT,
+    is_over_18 BOOLEAN,
+    understands_not_packing BOOLEAN,
+    terms_accepted BOOLEAN,
+    registered_at TIMESTAMPTZ,
+    registered_at_raw TEXT,
+    registration_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (campaign_id, ambassador_key)
@@ -201,6 +212,18 @@ CREATE TABLE IF NOT EXISTS goodraise.transactions_csv_raw (
 
 ALTER TABLE goodraise.transactions ADD COLUMN IF NOT EXISTS canonical_event_key TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_transactions_campaign_canonical_event_key ON goodraise.transactions(campaign_id, canonical_event_key);
+
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS nickname TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS referred_by TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS was_ambassador_before BOOLEAN;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS registration_source TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS is_over_18 BOOLEAN;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS understands_not_packing BOOLEAN;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS registered_at TIMESTAMPTZ;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS registered_at_raw TEXT;
+ALTER TABLE goodraise.ambassadors ADD COLUMN IF NOT EXISTS registration_payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 `;
 
 class IngestHttpError extends Error {
@@ -239,13 +262,67 @@ function parseInteger(value) {
 
 function parseBoolean(value) {
   const raw = normalizeText(value).toLowerCase();
-  if (["true", "1", "yes", "y"].includes(raw)) {
+  if (["true", "1", "yes", "y", "כן", "מסכים", "מסכימה", "יודע", "יודעת"].includes(raw) || /^(מסכימ|יודע)/.test(raw)) {
     return true;
   }
-  if (["false", "0", "no", "n"].includes(raw)) {
+  if (["false", "0", "no", "n", "לא"].includes(raw)) {
     return false;
   }
   return null;
+}
+
+function normalizeNickname(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
+}
+
+function deriveNicknameFromEmail(email) {
+  const normalized = normalizeEmail(email);
+  const atIndex = normalized.lastIndexOf("@");
+  return atIndex > 0 ? normalizeNickname(normalized.slice(0, atIndex)) : "";
+}
+
+export function normalizeAmbassadorRegistration(rawRecord = {}) {
+  const record = rawRecord && typeof rawRecord === "object" ? rawRecord : {};
+  const entries = Object.entries(record).map(([key, value]) => ({
+    key: normalizeText(key).replace(/^\uFEFF/, "").toLowerCase(),
+    value: value == null ? "" : String(value).trim(),
+  }));
+  const pick = (...aliases) => {
+    const normalizedAliases = aliases.map((alias) => normalizeText(alias).toLowerCase());
+    const exact = entries.find((entry) => normalizedAliases.includes(entry.key) && entry.value);
+    if (exact) return exact.value;
+    const partial = entries.find((entry) => entry.value && normalizedAliases.some((alias) => alias && entry.key.includes(alias)));
+    return partial?.value || "";
+  };
+  const fullName = pick("fullName", "full_name", "name", "שם מלא", "שם מלא של השגריר");
+  const candidateEmail = normalizeEmail(pick("email", "כתובת מייל", "מייל"));
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidateEmail) ? candidateEmail : "";
+  const suppliedNickname = normalizeNickname(pick("nickname", "alias", "slug", "כינוי"));
+  const nickname = suppliedNickname || deriveNicknameFromEmail(email);
+  return {
+    fullName: normalizeText(fullName),
+    email,
+    phone: normalizeText(pick("phone", "mobile", "מספר טלפון", "טלפון")),
+    nickname,
+    referredBy: normalizeText(pick("referredBy", "referred_by", "שם השגריר שהפנה אותך")),
+    wasAmbassadorBefore: parseBoolean(pick("wasAmbassadorBefore", "was_ambassador_before", "האם כבר היית שגריר בעבר")),
+    registrationSource: normalizeText(pick("registrationSource", "registration_source", "איך הגעת לקישור הרשמה לשגרירים")),
+    isOver18: parseBoolean(pick("isOver18", "is_over_18", "מעל גיל 18")),
+    understandsNotPacking: parseBoolean(pick("understandsNotPacking", "understands_not_packing", "לא הקישור הרשמה לאריזות")),
+    termsAccepted: parseBoolean(pick("termsAccepted", "terms_accepted", "מסכימ", "תקנון")),
+    registeredAtRaw: normalizeText(pick("registeredAt", "registered_at", "timestamp", "חותמת זמן")),
+    rawPayload: record,
+  };
+}
+
+function buildRegistrationAmbassadorKey(record) {
+  if (record.email) return sha256(`ambassador-registration-email:${record.email}`);
+  if (record.nickname) return sha256(`ambassador-registration-nickname:${record.nickname}`);
+  return record.fullName ? sha256(`ambassador-registration-name:${record.fullName.toLowerCase()}`) : "";
 }
 
 function parseTimestamp(value) {
@@ -1475,6 +1552,118 @@ export async function ingestCampaignRecords({
     },
     dataset,
     processedCount: normalizedRecords.length,
+  };
+}
+
+export async function importAmbassadorRegistrations({
+  organizationIdentifier,
+  campaignIdentifier,
+  records = [],
+  importedBy = "",
+  sourceLabel = "ambassador-registration-csv",
+}) {
+  if (!Array.isArray(records)) {
+    throw new IngestHttpError(400, "Ambassador import must include a records array.");
+  }
+  const normalizedByKey = new Map();
+  const skippedRows = [];
+  let duplicateRows = 0;
+
+  records.forEach((rawRecord, index) => {
+    const record = normalizeAmbassadorRegistration(rawRecord);
+    const ambassadorKey = buildRegistrationAmbassadorKey(record);
+    if (!record.fullName || !ambassadorKey) {
+      skippedRows.push(index + 1);
+      return;
+    }
+    if (normalizedByKey.has(ambassadorKey)) {
+      duplicateRows += 1;
+    }
+    normalizedByKey.set(ambassadorKey, record);
+  });
+
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
+  let scope = null;
+  try {
+    await client.query("BEGIN");
+    await ensureSchema(client);
+    scope = await resolveScope(client, organizationIdentifier, campaignIdentifier);
+    if (!scope) {
+      throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
+    }
+
+    for (const [ambassadorKey, record] of normalizedByKey) {
+      const registeredAt = parseTimestamp(record.registeredAtRaw);
+      await client.query(
+        `
+          INSERT INTO goodraise.ambassadors (
+            id, organization_id, campaign_id, ambassador_key, full_name, email, email_normalized,
+            phone, nickname, referred_by, was_ambassador_before, registration_source, is_over_18,
+            understands_not_packing, terms_accepted, registered_at, registered_at_raw, registration_payload
+          )
+          VALUES (
+            $1, $2::uuid, $3::uuid, $4, $5, $6, $7,
+            $8, $9, $10, $11, $12, $13,
+            $14, $15, $16, $17, $18::jsonb
+          )
+          ON CONFLICT (campaign_id, ambassador_key) DO UPDATE
+          SET full_name = EXCLUDED.full_name,
+              email = COALESCE(NULLIF(EXCLUDED.email, ''), goodraise.ambassadors.email),
+              email_normalized = COALESCE(NULLIF(EXCLUDED.email_normalized, ''), goodraise.ambassadors.email_normalized),
+              phone = COALESCE(NULLIF(EXCLUDED.phone, ''), goodraise.ambassadors.phone),
+              nickname = COALESCE(NULLIF(EXCLUDED.nickname, ''), goodraise.ambassadors.nickname),
+              referred_by = COALESCE(NULLIF(EXCLUDED.referred_by, ''), goodraise.ambassadors.referred_by),
+              was_ambassador_before = COALESCE(EXCLUDED.was_ambassador_before, goodraise.ambassadors.was_ambassador_before),
+              registration_source = COALESCE(NULLIF(EXCLUDED.registration_source, ''), goodraise.ambassadors.registration_source),
+              is_over_18 = COALESCE(EXCLUDED.is_over_18, goodraise.ambassadors.is_over_18),
+              understands_not_packing = COALESCE(EXCLUDED.understands_not_packing, goodraise.ambassadors.understands_not_packing),
+              terms_accepted = COALESCE(EXCLUDED.terms_accepted, goodraise.ambassadors.terms_accepted),
+              registered_at = COALESCE(EXCLUDED.registered_at, goodraise.ambassadors.registered_at),
+              registered_at_raw = COALESCE(NULLIF(EXCLUDED.registered_at_raw, ''), goodraise.ambassadors.registered_at_raw),
+              registration_payload = EXCLUDED.registration_payload,
+              updated_at = NOW()
+        `,
+        [
+          randomUUID(),
+          scope.organization_id,
+          scope.campaign_id,
+          ambassadorKey,
+          record.fullName,
+          record.email,
+          record.email,
+          record.phone,
+          record.nickname,
+          record.referredBy,
+          record.wasAmbassadorBefore,
+          record.registrationSource,
+          record.isOver18,
+          record.understandsNotPacking,
+          record.termsAccepted,
+          registeredAt,
+          record.registeredAtRaw,
+          JSON.stringify(record.rawPayload),
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error instanceof IngestHttpError) throw error;
+    throw new IngestHttpError(500, "Failed to import ambassador registrations.");
+  } finally {
+    client.release();
+  }
+
+  return {
+    ok: true,
+    organization: { id: scope.organization_id, slug: scope.organization_slug },
+    campaign: { id: scope.campaign_id, slug: scope.campaign_slug },
+    sourceLabel: normalizeText(sourceLabel) || "ambassador-registration-csv",
+    totalRows: records.length,
+    importedCount: normalizedByKey.size,
+    duplicateRows,
+    skippedRows,
   };
 }
 

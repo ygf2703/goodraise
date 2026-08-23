@@ -18,6 +18,7 @@ export const ACTION_POLICY = {
   source_update: ROLE_CAMPAIGN_MANAGER,
   source_refresh: ROLE_CAMPAIGN_MANAGER,
   campaign_update: ROLE_CAMPAIGN_MANAGER,
+  ambassador_import: ROLE_CAMPAIGN_MANAGER,
   campaign_create: ROLE_ORGANIZATION_ADMIN,
   campaign_duplicate: ROLE_CAMPAIGN_MANAGER,
 };

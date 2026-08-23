@@ -4255,6 +4255,13 @@ def build_fragment(
                       team: String(record?.team || "").trim(),
                       personalTarget: Number(record?.personalTarget || 0),
                       status: String(record?.status || "").trim().toLowerCase() || "active",
+                      registeredAt: String(record?.registeredAt || "").trim(),
+                      referredBy: String(record?.referredBy || "").trim(),
+                      wasAmbassadorBefore: record?.wasAmbassadorBefore ?? null,
+                      registrationSource: String(record?.registrationSource || "").trim(),
+                      isOver18: record?.isOver18 ?? null,
+                      understandsNotPacking: record?.understandsNotPacking ?? null,
+                      termsAccepted: record?.termsAccepted ?? null,
                     };
                   })
                   .filter(Boolean)
@@ -4331,13 +4338,31 @@ def build_fragment(
 
               function parseAmbassadorDirectoryCsv(text) {
                 const rawRows = csvMatrixToRecords(parseCsv(text));
+                const normalizeHeader = (value) => String(value || "")
+                  .replace(/^\uFEFF/, "")
+                  .trim()
+                  .toLowerCase()
+                  .replace(/\\s+/g, " ");
                 const pickValue = (row, keys) => {
                   for (const key of keys) {
                     if (row[key] !== undefined && row[key] !== null && String(row[key]).trim()) {
                       return String(row[key]).trim();
                     }
                   }
+                  const aliases = keys.map(normalizeHeader);
+                  for (const [key, value] of Object.entries(row)) {
+                    const normalizedKey = normalizeHeader(key);
+                    if (value !== undefined && value !== null && String(value).trim() && aliases.some((alias) => normalizedKey === alias || normalizedKey.includes(alias))) {
+                      return String(value).trim();
+                    }
+                  }
                   return "";
+                };
+                const parseRegistrationBoolean = (value) => {
+                  const normalized = String(value || "").trim().toLowerCase();
+                  if (["true", "1", "yes", "y", "כן", "מסכים", "מסכימה", "יודע", "יודעת"].includes(normalized) || /^(מסכימ|יודע)/.test(normalized)) return true;
+                  if (["false", "0", "no", "n", "לא"].includes(normalized)) return false;
+                  return null;
                 };
 
                 const missingRows = [];
@@ -4347,9 +4372,9 @@ def build_fragment(
                 const seenNicknames = new Set();
 
                 rawRows.forEach((row, index) => {
-                  const fullName = pickValue(row, ["full_name", "Full Name", "name", "Name", "שם מלא"]);
-                  const email = pickValue(row, ["email", "Email", "מייל", "דואל"]);
-                  const phone = pickValue(row, ["phone", "Phone", "טלפון", "mobile"]);
+                  const fullName = pickValue(row, ["full_name", "Full Name", "name", "Name", "שם מלא", "שם מלא של השגריר"]);
+                  const email = pickValue(row, ["email", "Email", "מייל", "דואל", "כתובת מייל"]);
+                  const phone = pickValue(row, ["phone", "Phone", "טלפון", "mobile", "מספר טלפון"]);
                   const suppliedNickname = normalizeUrlSlug(pickValue(row, ["nickname", "Nickname", "alias", "slug", "כינוי"]));
                   const nickname = suppliedNickname || deriveAmbassadorNicknameFromEmail(email);
                   const team = pickValue(row, ["team", "Team", "group", "קבוצה", "צוות"]);
@@ -4375,6 +4400,13 @@ def build_fragment(
                     team,
                     personalTarget: Number(personalTarget || 0),
                     status: String(status || "").trim().toLowerCase() || "active",
+                    registeredAt: pickValue(row, ["registered_at", "timestamp", "חותמת זמן"]),
+                    referredBy: pickValue(row, ["referred_by", "שם השגריר שהפנה אותך"]),
+                    wasAmbassadorBefore: parseRegistrationBoolean(pickValue(row, ["was_ambassador_before", "האם כבר היית שגריר בעבר"])),
+                    registrationSource: pickValue(row, ["registration_source", "איך הגעת לקישור הרשמה לשגרירים"]),
+                    isOver18: parseRegistrationBoolean(pickValue(row, ["is_over_18", "מעל גיל 18"])),
+                    understandsNotPacking: parseRegistrationBoolean(pickValue(row, ["understands_not_packing", "לא הקישור הרשמה לאריזות"])),
+                    termsAccepted: parseRegistrationBoolean(pickValue(row, ["terms_accepted", "מסכימ", "תקנון"])),
                   });
                 });
 
@@ -4385,6 +4417,30 @@ def build_fragment(
                   generatedNicknames,
                   totalRows: rawRows.length,
                 };
+              }
+
+              async function persistAmbassadorDirectoryToBackend(records, sourceLabel) {
+                if (!canUseBackendAuth()) {
+                  return null;
+                }
+                if (!isManagerAuthenticated()) {
+                  throw new Error("נדרשת התחברות מנהל כדי לשמור שגרירים במסד הנתונים.");
+                }
+                const endpoint = buildScopedAdminEndpoint("ambassador-import", getActiveCampaignIdentity());
+                if (!endpoint) {
+                  throw new Error("לא נמצאה זהות קמפיין לשמירת השגרירים.");
+                }
+                const { response, payload } = await authRequest(endpoint, {
+                  method: "POST",
+                  body: {
+                    records,
+                    sourceLabel: sourceLabel || "ambassador-registration-csv",
+                  },
+                });
+                if (!response.ok) {
+                  throw new Error(payload?.message || "שמירת השגרירים במסד הנתונים נכשלה.");
+                }
+                return payload;
               }
 
               function exportAmbassadorLinks(records) {
@@ -5638,6 +5694,9 @@ def build_fragment(
                 }
                 if (kind === "source-refresh") {
                   return buildAuthUrl(`${basePath}/source/refresh`);
+                }
+                if (kind === "ambassador-import") {
+                  return buildAuthUrl(`${basePath}/ambassadors/import`);
                 }
                 return getFallbackAdminEndpoint(kind);
               }
@@ -9370,7 +9429,7 @@ def build_fragment(
                     <section class="control-group">
                       <div class="control-group-header">
                         <h4>ייבוא CSV</h4>
-                        <p>CSV עם <code>full_name</code>, <code>nickname</code>, <code>email</code>, <code>phone</code> ובמידת הצורך גם <code>team</code> ו-<code>personal_target</code>.</p>
+                        <p>תומך גם בטופס ההרשמה: חותמת זמן, שם מלא של השגריר, מפנה, כתובת מייל, טלפון, ניסיון קודם, מקור הגעה ואישורים. כינוי חסר מופק אוטומטית מהמייל.</p>
                       </div>
                       <div class="filters-grid">
                         <label class="form-label">
@@ -10196,14 +10255,21 @@ def build_fragment(
                       try {
                         const parsed = parseAmbassadorDirectoryCsv(await file.text());
                         if (!parsed.records.length) {
-                          setAmbassadorDirectoryStatus("לא זוהו שגרירים תקינים בקובץ. נדרשים לפחות full_name ו-nickname לכל שורה.", "error");
+                          setAmbassadorDirectoryStatus("לא זוהו שגרירים תקינים בקובץ. נדרשים שם מלא ומייל תקין או כינוי לכל שורה.", "error");
                           renderCampaignDesigner(true);
                           return;
                         }
+                        const backendImport = await persistAmbassadorDirectoryToBackend(parsed.records, file.name || "ambassador-registration-csv");
                         state.ambassadorDirectory = parsed.records;
                         storeAmbassadorDirectory(state.ambassadorDirectory);
                         const notes = [];
                         notes.push(`${formatNumber(parsed.records.length)} שגרירים נשמרו עם לינקים אישיים.`);
+                        if (backendImport) {
+                          notes.push(`${formatNumber(backendImport.importedCount || 0)} רשומות נשמרו במסד הנתונים.`);
+                          if (backendImport.duplicateRows) {
+                            notes.push(`${formatNumber(backendImport.duplicateRows)} כפילויות אוחדו לפי מייל/כינוי.`);
+                          }
+                        }
                         if (parsed.generatedNicknames.length) {
                           notes.push(`${formatNumber(parsed.generatedNicknames.length)} \u05db\u05d9\u05e0\u05d5\u05d9\u05d9\u05dd \u05e0\u05d5\u05e6\u05e8\u05d5 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea \u05de\u05db\u05ea\u05d5\u05d1\u05ea \u05d4\u05de\u05d9\u05d9\u05dc.`);
                         }
@@ -10219,8 +10285,8 @@ def build_fragment(
                         renderCampaignDesigner(true);
                         renderProjectPage();
                         queueCampaignBuilderAutosave("רשימת השגרירים עודכנה ונשמרת בטיוטת הקמפיין.");
-                      } catch (_error) {
-                        setAmbassadorDirectoryStatus("טעינת קובץ השגרירים נכשלה. ודא/י שמדובר ב-CSV תקין עם full_name ו-nickname.", "error");
+                      } catch (error) {
+                        setAmbassadorDirectoryStatus(error?.message || "טעינת קובץ השגרירים נכשלה. ודא/י שמדובר ב-CSV תקין עם שם מלא ומייל או כינוי.", "error");
                         renderCampaignDesigner(true);
                       }
                     }

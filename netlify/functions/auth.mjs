@@ -28,6 +28,7 @@ import {
 import { refreshAdminSource } from "../lib/source-sync.mjs";
 import {
   IngestHttpError,
+  importAmbassadorRegistrations,
   ingestCampaignRecord,
   validateIngestApiKey,
 } from "../lib/postgres-ingest.mjs";
@@ -69,6 +70,54 @@ async function readRequestPayload(request) {
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
+  }
+}
+
+async function importCampaignAmbassadors(request, payload, scope) {
+  const access = await resolveScopedAccess(request, {
+    action: "ambassador_import",
+    organizationId: scope.organizationId,
+    campaignId: scope.campaignId,
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי לייבא שגרירים.",
+  });
+  if (access.error) {
+    return access.error;
+  }
+  try {
+    const result = await importAmbassadorRegistrations({
+      organizationIdentifier: access.organization.id,
+      campaignIdentifier: access.campaign.id,
+      records: payload.records,
+      importedBy: access.auth.email,
+      sourceLabel: payload.sourceLabel || "ambassador-registration-csv",
+    });
+    await appendAuditEvent({
+      user: access.auth.email,
+      role: access.auth.role,
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      action: "ambassador_import",
+      outcome: "success",
+      detail: {
+        importedCount: result.importedCount,
+        duplicateRows: result.duplicateRows,
+        skippedRows: result.skippedRows.length,
+      },
+    });
+    return jsonResponse(200, result);
+  } catch (error) {
+    const status = error instanceof IngestHttpError ? error.status : 500;
+    const message = error instanceof IngestHttpError ? error.message : "ייבוא השגרירים נכשל.";
+    await appendAuditEvent({
+      user: access.auth.email,
+      role: access.auth.role,
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      action: "ambassador_import",
+      outcome: "error",
+      detail: { reason: message },
+    });
+    return jsonResponse(status, { message });
   }
 }
 
@@ -235,6 +284,12 @@ export default async (request) => {
   const scopedRefresh = matchScopedCampaignRoute(pathname, "/source/refresh");
   if (scopedRefresh && request.method === "POST") {
     return refreshAdminSource(request, scopedRefresh);
+  }
+
+  const scopedAmbassadorImport = matchScopedCampaignRoute(pathname, "/ambassadors/import");
+  if (scopedAmbassadorImport && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return importCampaignAmbassadors(request, payload, scopedAmbassadorImport);
   }
 
   const scopedCampaign = matchScopedCampaignRoute(pathname, "");
