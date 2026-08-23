@@ -345,7 +345,14 @@ async function getGoogleServiceAccountAccessToken() {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.access_token) {
-    throw new Error("המערכת לא הצליחה לקבל access token מ-Google עבור קריאת ה-sheet.");
+    const detail = [payload?.error, payload?.error_description]
+      .map((value) => String(value || "").replace(/[\r\n]+/g, " ").trim())
+      .filter(Boolean)
+      .join(" - ")
+      .slice(0, 280);
+    throw new Error(
+      `המערכת לא הצליחה לקבל access token מ-Google עבור קריאת ה-sheet.${detail ? ` ${detail}` : ""}`,
+    );
   }
   return String(payload.access_token);
 }

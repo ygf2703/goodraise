@@ -6004,9 +6004,12 @@ def build_fragment(
                 });
                 let payload = {};
                 try {
-                  payload = await response.json();
+                  const responseText = await response.text();
+                  payload = responseText ? JSON.parse(responseText) : {};
                 } catch (_error) {
-                  payload = {};
+                  payload = response.ok
+                    ? {}
+                    : { message: `שגיאת שרת בעת ביצוע הפעולה (HTTP ${response.status}).` };
                 }
                 return { response, payload };
               }
