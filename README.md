@@ -173,6 +173,8 @@ This repository intentionally does not track live campaign data or generated das
 
 Important:
 
+- For a private Google Sheet in `service_account` mode, share the sheet with the configured Google service-account email as a Viewer. Sharing it only with a personal Google account does not grant the server permission to read it.
+
 - Public participant views remain open without registration.
 - Admin access is backed by a server-side session cookie.
 - Regular users do not sign in. Only predefined managers can enter the admin dashboard from the public participant page.
