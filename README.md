@@ -51,7 +51,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - One-time prelaunch reset scheduler that can clear campaign donation data before go-live while preserving campaign setup
 - Manual pull plus optional timed auto-refresh from the fundraising platform API while managers monitor the campaign
 - File upload for comparison CSV
-- File upload for prize model from Excel or CSV
+- Campaign-scoped prize management in `Campaign Builder` step "יעדים ופרסים", including a visible Excel/CSV upload that replaces only the active campaign's prize model and persists it with the campaign draft
 - Filters for ambassador, project day, exact date, date range, exact hour, hour range, donor name, and amount range
 - Local backend with SQLite admin table, first-password setup, login session, and logout
 - Manager/user persistence can run from PostgreSQL when `GOODRAISE_DATABASE_URL` is configured, including first-password setup, stored password hashes, and active sessions

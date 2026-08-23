@@ -9011,6 +9011,45 @@ def build_fragment(
                 return buildPrizeModelFromMatrix(matrix);
               }
 
+              async function applyPrizeModelUpload(file, options = {}) {
+                const fromCampaignBuilder = Boolean(options.fromCampaignBuilder);
+                try {
+                  const model = await loadPrizeModelFromFile(file);
+                  const validation = validatePrizeModelUpload(model, file.name);
+                  if (validation.errors.length) {
+                    const message = `קובץ הפרסים ${file.name} לא נטען. טבלת הפרסים הפעילה נשארה כפי שהיא.`;
+                    setImportMessage(message, "error");
+                    if (fromCampaignBuilder) {
+                      setCampaignBuilderStatus(message, "error");
+                      renderCampaignDesigner(true);
+                    }
+                    renderAll();
+                    return false;
+                  }
+                  state.prizeModel = validation.normalized;
+                  storePrizeModel(validation.normalized);
+                  const message = validation.warnings.length
+                    ? `טבלת הפרסים הוחלפה מתוך ${file.name}, אך נטענה עם אזהרות. מומלץ לבדוק שלא חסרים פרסים או מדרגות.`
+                    : `טבלת הפרסים הוחלפה מתוך ${file.name}. היא נשמרת לקמפיין הפעיל ואין צורך להעלות אותה שוב בכל התחברות.`;
+                  setImportMessage(message, validation.warnings.length ? "warning" : "success");
+                  if (fromCampaignBuilder) {
+                    setCampaignBuilderStatus(message, validation.warnings.length ? "warning" : "success");
+                    queueCampaignBuilderAutosave("טבלת הפרסים עודכנה ונשמרת בטיוטת הקמפיין.");
+                    renderCampaignDesigner(true);
+                  }
+                  renderAll();
+                  return true;
+                } catch (_error) {
+                  const message = `טעינת קובץ הפרסים ${file.name} נכשלה.`;
+                  setImportMessage(message, "error");
+                  if (fromCampaignBuilder) {
+                    setCampaignBuilderStatus(message, "error");
+                    renderCampaignDesigner(true);
+                  }
+                  return false;
+                }
+              }
+
               function exportRowsToCsv(rows, fileName) {
                 const headers = ["id", "createdIso", "date", "hour", "ambassador", "donor", "email", "amount", "city", "status", "chargeResult"];
                 const lines = [headers.join(",")];
@@ -9538,6 +9577,16 @@ def build_fragment(
                       הערת tie-break / eligibility
                       <textarea class="form-control settings-textarea" data-builder-setting="goals.tierRuleNote">${escapeHtml(builder.goals.tierRuleNote)}</textarea>
                     </label>
+                    <section class="analysis-card form-label--full">
+                      <h4>רשימת פרסים לקמפיין</h4>
+                      <p>כאן מגדירים את הפרסים והמדרגות של הקמפיין הפעיל. אפשר להחליף את הטבלה הקיימת באמצעות קובץ Excel או CSV; ההחלפה אינה משפיעה על קמפיינים אחרים.</p>
+                      <label class="form-label">
+                        העלאת קובץ פרסים
+                        <input id="campaign-prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" aria-describedby="campaign-prize-upload-help" />
+                      </label>
+                      <div id="campaign-prize-upload-help" class="text-small text-muted">פורמטים נתמכים: Excel או CSV. הקובץ צריך לכלול פרסי מיקומים ו/או מדרגות סכום. העלאה תקינה מחליפה את הטבלה הפעילה של הקמפיין בלבד.</div>
+                      <div class="status-note text-small" data-prize-upload-status aria-live="polite">טבלה פעילה: ${escapeHtml(formatNumber((state.prizeModel.placePrizes || []).length))} פרסי מיקומים ו-${escapeHtml(formatNumber((state.prizeModel.tierPrizes || []).length))} מדרגות פרס.</div>
+                    </section>
                     <div class="signal-grid">
                       <article class="analysis-card">
                         <h4>פרסי מיקומים</h4>
@@ -10247,6 +10296,14 @@ def build_fragment(
                       return;
                     }
 
+                    if (event.target.id === "campaign-prize-upload") {
+                      const [file] = event.target.files || [];
+                      if (file) {
+                        await applyPrizeModelUpload(file, { fromCampaignBuilder: true });
+                      }
+                      return;
+                    }
+
                     if (event.target.id === "ambassador-directory-upload") {
                       const [file] = event.target.files || [];
                       if (!file) {
@@ -10879,26 +10936,7 @@ def build_fragment(
                   if (!file) {
                     return;
                   }
-                  try {
-                    const model = await loadPrizeModelFromFile(file);
-                    const validation = validatePrizeModelUpload(model, file.name);
-                    if (validation.errors.length) {
-                      setImportMessage(`קובץ הפרסים ${file.name} לא נטען. טבלת הפרסים הפעילה נשארה כפי שהיא.`, "error");
-                      renderAll();
-                      return;
-                    }
-                    state.prizeModel = validation.normalized;
-                    storePrizeModel(validation.normalized);
-                    setImportMessage(
-                      validation.warnings.length
-                        ? `טבלת הפרסים הוחלפה מתוך ${file.name} ונשמרה בדפדפן הזה, אך נטענה עם אזהרות. מומלץ לבדוק שלא חסרים פרסים או מדרגות.`
-                        : `טבלת הפרסים הוחלפה מתוך ${file.name} ונשמרה בדפדפן הזה. אין צורך להעלות אותה שוב בכל התחברות.`,
-                      validation.warnings.length ? "warning" : "success"
-                    );
-                    renderAll();
-                  } catch (_error) {
-                    setImportMessage(`טעינת קובץ הפרסים ${file.name} נכשלה.`, "error");
-                  }
+                  await applyPrizeModelUpload(file, { fromCampaignBuilder: false });
                 });
               }
 
