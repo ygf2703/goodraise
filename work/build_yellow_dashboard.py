@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import base64
 import csv
@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 import re
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -49,6 +50,7 @@ BROWSER_OUTPUT_HTML = Path(
     os.getenv("YELLOW_DASHBOARD_BROWSER_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-dashboard-browser.html"))
 ).resolve()
 INDEX_OUTPUT_HTML = Path(os.getenv("YELLOW_DASHBOARD_INDEX_OUTPUT_HTML", str(OUTPUTS_DIR / "index.html"))).resolve()
+OUTPUT_ASSETS_DIR = OUTPUTS_DIR / "assets"
 PUBLIC_BROWSER_OUTPUT_HTML = Path(
     os.getenv("YELLOW_DASHBOARD_PUBLIC_OUTPUT_HTML", str(OUTPUTS_DIR / "yellow-project-public-dashboard.html"))
 ).resolve()
@@ -83,7 +85,7 @@ def parse_bool(value: str) -> bool:
 
 def ambassador_label(value: str) -> str:
     cleaned = (value or "").strip()
-    return cleaned if cleaned else "ללא שיוך"
+    return cleaned if cleaned else "×œ×œ× ×©×™×•×š"
 
 
 def get_source_csv_path() -> Path | None:
@@ -118,10 +120,10 @@ def load_rows() -> list[dict]:
                     "date": created_dt.date().isoformat(),
                     "hour": created_dt.hour,
                     "email": (raw.get("email") or "").strip().lower(),
-                    "donor": (raw.get("full_name") or "").strip() or "ללא שם",
+                    "donor": (raw.get("full_name") or "").strip() or "×œ×œ× ×©×",
                     "ambassador": ambassador_label(raw.get("Ambassador name") or ""),
                     "amount": parse_amount(raw.get("total") or ""),
-                    "city": (raw.get("city") or "").strip() or "ללא עיר",
+                    "city": (raw.get("city") or "").strip() or "×œ×œ× ×¢×™×¨",
                     "status": "success" if parse_bool(raw.get("charged_success") or "") else "failed",
                     "chargeResult": (raw.get("charge_result") or "").strip(),
                 }
@@ -132,7 +134,7 @@ def load_rows() -> list[dict]:
 def get_source_label() -> str:
     source_path = get_source_csv_path()
     if source_path is None:
-        return "קובץ בסיס"
+        return "×§×•×‘×¥ ×‘×¡×™×¡"
     return source_path.name
 
 
@@ -149,7 +151,7 @@ def build_meta(rows: list[dict]) -> dict:
         "minDate": unique_dates[0] if unique_dates else "",
         "maxDate": unique_dates[-1] if unique_dates else "",
         "rowCount": len(rows),
-        "projectWindowLabel": f"{default_from} עד {default_to}" if default_from and default_to else "",
+        "projectWindowLabel": f"{default_from} ×¢×“ {default_to}" if default_from and default_to else "",
     }
 
 
@@ -157,7 +159,7 @@ def build_leaderboard(rows: list[dict]) -> list[dict]:
     grouped: dict[str, dict] = {}
     for row in rows:
         ambassador = (row.get("ambassador") or "").strip()
-        if not ambassador or ambassador == "×œ×œ× ×©×™×•×š":
+        if not ambassador or ambassador == "Ã—Å“Ã—Å“Ã—Â Ã—Â©Ã—â„¢Ã—â€¢Ã—Å¡":
             continue
         current = grouped.setdefault(ambassador, {"ambassador": ambassador, "total": 0.0, "deals": 0})
         current["total"] += float(row.get("amount") or 0)
@@ -179,9 +181,9 @@ def compute_public_snapshot(rows: list[dict], meta: dict, prize_model: dict) -> 
         podium.append(
             {
                 "place": item["place"],
-                "label": item.get("label") or f"מקום {item['place']}",
+                "label": item.get("label") or f"×ž×§×•× {item['place']}",
                 "prize": item.get("prize") or "",
-                "winner": winner["ambassador"] if winner else "טרם נקבע",
+                "winner": winner["ambassador"] if winner else "×˜×¨× × ×§×‘×¢",
                 "amount": winner["total"] if winner else 0,
                 "deals": winner["deals"] if winner else 0,
             }
@@ -223,7 +225,7 @@ def build_public_rows(rows: list[dict]) -> list[dict]:
                 "date": row.get("date", ""),
                 "hour": row.get("hour", 0),
                 "email": "",
-                "donor": "מוסתר בצפייה ציבורית",
+                "donor": "×ž×•×¡×ª×¨ ×‘×¦×¤×™×™×” ×¦×™×‘×•×¨×™×ª",
                 "ambassador": row.get("ambassador", ""),
                 "amount": row.get("amount", 0),
                 "city": "",
@@ -249,6 +251,15 @@ def load_file_data_uri(path: Path) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
+def emit_output_asset(source_path: Path, target_name: str) -> str:
+    if not source_path.exists():
+        return ""
+    OUTPUT_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    target_path = OUTPUT_ASSETS_DIR / target_name
+    shutil.copy2(source_path, target_path)
+    return f"assets/{target_name}"
+
+
 def load_markdown_text(path: Path) -> str:
     if not path.exists():
         return ""
@@ -261,25 +272,25 @@ def load_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def build_default_campaign_page_settings() -> dict:
+def build_default_campaign_page_settings(project_hero_url: str) -> dict:
     return {
-        "projectDatesLabel": "23.08.2026–01.09.2026",
+        "projectDatesLabel": "23.08.2026â€“01.09.2026",
         "platformBaseUrl": "https://goodraise.netlify.app",
         "projectSlug": "campaign-2026",
         "eyebrow": "GoodRaise campaign",
         "title": "Campaign Title",
-        "subtitle": "עדכנו את הטקסט, המדיה והמיתוג מתוך הגדרות הקמפיין כדי להתאים את עמוד הפרויקט לקמפיין הפעיל.",
+        "subtitle": "×¢×“×›× ×• ××ª ×”×˜×§×¡×˜, ×”×ž×“×™×” ×•×”×ž×™×ª×•×’ ×ž×ª×•×š ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ ×›×“×™ ×œ×”×ª××™× ××ª ×¢×ž×•×“ ×”×¤×¨×•×™×§×˜ ×œ×§×ž×¤×™×™×Ÿ ×”×¤×¢×™×œ.",
         "storyMarkdown": load_markdown_text(PROJECT_PAGE_CONTENT_PATH),
-        "primaryCtaLabel": "המשך לתרומה מאובטחת",
-        "secondaryCtaLabel": "צפייה במובילים ובזוכים",
+        "primaryCtaLabel": "×”×ž×©×š ×œ×ª×¨×•×ž×” ×ž××•×‘×˜×—×ª",
+        "secondaryCtaLabel": "×¦×¤×™×™×” ×‘×ž×•×‘×™×œ×™× ×•×‘×–×•×›×™×",
         "externalDonationUrl": "https://example.org/donate",
-        "trustNote": "התשלום והסליקה יתבצעו אצל ספק חיצוני מאובטח. מסך זה מרכז את בחירת סכום התרומה ופרטי ההתקדמות בלבד.",
-        "successHint": "לאחר לחיצה תועברו לעמוד התשלום של ספק התרומות החיצוני עם פרטי התרומה שבחרתם.",
+        "trustNote": "×”×ª×©×œ×•× ×•×”×¡×œ×™×§×” ×™×ª×‘×¦×¢×• ××¦×œ ×¡×¤×§ ×—×™×¦×•× ×™ ×ž××•×‘×˜×—. ×ž×¡×š ×–×” ×ž×¨×›×– ××ª ×‘×—×™×¨×ª ×¡×›×•× ×”×ª×¨×•×ž×” ×•×¤×¨×˜×™ ×”×”×ª×§×“×ž×•×ª ×‘×œ×‘×“.",
+        "successHint": "×œ××—×¨ ×œ×—×™×¦×” ×ª×•×¢×‘×¨×• ×œ×¢×ž×•×“ ×”×ª×©×œ×•× ×©×œ ×¡×¤×§ ×”×ª×¨×•×ž×•×ª ×”×—×™×¦×•× ×™ ×¢× ×¤×¨×˜×™ ×”×ª×¨×•×ž×” ×©×‘×—×¨×ª×.",
         "mediaType": "image",
-        "mediaUrl": load_file_data_uri(PROJECT_HERO_IMAGE_PATH),
+        "mediaUrl": project_hero_url,
         "mediaAlt": "Campaign hero media",
-        "campaignLogoUrl": load_file_data_uri(CAMPAIGN_LOGO_PATH),
-        "organizationLogoUrl": load_file_data_uri(ORG_LOGO_PATH),
+        "campaignLogoUrl": "",
+        "organizationLogoUrl": "",
         "fontFamily": "Assistant",
         "theme": {
             "primary": "#111D4A",
@@ -289,17 +300,17 @@ def build_default_campaign_page_settings() -> dict:
             "text": "#090B10",
         },
         "amountCards": [
-            {"value": 54, "label": "תמיכה התחלתית", "description": "הצטרפות מיידית למאמץ הקהילתי של החג."},
-            {"value": 100, "label": "מוצרים בסיסיים", "description": "מסייע/ת למימון פריטי מזון חיוניים למארז."},
-            {"value": 180, "label": "מארז חג", "description": "תרומה בסכום קלאסי שמקדמת הכנת מארזי חג מלאים."},
-            {"value": 360, "label": "כפול טוב", "description": "מרחיב/ה את היכולת להגיע ליותר משפחות בטווח קצר."},
-            {"value": 500, "label": "חיזוק משמעותי", "description": "דוחף/ת את הקמפיין קדימה ותומך/ת בהיערכות הלוגיסטית."},
-            {"value": 1000, "label": "שותפות מובילה", "description": "תרומה מרכזית שמקדמת גיוס, אריזה וחלוקה בפועל."},
+            {"value": 54, "label": "×ª×ž×™×›×” ×”×ª×—×œ×ª×™×ª", "description": "×”×¦×˜×¨×¤×•×ª ×ž×™×™×“×™×ª ×œ×ž××ž×¥ ×”×§×”×™×œ×ª×™ ×©×œ ×”×—×’."},
+            {"value": 100, "label": "×ž×•×¦×¨×™× ×‘×¡×™×¡×™×™×", "description": "×ž×¡×™×™×¢/×ª ×œ×ž×™×ž×•×Ÿ ×¤×¨×™×˜×™ ×ž×–×•×Ÿ ×—×™×•× ×™×™× ×œ×ž××¨×–."},
+            {"value": 180, "label": "×ž××¨×– ×—×’", "description": "×ª×¨×•×ž×” ×‘×¡×›×•× ×§×œ××¡×™ ×©×ž×§×“×ž×ª ×”×›× ×ª ×ž××¨×–×™ ×—×’ ×ž×œ××™×."},
+            {"value": 360, "label": "×›×¤×•×œ ×˜×•×‘", "description": "×ž×¨×—×™×‘/×” ××ª ×”×™×›×•×œ×ª ×œ×”×’×™×¢ ×œ×™×•×ª×¨ ×ž×©×¤×—×•×ª ×‘×˜×•×•×— ×§×¦×¨."},
+            {"value": 500, "label": "×—×™×–×•×§ ×ž×©×ž×¢×•×ª×™", "description": "×“×•×—×£/×ª ××ª ×”×§×ž×¤×™×™×Ÿ ×§×“×™×ž×” ×•×ª×•×ž×š/×ª ×‘×”×™×¢×¨×›×•×ª ×”×œ×•×’×™×¡×˜×™×ª."},
+            {"value": 1000, "label": "×©×•×ª×¤×•×ª ×ž×•×‘×™×œ×”", "description": "×ª×¨×•×ž×” ×ž×¨×›×–×™×ª ×©×ž×§×“×ž×ª ×’×™×•×¡, ××¨×™×–×” ×•×—×œ×•×§×” ×‘×¤×•×¢×œ."},
         ],
         "stats": [
-            {"value": "14", "label": "שנות עשייה"},
-            {"value": "1,000+", "label": "מתנדבים באירוע האריזה"},
-            {"value": "אלפים", "label": "מארזי חג בכל מבצע"},
+            {"value": "14", "label": "×©× ×•×ª ×¢×©×™×™×”"},
+            {"value": "1,000+", "label": "×ž×ª× ×“×‘×™× ×‘××™×¨×•×¢ ×”××¨×™×–×”"},
+            {"value": "××œ×¤×™×", "label": "×ž××¨×–×™ ×—×’ ×‘×›×œ ×ž×‘×¦×¢"},
         ],
         "showRecurring": True,
     }
@@ -339,7 +350,7 @@ def load_prize_model() -> dict:
         left_text = normalize_text(left_value)
         right_text = normalize_text(right_value)
 
-        if not in_tiers and left_text.startswith("מקום"):
+        if not in_tiers and left_text.startswith("×ž×§×•×"):
             digits = "".join(character for character in left_text if character.isdigit())
             if digits:
                 place_prizes.append(
@@ -351,7 +362,7 @@ def load_prize_model() -> dict:
                 )
             continue
 
-        if left_text == "מדרגות פרס":
+        if left_text == "×ž×“×¨×’×•×ª ×¤×¨×¡":
             in_tiers = True
             continue
 
@@ -364,7 +375,7 @@ def load_prize_model() -> dict:
                     }
                 )
                 continue
-            if left_text and "לא ניתן לקבל יותר מפרס אחד" in left_text:
+            if left_text and "×œ× × ×™×ª×Ÿ ×œ×§×‘×œ ×™×•×ª×¨ ×ž×¤×¨×¡ ××—×“" in left_text:
                 tier_rule_note = left_text
 
     place_prizes = sorted(place_prizes, key=lambda item: item["place"])
@@ -437,7 +448,7 @@ def build_fragment(
     source_label: str,
     org_logo_data_uri: str,
     campaign_logo_data_uri: str,
-    backdrop_data_uri: str,
+    backdrop_url: str,
     prize_model: dict,
     campaign_page_settings: dict,
 ) -> str:
@@ -446,7 +457,7 @@ def build_fragment(
     source_label_json = json.dumps(source_label, ensure_ascii=False)
     org_logo_json = json.dumps(org_logo_data_uri, ensure_ascii=False)
     campaign_logo_json = json.dumps(campaign_logo_data_uri, ensure_ascii=False)
-    backdrop_json = json.dumps(backdrop_data_uri, ensure_ascii=False)
+    backdrop_json = json.dumps(backdrop_url, ensure_ascii=False)
     prize_json = json.dumps(prize_model, ensure_ascii=False, separators=(",", ":"))
     campaign_page_settings_json = json.dumps(campaign_page_settings, ensure_ascii=False, separators=(",", ":"))
     auth_config_json = json.dumps(build_auth_config(), ensure_ascii=False, separators=(",", ":"))
@@ -2923,27 +2934,27 @@ def build_fragment(
           <div class="app-shell">
             <header class="app-topbar brand-header">
               <div class="topbar-actions">
-                <nav class="top-nav" aria-label="ניווט עמודים">
-                  <button class="nav-button" type="button" data-page-target="project">דף הפרויקט</button>
-                  <button class="nav-button" type="button" data-page-target="prizes">פרסים ותחרות</button>
-                  <button class="nav-button" type="button" data-page-target="rules">תקנון השתתפות</button>
-                  <button class="nav-button" type="button" data-page-target="privacy">פרטיות</button>
-                  <button class="nav-button" type="button" data-page-target="admin">דשבורד ניהולי</button>
+                <nav class="top-nav" aria-label="× ×™×•×•×˜ ×¢×ž×•×“×™×">
+                  <button class="nav-button" type="button" data-page-target="project">×“×£ ×”×¤×¨×•×™×§×˜</button>
+                  <button class="nav-button" type="button" data-page-target="prizes">×¤×¨×¡×™× ×•×ª×—×¨×•×ª</button>
+                  <button class="nav-button" type="button" data-page-target="rules">×ª×§× ×•×Ÿ ×”×©×ª×ª×¤×•×ª</button>
+                  <button class="nav-button" type="button" data-page-target="privacy">×¤×¨×˜×™×•×ª</button>
+                  <button class="nav-button" type="button" data-page-target="admin">×“×©×‘×•×¨×“ × ×™×”×•×œ×™</button>
                 </nav>
                 <div class="session-box">
-                  <div id="session-status" class="session-chip" aria-live="polite">מצב ניהול: אורח/ת</div>
-                  <button id="go-admin-login" class="button-secondary action-button secondary" type="button" data-admin-login data-legacy-id="public-admin-login">כניסת מנהלים</button>
-                  <button id="logout-button" class="button-ghost" type="button" hidden>התנתקות</button>
+                  <div id="session-status" class="session-chip" aria-live="polite">×ž×¦×‘ × ×™×”×•×œ: ××•×¨×—/×ª</div>
+                  <button id="go-admin-login" class="button-secondary action-button secondary" type="button" data-admin-login data-legacy-id="public-admin-login">×›× ×™×¡×ª ×ž× ×”×œ×™×</button>
+                  <button id="logout-button" class="button-ghost" type="button" hidden>×”×ª× ×ª×§×•×ª</button>
                 </div>
               </div>
               <div class="topbar-brand">
                 <div class="brand-logo-cluster">
-                  <img id="topbar-campaign-logo" class="topbar-campaign-logo" alt="לוגו הקמפיין" />
+                  <img id="topbar-campaign-logo" class="topbar-campaign-logo" alt="×œ×•×’×• ×”×§×ž×¤×™×™×Ÿ" />
                   <span class="brand-divider" aria-hidden="true"></span>
-                  <img id="topbar-logo" class="topbar-logo" alt="לוגו הארגון" />
+                  <img id="topbar-logo" class="topbar-logo" alt="×œ×•×’×• ×”××¨×’×•×Ÿ" />
                 </div>
                 <div id="topbar-meta" class="topbar-meta" hidden>
-                  <div id="topbar-title" class="topbar-title">מערכת ניהול קמפיין</div>
+                  <div id="topbar-title" class="topbar-title">×ž×¢×¨×›×ª × ×™×”×•×œ ×§×ž×¤×™×™×Ÿ</div>
                 </div>
               </div>
             </header>
@@ -2956,13 +2967,13 @@ def build_fragment(
               <section id="page-prizes" class="page-shell">
                 <article class="public-hero app-card--dark">
                   <div class="public-hero-watermark" aria-hidden="true">
-                    <img id="public-org-logo" alt="לוגו אחים לסמל" />
+                    <img id="public-org-logo" alt="×œ×•×’×• ××—×™× ×œ×¡×ž×œ" />
                   </div>
                   <div class="public-hero-grid">
                     <div class="public-hero-copy">
-                      <span class="brand-kicker">תמונת מצב מיידית של הפרויקט</span>
-                      <h1 class="public-hero-title">מצב הקמפיין ברגע זה</h1>
-                      <p>כל מה שחשוב להבין בשנייה הראשונה: כמה גויס, מי מוביל, כמה שגרירים פעילים ומהו חלון הנתונים הפעיל כרגע.</p>
+                      <span class="brand-kicker">×ª×ž×•× ×ª ×ž×¦×‘ ×ž×™×™×“×™×ª ×©×œ ×”×¤×¨×•×™×§×˜</span>
+                      <h1 class="public-hero-title">×ž×¦×‘ ×”×§×ž×¤×™×™×Ÿ ×‘×¨×’×¢ ×–×”</h1>
+                      <p>×›×œ ×ž×” ×©×—×©×•×‘ ×œ×”×‘×™×Ÿ ×‘×©× ×™×™×” ×”×¨××©×•× ×”: ×›×ž×” ×’×•×™×¡, ×ž×™ ×ž×•×‘×™×œ, ×›×ž×” ×©×’×¨×™×¨×™× ×¤×¢×™×œ×™× ×•×ž×”×• ×—×œ×•×Ÿ ×”× ×ª×•× ×™× ×”×¤×¢×™×œ ×›×¨×’×¢.</p>
                       <div id="public-hero-badges" class="public-badges" aria-live="polite"></div>
                     </div>
                   </div>
@@ -2970,7 +2981,7 @@ def build_fragment(
 
                 <section class="page-panel app-card app-card--elevated">
                   <div class="public-panel-header">
-                    <h3>פודיום, מדרגות פרס וזוכים חיים</h3>
+                    <h3>×¤×•×“×™×•×, ×ž×“×¨×’×•×ª ×¤×¨×¡ ×•×–×•×›×™× ×—×™×™×</h3>
                     <div id="prize-summary" class="text-small text-muted"></div>
                   </div>
                   <div id="prize-board" class="prize-shell"></div>
@@ -2979,65 +2990,65 @@ def build_fragment(
 
               <section id="page-rules" class="page-shell">
                 <article class="legal-hero app-card app-card--elevated">
-                  <h2>תקנון השתתפות</h2>
-                  <p>עמוד זה מרכז את נוסח העבודה הנוכחי עבור השתתפות, פרסים, זכאות, הכרעות ועדכונים. לפני פרסום חיצוני יש לאשר את הנוסח הסופי מול הייעוץ המשפטי של הארגון.</p>
+                  <h2>×ª×§× ×•×Ÿ ×”×©×ª×ª×¤×•×ª</h2>
+                  <p>×¢×ž×•×“ ×–×” ×ž×¨×›×– ××ª × ×•×¡×— ×”×¢×‘×•×“×” ×”× ×•×›×—×™ ×¢×‘×•×¨ ×”×©×ª×ª×¤×•×ª, ×¤×¨×¡×™×, ×–×›××•×ª, ×”×›×¨×¢×•×ª ×•×¢×“×›×•× ×™×. ×œ×¤× ×™ ×¤×¨×¡×•× ×—×™×¦×•× ×™ ×™×© ×œ××©×¨ ××ª ×”× ×•×¡×— ×”×¡×•×¤×™ ×ž×•×œ ×”×™×™×¢×•×¥ ×”×ž×©×¤×˜×™ ×©×œ ×”××¨×’×•×Ÿ.</p>
                 </article>
                 <div class="legal-layout">
                   <aside class="legal-sidebar app-card">
                     <div class="section-header">
-                      <h3>תוכן עניינים</h3>
+                      <h3>×ª×•×›×Ÿ ×¢× ×™×™× ×™×</h3>
                     </div>
-                    <nav aria-label="תוכן עניינים - תקנון">
-                      <a href="#rules-section-1">1. זכאות להשתתפות</a>
-                      <a href="#rules-section-2">2. רישום ונתונים</a>
-                      <a href="#rules-section-3">3. חישוב תוצאות וזכייה</a>
-                      <a href="#rules-section-4">4. שוויון, תיקונים וחריגים</a>
-                      <a href="#rules-section-5">5. עדכונים ואישור משפטי</a>
+                    <nav aria-label="×ª×•×›×Ÿ ×¢× ×™×™× ×™× - ×ª×§× ×•×Ÿ">
+                      <a href="#rules-section-1">1. ×–×›××•×ª ×œ×”×©×ª×ª×¤×•×ª</a>
+                      <a href="#rules-section-2">2. ×¨×™×©×•× ×•× ×ª×•× ×™×</a>
+                      <a href="#rules-section-3">3. ×—×™×©×•×‘ ×ª×•×¦××•×ª ×•×–×›×™×™×”</a>
+                      <a href="#rules-section-4">4. ×©×•×•×™×•×Ÿ, ×ª×™×§×•× ×™× ×•×—×¨×™×’×™×</a>
+                      <a href="#rules-section-5">5. ×¢×“×›×•× ×™× ×•××™×©×•×¨ ×ž×©×¤×˜×™</a>
                     </nav>
                   </aside>
                   <article class="legal-document app-card legal-layout__content">
-                    <div class="status-note text-small">הערה: זהו נוסח עבודה המצורף למערכת ודורש אישור משפטי לפני עלייה לאוויר.</div>
+                    <div class="status-note text-small">×”×¢×¨×”: ×–×”×• × ×•×¡×— ×¢×‘×•×“×” ×”×ž×¦×•×¨×£ ×œ×ž×¢×¨×›×ª ×•×“×•×¨×© ××™×©×•×¨ ×ž×©×¤×˜×™ ×œ×¤× ×™ ×¢×œ×™×™×” ×œ××•×•×™×¨.</div>
                     <section id="rules-section-1">
-                      <h3>1. זכאות להשתתפות</h3>
-                      <p>השתתפות בתחרות ובמסלולי הפרסים כפופה לרישום כשגריר או שגרירה במערכת ולפעילות במהלך ימי הקמפיין כפי שהוגדרו על ידי הנהלת הקמפיין.</p>
+                      <h3>1. ×–×›××•×ª ×œ×”×©×ª×ª×¤×•×ª</h3>
+                      <p>×”×©×ª×ª×¤×•×ª ×‘×ª×—×¨×•×ª ×•×‘×ž×¡×œ×•×œ×™ ×”×¤×¨×¡×™× ×›×¤×•×¤×” ×œ×¨×™×©×•× ×›×©×’×¨×™×¨ ××• ×©×’×¨×™×¨×” ×‘×ž×¢×¨×›×ª ×•×œ×¤×¢×™×œ×•×ª ×‘×ž×”×œ×š ×™×ž×™ ×”×§×ž×¤×™×™×Ÿ ×›×¤×™ ×©×”×•×’×“×¨×• ×¢×œ ×™×“×™ ×”× ×”×œ×ª ×”×§×ž×¤×™×™×Ÿ.</p>
                       <ol>
-                        <li>הארגון רשאי להגדיר תנאי סף, שיוך לקבוצות או החרגת משתמשים שאינם עומדים בכללי הפעילות.</li>
-                        <li>רק עסקאות שנקלטו במערכת באופן תקין ושויכו בהתאם לכללי הקמפיין ייחשבו לצורך התחרות.</li>
-                        <li>השתתפות פעילה כפופה לנתוני הקלט שמוזנים למערכת ולבדיקות הבקרה של הנהלת הקמפיין.</li>
+                        <li>×”××¨×’×•×Ÿ ×¨×©××™ ×œ×”×’×“×™×¨ ×ª× ××™ ×¡×£, ×©×™×•×š ×œ×§×‘×•×¦×•×ª ××• ×”×—×¨×’×ª ×ž×©×ª×ž×©×™× ×©××™× × ×¢×•×ž×“×™× ×‘×›×œ×œ×™ ×”×¤×¢×™×œ×•×ª.</li>
+                        <li>×¨×§ ×¢×¡×§××•×ª ×©× ×§×œ×˜×• ×‘×ž×¢×¨×›×ª ×‘××•×¤×Ÿ ×ª×§×™×Ÿ ×•×©×•×™×›×• ×‘×”×ª×× ×œ×›×œ×œ×™ ×”×§×ž×¤×™×™×Ÿ ×™×™×—×©×‘×• ×œ×¦×•×¨×š ×”×ª×—×¨×•×ª.</li>
+                        <li>×”×©×ª×ª×¤×•×ª ×¤×¢×™×œ×” ×›×¤×•×¤×” ×œ× ×ª×•× ×™ ×”×§×œ×˜ ×©×ž×•×–× ×™× ×œ×ž×¢×¨×›×ª ×•×œ×‘×“×™×§×•×ª ×”×‘×§×¨×” ×©×œ ×”× ×”×œ×ª ×”×§×ž×¤×™×™×Ÿ.</li>
                       </ol>
                     </section>
                     <section id="rules-section-2">
-                      <h3>2. רישום ונתונים</h3>
-                      <p>המערכת מבוססת על קובצי המקור שהועלו על ידי מנהלי הקמפיין ולכן מציגה תמונת מצב עדכנית בהתאם לנתונים שנקלטו באותו רגע.</p>
+                      <h3>2. ×¨×™×©×•× ×•× ×ª×•× ×™×</h3>
+                      <p>×”×ž×¢×¨×›×ª ×ž×‘×•×¡×¡×ª ×¢×œ ×§×•×‘×¦×™ ×”×ž×§×•×¨ ×©×”×•×¢×œ×• ×¢×œ ×™×“×™ ×ž× ×”×œ×™ ×”×§×ž×¤×™×™×Ÿ ×•×œ×›×Ÿ ×ž×¦×™×’×” ×ª×ž×•× ×ª ×ž×¦×‘ ×¢×“×›× ×™×ª ×‘×”×ª×× ×œ× ×ª×•× ×™× ×©× ×§×œ×˜×• ×‘××•×ª×• ×¨×’×¢.</p>
                       <ol>
-                        <li>שדות כמו שם שגריר, שם תורם, תאריך, שעה, סכום וסטטוס עסקה משפיעים על החישובים והדירוגים.</li>
-                        <li>הארגון רשאי לבצע טיוב נתונים, איחוד כפילויות, השלמת שיוך או נטרול עסקאות לא תקינות.</li>
+                        <li>×©×“×•×ª ×›×ž×• ×©× ×©×’×¨×™×¨, ×©× ×ª×•×¨×, ×ª××¨×™×š, ×©×¢×”, ×¡×›×•× ×•×¡×˜×˜×•×¡ ×¢×¡×§×” ×ž×©×¤×™×¢×™× ×¢×œ ×”×—×™×©×•×‘×™× ×•×”×“×™×¨×•×’×™×.</li>
+                        <li>×”××¨×’×•×Ÿ ×¨×©××™ ×œ×‘×¦×¢ ×˜×™×•×‘ × ×ª×•× ×™×, ××™×—×•×“ ×›×¤×™×œ×•×™×•×ª, ×”×©×œ×ž×ª ×©×™×•×š ××• × ×˜×¨×•×œ ×¢×¡×§××•×ª ×œ× ×ª×§×™× ×•×ª.</li>
                       </ol>
                     </section>
                     <section id="rules-section-3">
-                      <h3>3. חישוב תוצאות וזכייה</h3>
-                      <p>הדירוגים והזכאות לפרסים נקבעים לפי טבלת הפרסים ומדרגות הפרס המעודכנות במערכת.</p>
+                      <h3>3. ×—×™×©×•×‘ ×ª×•×¦××•×ª ×•×–×›×™×™×”</h3>
+                      <p>×”×“×™×¨×•×’×™× ×•×”×–×›××•×ª ×œ×¤×¨×¡×™× × ×§×‘×¢×™× ×œ×¤×™ ×˜×‘×œ×ª ×”×¤×¨×¡×™× ×•×ž×“×¨×’×•×ª ×”×¤×¨×¡ ×”×ž×¢×•×“×›× ×•×ª ×‘×ž×¢×¨×›×ª.</p>
                       <ol>
-                        <li>הנהלת הקמפיין רשאית לקבוע אם הזכאות מבוססת על סכום גיוס, מספר עסקאות או שילוב של שניהם.</li>
-                        <li>עסקאות שבוטלו, נכשלו, הוחזרו או סומנו כלא תקינות עשויות שלא להיכלל בחישוב הסופי.</li>
-                        <li>במקרה של פערי מידע, הכרעת הנהלת הקמפיין היא הקובעת.</li>
+                        <li>×”× ×”×œ×ª ×”×§×ž×¤×™×™×Ÿ ×¨×©××™×ª ×œ×§×‘×•×¢ ×× ×”×–×›××•×ª ×ž×‘×•×¡×¡×ª ×¢×œ ×¡×›×•× ×’×™×•×¡, ×ž×¡×¤×¨ ×¢×¡×§××•×ª ××• ×©×™×œ×•×‘ ×©×œ ×©× ×™×”×.</li>
+                        <li>×¢×¡×§××•×ª ×©×‘×•×˜×œ×•, × ×›×©×œ×•, ×”×•×—×–×¨×• ××• ×¡×•×ž× ×• ×›×œ× ×ª×§×™× ×•×ª ×¢×©×•×™×•×ª ×©×œ× ×œ×”×™×›×œ×œ ×‘×—×™×©×•×‘ ×”×¡×•×¤×™.</li>
+                        <li>×‘×ž×§×¨×” ×©×œ ×¤×¢×¨×™ ×ž×™×“×¢, ×”×›×¨×¢×ª ×”× ×”×œ×ª ×”×§×ž×¤×™×™×Ÿ ×”×™× ×”×§×•×‘×¢×ª.</li>
                       </ol>
                     </section>
                     <section id="rules-section-4">
-                      <h3>4. שוויון, תיקונים וחריגים</h3>
-                      <p>ייתכנו מצבים של שוויון, כפילויות, השהיית עסקאות או תיקוני נתונים במהלך הקמפיין.</p>
+                      <h3>4. ×©×•×•×™×•×Ÿ, ×ª×™×§×•× ×™× ×•×—×¨×™×’×™×</h3>
+                      <p>×™×™×ª×›× ×• ×ž×¦×‘×™× ×©×œ ×©×•×•×™×•×Ÿ, ×›×¤×™×œ×•×™×•×ª, ×”×©×”×™×™×ª ×¢×¡×§××•×ª ××• ×ª×™×§×•× ×™ × ×ª×•× ×™× ×‘×ž×”×œ×š ×”×§×ž×¤×™×™×Ÿ.</p>
                       <ol>
-                        <li>במקרה של שוויון, הארגון רשאי להפעיל כללי הכרעה משלימים.</li>
-                        <li>הארגון רשאי לבצע בדיקה חוזרת של עסקאות חריגות או רשומות חסרות לפני הכרזה על זכייה.</li>
-                        <li>עדכוני נתונים עשויים להשפיע על הדירוג והמדרגות המוצגות במערכת.</li>
+                        <li>×‘×ž×§×¨×” ×©×œ ×©×•×•×™×•×Ÿ, ×”××¨×’×•×Ÿ ×¨×©××™ ×œ×”×¤×¢×™×œ ×›×œ×œ×™ ×”×›×¨×¢×” ×ž×©×œ×™×ž×™×.</li>
+                        <li>×”××¨×’×•×Ÿ ×¨×©××™ ×œ×‘×¦×¢ ×‘×“×™×§×” ×—×•×–×¨×ª ×©×œ ×¢×¡×§××•×ª ×—×¨×™×’×•×ª ××• ×¨×©×•×ž×•×ª ×—×¡×¨×•×ª ×œ×¤× ×™ ×”×›×¨×–×” ×¢×œ ×–×›×™×™×”.</li>
+                        <li>×¢×“×›×•× ×™ × ×ª×•× ×™× ×¢×©×•×™×™× ×œ×”×©×¤×™×¢ ×¢×œ ×”×“×™×¨×•×’ ×•×”×ž×“×¨×’×•×ª ×”×ž×•×¦×’×•×ª ×‘×ž×¢×¨×›×ª.</li>
                       </ol>
                     </section>
                     <section id="rules-section-5">
-                      <h3>5. עדכונים ואישור משפטי</h3>
-                      <p>הארגון שומר לעצמו את הזכות לעדכן את התקנון, את מדרגות הפרסים או את מנגנון החישוב, בכפוף לדין ולהודעה מתאימה.</p>
+                      <h3>5. ×¢×“×›×•× ×™× ×•××™×©×•×¨ ×ž×©×¤×˜×™</h3>
+                      <p>×”××¨×’×•×Ÿ ×©×•×ž×¨ ×œ×¢×¦×ž×• ××ª ×”×–×›×•×ª ×œ×¢×“×›×Ÿ ××ª ×”×ª×§× ×•×Ÿ, ××ª ×ž×“×¨×’×•×ª ×”×¤×¨×¡×™× ××• ××ª ×ž× ×’× ×•×Ÿ ×”×—×™×©×•×‘, ×‘×›×¤×•×£ ×œ×“×™×Ÿ ×•×œ×”×•×“×¢×” ×ž×ª××™×ž×”.</p>
                       <ol>
-                        <li>תאריך עדכון נוכחי: טיוטת מערכת ליום 28.07.2026.</li>
-                        <li>לפני פרסום חיצוני יש לאשר את הנוסח הסופי מול הייעוץ המשפטי של הארגון.</li>
+                        <li>×ª××¨×™×š ×¢×“×›×•×Ÿ × ×•×›×—×™: ×˜×™×•×˜×ª ×ž×¢×¨×›×ª ×œ×™×•× 28.07.2026.</li>
+                        <li>×œ×¤× ×™ ×¤×¨×¡×•× ×—×™×¦×•× ×™ ×™×© ×œ××©×¨ ××ª ×”× ×•×¡×— ×”×¡×•×¤×™ ×ž×•×œ ×”×™×™×¢×•×¥ ×”×ž×©×¤×˜×™ ×©×œ ×”××¨×’×•×Ÿ.</li>
                       </ol>
                     </section>
                   </article>
@@ -3046,68 +3057,68 @@ def build_fragment(
 
               <section id="page-privacy" class="page-shell">
                 <article class="legal-hero app-card app-card--elevated">
-                  <h2>מדיניות פרטיות</h2>
-                  <p>עמוד זה מציג את מבנה הפרטיות והמידע עבור גרסת הפיילוט של המערכת, בלי להוסיף התחייבויות משפטיות חדשות מעבר לנוסח שכבר הוגדר.</p>
+                  <h2>×ž×“×™× ×™×•×ª ×¤×¨×˜×™×•×ª</h2>
+                  <p>×¢×ž×•×“ ×–×” ×ž×¦×™×’ ××ª ×ž×‘× ×” ×”×¤×¨×˜×™×•×ª ×•×”×ž×™×“×¢ ×¢×‘×•×¨ ×’×¨×¡×ª ×”×¤×™×™×œ×•×˜ ×©×œ ×”×ž×¢×¨×›×ª, ×‘×œ×™ ×œ×”×•×¡×™×£ ×”×ª×—×™×™×‘×•×™×•×ª ×ž×©×¤×˜×™×•×ª ×—×“×©×•×ª ×ž×¢×‘×¨ ×œ× ×•×¡×— ×©×›×‘×¨ ×”×•×’×“×¨.</p>
                 </article>
                 <div class="legal-layout">
                   <aside class="legal-sidebar app-card">
                     <div class="section-header">
-                      <h3>תוכן עניינים</h3>
+                      <h3>×ª×•×›×Ÿ ×¢× ×™×™× ×™×</h3>
                     </div>
-                    <nav aria-label="תוכן עניינים - פרטיות">
-                      <a href="#privacy-section-1">1. מידע שנאסף</a>
-                      <a href="#privacy-section-2">2. מטרות השימוש</a>
-                      <a href="#privacy-section-3">3. הרשאות וגישה</a>
-                      <a href="#privacy-section-4">4. שמירת מידע</a>
-                      <a href="#privacy-section-5">5. אבטחת מידע</a>
-                      <a href="#privacy-section-6">6. זכויות המשתמשים</a>
-                      <a href="#privacy-section-7">7. יצירת קשר</a>
-                      <a href="#privacy-section-8">8. תאריך עדכון</a>
+                    <nav aria-label="×ª×•×›×Ÿ ×¢× ×™×™× ×™× - ×¤×¨×˜×™×•×ª">
+                      <a href="#privacy-section-1">1. ×ž×™×“×¢ ×©× ××¡×£</a>
+                      <a href="#privacy-section-2">2. ×ž×˜×¨×•×ª ×”×©×™×ž×•×©</a>
+                      <a href="#privacy-section-3">3. ×”×¨×©××•×ª ×•×’×™×©×”</a>
+                      <a href="#privacy-section-4">4. ×©×ž×™×¨×ª ×ž×™×“×¢</a>
+                      <a href="#privacy-section-5">5. ××‘×˜×—×ª ×ž×™×“×¢</a>
+                      <a href="#privacy-section-6">6. ×–×›×•×™×•×ª ×”×ž×©×ª×ž×©×™×</a>
+                      <a href="#privacy-section-7">7. ×™×¦×™×¨×ª ×§×©×¨</a>
+                      <a href="#privacy-section-8">8. ×ª××¨×™×š ×¢×“×›×•×Ÿ</a>
                     </nav>
                   </aside>
                   <article class="legal-document app-card legal-layout__content">
                     <section id="privacy-section-1">
-                      <h3>1. מידע שנאסף</h3>
-                      <p>המערכת עשויה לקלוט נתוני תרומה ותפעול לצורך בקרה ודשבורד, לרבות שם תורם, כתובת דוא״ל, סכום, זמן ביצוע, שיוך לשגריר וסטטוס עסקה.</p>
+                      <h3>1. ×ž×™×“×¢ ×©× ××¡×£</h3>
+                      <p>×”×ž×¢×¨×›×ª ×¢×©×•×™×” ×œ×§×œ×•×˜ × ×ª×•× ×™ ×ª×¨×•×ž×” ×•×ª×¤×¢×•×œ ×œ×¦×•×¨×š ×‘×§×¨×” ×•×“×©×‘×•×¨×“, ×œ×¨×‘×•×ª ×©× ×ª×•×¨×, ×›×ª×•×‘×ª ×“×•××´×œ, ×¡×›×•×, ×–×ž×Ÿ ×‘×™×¦×•×¢, ×©×™×•×š ×œ×©×’×¨×™×¨ ×•×¡×˜×˜×•×¡ ×¢×¡×§×”.</p>
                     </section>
                     <section id="privacy-section-2">
-                      <h3>2. מטרות השימוש</h3>
+                      <h3>2. ×ž×˜×¨×•×ª ×”×©×™×ž×•×©</h3>
                       <ul>
-                        <li>הצגת נתונים ניהוליים בזמן אמת.</li>
-                        <li>זיהוי מגמות גיוס, זוכים, שגרירים מובילים, תקלות וחריגות.</li>
-                        <li>השוואות בין קבצים, בין תקופות ובין מחזורי קמפיין שונים.</li>
+                        <li>×”×¦×’×ª × ×ª×•× ×™× × ×™×”×•×œ×™×™× ×‘×–×ž×Ÿ ××ž×ª.</li>
+                        <li>×–×™×”×•×™ ×ž×’×ž×•×ª ×’×™×•×¡, ×–×•×›×™×, ×©×’×¨×™×¨×™× ×ž×•×‘×™×œ×™×, ×ª×§×œ×•×ª ×•×—×¨×™×’×•×ª.</li>
+                        <li>×”×©×•×•××•×ª ×‘×™×Ÿ ×§×‘×¦×™×, ×‘×™×Ÿ ×ª×§×•×¤×•×ª ×•×‘×™×Ÿ ×ž×—×–×•×¨×™ ×§×ž×¤×™×™×Ÿ ×©×•× ×™×.</li>
                       </ul>
                     </section>
                     <section id="privacy-section-3">
-                      <h3>3. הרשאות וגישה</h3>
+                      <h3>3. ×”×¨×©××•×ª ×•×’×™×©×”</h3>
                       <ul>
-                        <li>עמודי התקנון, הפרטיות והפרסים זמינים גם למשתתפים וגם למנהלים.</li>
-                        <li>הדשבורד הניהולי זמין למשתמשים מורשים לפי מייל שהוגדר מראש ובאמצעות סיסמה.</li>
-                        <li>לפני עלייה לאוויר יש להעביר את מנגנון הזיהוי לאימות שרת אמיתי.</li>
+                        <li>×¢×ž×•×“×™ ×”×ª×§× ×•×Ÿ, ×”×¤×¨×˜×™×•×ª ×•×”×¤×¨×¡×™× ×–×ž×™× ×™× ×’× ×œ×ž×©×ª×ª×¤×™× ×•×’× ×œ×ž× ×”×œ×™×.</li>
+                        <li>×”×“×©×‘×•×¨×“ ×”× ×™×”×•×œ×™ ×–×ž×™×Ÿ ×œ×ž×©×ª×ž×©×™× ×ž×•×¨×©×™× ×œ×¤×™ ×ž×™×™×œ ×©×”×•×’×“×¨ ×ž×¨××© ×•×‘××ž×¦×¢×•×ª ×¡×™×¡×ž×”.</li>
+                        <li>×œ×¤× ×™ ×¢×œ×™×™×” ×œ××•×•×™×¨ ×™×© ×œ×”×¢×‘×™×¨ ××ª ×ž× ×’× ×•×Ÿ ×”×–×™×”×•×™ ×œ××™×ž×•×ª ×©×¨×ª ××ž×™×ª×™.</li>
                       </ul>
                     </section>
                     <section id="privacy-section-4">
-                      <h3>4. שמירת מידע</h3>
-                      <p>בגרסת הפיילוט המערכת עובדת מקומית ולכן מצמצמת חשיפה, אך עדיין יש לנהוג בזהירות בקובצי המקור ובהרשאות הגישה אליהם.</p>
+                      <h3>4. ×©×ž×™×¨×ª ×ž×™×“×¢</h3>
+                      <p>×‘×’×¨×¡×ª ×”×¤×™×™×œ×•×˜ ×”×ž×¢×¨×›×ª ×¢×•×‘×“×ª ×ž×§×•×ž×™×ª ×•×œ×›×Ÿ ×ž×¦×ž×¦×ž×ª ×—×©×™×¤×”, ××š ×¢×“×™×™×Ÿ ×™×© ×œ× ×”×•×’ ×‘×–×”×™×¨×•×ª ×‘×§×•×‘×¦×™ ×”×ž×§×•×¨ ×•×‘×”×¨×©××•×ª ×”×’×™×©×” ××œ×™×”×.</p>
                     </section>
                     <section id="privacy-section-5">
-                      <h3>5. אבטחת מידע</h3>
+                      <h3>5. ××‘×˜×—×ª ×ž×™×“×¢</h3>
                       <ul>
-                        <li>מומלץ להגדיר מדיניות שמירה, מחיקה, גיבוי והרשאות צפייה לפי תפקיד.</li>
-                        <li>בעתיד יש להוסיף שכבת Backend, ניהול משתמשים ורישום פעולות לצורכי בקרה.</li>
+                        <li>×ž×•×ž×œ×¥ ×œ×”×’×“×™×¨ ×ž×“×™× ×™×•×ª ×©×ž×™×¨×”, ×ž×—×™×§×”, ×’×™×‘×•×™ ×•×”×¨×©××•×ª ×¦×¤×™×™×” ×œ×¤×™ ×ª×¤×§×™×“.</li>
+                        <li>×‘×¢×ª×™×“ ×™×© ×œ×”×•×¡×™×£ ×©×›×‘×ª Backend, × ×™×”×•×œ ×ž×©×ª×ž×©×™× ×•×¨×™×©×•× ×¤×¢×•×œ×•×ª ×œ×¦×•×¨×›×™ ×‘×§×¨×”.</li>
                       </ul>
                     </section>
                     <section id="privacy-section-6">
-                      <h3>6. זכויות המשתמשים</h3>
-                      <p>כל בקשה לעדכון, מחיקה, תיקון או בירור נתונים צריכה להתבצע לפי נהלי הארגון והדין החל.</p>
+                      <h3>6. ×–×›×•×™×•×ª ×”×ž×©×ª×ž×©×™×</h3>
+                      <p>×›×œ ×‘×§×©×” ×œ×¢×“×›×•×Ÿ, ×ž×—×™×§×”, ×ª×™×§×•×Ÿ ××• ×‘×™×¨×•×¨ × ×ª×•× ×™× ×¦×¨×™×›×” ×œ×”×ª×‘×¦×¢ ×œ×¤×™ × ×”×œ×™ ×”××¨×’×•×Ÿ ×•×”×“×™×Ÿ ×”×—×œ.</p>
                     </section>
                     <section id="privacy-section-7">
-                      <h3>7. יצירת קשר</h3>
-                      <p>לצורכי בקרה, פרטיות או אבטחת מידע יש לפנות לארגון המנהל את הקמפיין ולגורמים המורשים מטעמו.</p>
+                      <h3>7. ×™×¦×™×¨×ª ×§×©×¨</h3>
+                      <p>×œ×¦×•×¨×›×™ ×‘×§×¨×”, ×¤×¨×˜×™×•×ª ××• ××‘×˜×—×ª ×ž×™×“×¢ ×™×© ×œ×¤× ×•×ª ×œ××¨×’×•×Ÿ ×”×ž× ×”×œ ××ª ×”×§×ž×¤×™×™×Ÿ ×•×œ×’×•×¨×ž×™× ×”×ž×•×¨×©×™× ×ž×˜×¢×ž×•.</p>
                     </section>
                     <section id="privacy-section-8">
-                      <h3>8. תאריך עדכון</h3>
-                      <p>טיוטת מערכת ליום 28.07.2026. לפני שימוש חיצוני יש להשלים אישור סופי.</p>
+                      <h3>8. ×ª××¨×™×š ×¢×“×›×•×Ÿ</h3>
+                      <p>×˜×™×•×˜×ª ×ž×¢×¨×›×ª ×œ×™×•× 28.07.2026. ×œ×¤× ×™ ×©×™×ž×•×© ×—×™×¦×•× ×™ ×™×© ×œ×”×©×œ×™× ××™×©×•×¨ ×¡×•×¤×™.</p>
                     </section>
                   </article>
                 </div>
@@ -3119,16 +3130,16 @@ def build_fragment(
                     <div class="login-visual app-card--dark">
                       <div class="login-brand-row">
                         <div class="login-copy">
-                          <span class="brand-kicker">גישה למנהלים מורשים בלבד</span>
-                          <h2>כניסה למערכת הניהול</h2>
-                          <p>מסך הכניסה מספק גישה לפאנל הניהול, לבקרה על קבצי המקור, לפילוחים המתקדמים, להשוואות הקבצים ולכל שכבת האנליטיקה של הקמפיין.</p>
+                          <span class="brand-kicker">×’×™×©×” ×œ×ž× ×”×œ×™× ×ž×•×¨×©×™× ×‘×œ×‘×“</span>
+                          <h2>×›× ×™×¡×” ×œ×ž×¢×¨×›×ª ×”× ×™×”×•×œ</h2>
+                          <p>×ž×¡×š ×”×›× ×™×¡×” ×ž×¡×¤×§ ×’×™×©×” ×œ×¤×× ×œ ×”× ×™×”×•×œ, ×œ×‘×§×¨×” ×¢×œ ×§×‘×¦×™ ×”×ž×§×•×¨, ×œ×¤×™×œ×•×—×™× ×”×ž×ª×§×“×ž×™×, ×œ×”×©×•×•××•×ª ×”×§×‘×¦×™× ×•×œ×›×œ ×©×›×‘×ª ×”×× ×œ×™×˜×™×§×” ×©×œ ×”×§×ž×¤×™×™×Ÿ.</p>
                         </div>
                         <div class="login-logos">
                           <div class="login-logo-frame">
-                            <img id="login-campaign-logo" alt="לוגו עושים טוב בצהוב" />
+                            <img id="login-campaign-logo" alt="×œ×•×’×• ×¢×•×©×™× ×˜×•×‘ ×‘×¦×”×•×‘" />
                           </div>
                           <div class="login-logo-frame">
-                            <img id="login-org-logo" alt="לוגו אחים לסמל" />
+                            <img id="login-org-logo" alt="×œ×•×’×• ××—×™× ×œ×¡×ž×œ" />
                           </div>
                         </div>
                       </div>
@@ -3136,31 +3147,31 @@ def build_fragment(
                     <form id="login-form" class="login-card app-card">
                       <div class="section-header">
                         <div>
-                          <h2>כניסה למערכת הניהול</h2>
-                          <div class="text-small text-muted">כניסה באמצעות מייל מורשה מראש. אם זו כניסה ראשונה, המערכת תעבור אוטומטית להגדרת סיסמה.</div>
+                          <h2>×›× ×™×¡×” ×œ×ž×¢×¨×›×ª ×”× ×™×”×•×œ</h2>
+                          <div class="text-small text-muted">×›× ×™×¡×” ×‘××ž×¦×¢×•×ª ×ž×™×™×œ ×ž×•×¨×©×” ×ž×¨××©. ×× ×–×• ×›× ×™×¡×” ×¨××©×•× ×”, ×”×ž×¢×¨×›×ª ×ª×¢×‘×•×¨ ××•×˜×•×ž×˜×™×ª ×œ×”×’×“×¨×ª ×¡×™×¡×ž×”.</div>
                         </div>
                       </div>
                       <label class="form-label">
-                        מייל מנהל/ת
+                        ×ž×™×™×œ ×ž× ×”×œ/×ª
                         <input id="login-email" class="form-control" type="email" autocomplete="username" placeholder="name@example.org" />
                       </label>
                       <label class="form-label">
-                        סיסמה
+                        ×¡×™×¡×ž×”
                         <div class="password-field">
-                          <input id="login-password" class="form-control" type="password" autocomplete="current-password" placeholder="הקלד/י סיסמה" />
-                          <button id="login-password-toggle" class="button-ghost password-toggle" type="button" aria-label="הצג או הסתר סיסמה">הצג</button>
+                          <input id="login-password" class="form-control" type="password" autocomplete="current-password" placeholder="×”×§×œ×“/×™ ×¡×™×¡×ž×”" />
+                          <button id="login-password-toggle" class="button-ghost password-toggle" type="button" aria-label="×”×¦×’ ××• ×”×¡×ª×¨ ×¡×™×¡×ž×”">×”×¦×’</button>
                         </div>
-                        <div id="login-password-setup-note" class="text-small text-muted" hidden style="display:none;">בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.</div>
+                        <div id="login-password-setup-note" class="text-small text-muted" hidden style="display:none;">×‘×›× ×™×¡×” ×¨××©×•× ×” ×™×© ×œ×‘×—×•×¨ ×¡×™×¡×ž×” ×‘××•×¨×š 8 ×ª×•×•×™× ×œ×¤×—×•×ª.</div>
                       </label>
                       <label id="login-password-confirm-label" class="form-label" hidden style="display:none;">
-                        אימות סיסמה
-                        <input id="login-password-confirm" class="form-control" type="password" autocomplete="new-password" placeholder="הקלד/י שוב את הסיסמה" />
+                        ××™×ž×•×ª ×¡×™×¡×ž×”
+                        <input id="login-password-confirm" class="form-control" type="password" autocomplete="new-password" placeholder="×”×§×œ×“/×™ ×©×•×‘ ××ª ×”×¡×™×¡×ž×”" />
                       </label>
                       <div class="login-actions">
-                        <button id="login-button" class="button-primary action-button" type="submit">כניסה לפאנל הניהול</button>
-                        <button id="login-reset-button" class="button-ghost" type="button">איפוס סיסמה</button>
+                        <button id="login-button" class="button-primary action-button" type="submit">×›× ×™×¡×” ×œ×¤×× ×œ ×”× ×™×”×•×œ</button>
+                        <button id="login-reset-button" class="button-ghost" type="button">××™×¤×•×¡ ×¡×™×¡×ž×”</button>
                       </div>
-                      <div id="login-mode-hint" class="text-small text-muted">הכניסה נשמרת ב-session מקומי מאובטח בשרת. בפריסה ציבורית יש להפעיל HTTPS וניהול secrets מסודר.</div>
+                      <div id="login-mode-hint" class="text-small text-muted">×”×›× ×™×¡×” × ×©×ž×¨×ª ×‘-session ×ž×§×•×ž×™ ×ž××•×‘×˜×— ×‘×©×¨×ª. ×‘×¤×¨×™×¡×” ×¦×™×‘×•×¨×™×ª ×™×© ×œ×”×¤×¢×™×œ HTTPS ×•× ×™×”×•×œ secrets ×ž×¡×•×“×¨.</div>
                       <div id="login-message" class="login-message text-small" aria-live="polite"></div>
                     </form>
                   </div>
@@ -3171,12 +3182,12 @@ def build_fragment(
                     <section class="admin-tabs-shell app-card app-card--elevated">
                       <div class="admin-tabs-head">
                         <div class="admin-tabs-copy">
-                          <h3>פאנל הניהול</h3>
-                          <p>הפרדנו בין שכבת הניתוח והבקרה לבין שכבת עיצוב דף הפרויקט, כדי שהעבודה תהיה ממוקדת וברורה יותר.</p>
+                          <h3>×¤×× ×œ ×”× ×™×”×•×œ</h3>
+                          <p>×”×¤×¨×“× ×• ×‘×™×Ÿ ×©×›×‘×ª ×”× ×™×ª×•×— ×•×”×‘×§×¨×” ×œ×‘×™×Ÿ ×©×›×‘×ª ×¢×™×¦×•×‘ ×“×£ ×”×¤×¨×•×™×§×˜, ×›×“×™ ×©×”×¢×‘×•×“×” ×ª×”×™×” ×ž×ž×•×§×“×ª ×•×‘×¨×•×¨×” ×™×•×ª×¨.</p>
                         </div>
-                        <div class="admin-tabbar" role="tablist" aria-label="לשוניות ניהול">
-                          <button class="admin-tab-button is-active" type="button" role="tab" aria-selected="true" data-admin-tab-target="insights">בקרה ותובנות</button>
-                          <button class="admin-tab-button" type="button" role="tab" aria-selected="false" data-admin-tab-target="design">עיצוב ומדיה</button>
+                        <div class="admin-tabbar" role="tablist" aria-label="×œ×©×•× ×™×•×ª × ×™×”×•×œ">
+                          <button class="admin-tab-button is-active" type="button" role="tab" aria-selected="true" data-admin-tab-target="insights">×‘×§×¨×” ×•×ª×•×‘× ×•×ª</button>
+                          <button class="admin-tab-button" type="button" role="tab" aria-selected="false" data-admin-tab-target="design">×¢×™×¦×•×‘ ×•×ž×“×™×”</button>
                         </div>
                       </div>
                     </section>
@@ -3187,33 +3198,33 @@ def build_fragment(
                           <div class="brand-command-head">
                             <div class="brand-copy">
                               <span class="brand-kicker">Executive campaign operations</span>
-                              <h1 class="hero-title">מרכז השליטה של הקמפיין</h1>
-                              <p class="hero-subtitle">מסך ניהולי מרוכז לפילוח לפי תאריך, שעה, טווח שעות, יום פרויקט, שגריר/ה, תורם/ת וסכום, כולל השוואת קבצים, יעדים, גרפים, טבלאות וייצוא.</p>
+                              <h1 class="hero-title">×ž×¨×›×– ×”×©×œ×™×˜×” ×©×œ ×”×§×ž×¤×™×™×Ÿ</h1>
+                              <p class="hero-subtitle">×ž×¡×š × ×™×”×•×œ×™ ×ž×¨×•×›×– ×œ×¤×™×œ×•×— ×œ×¤×™ ×ª××¨×™×š, ×©×¢×”, ×˜×•×•×— ×©×¢×•×ª, ×™×•× ×¤×¨×•×™×§×˜, ×©×’×¨×™×¨/×”, ×ª×•×¨×/×ª ×•×¡×›×•×, ×›×•×œ×œ ×”×©×•×•××ª ×§×‘×¦×™×, ×™×¢×“×™×, ×’×¨×¤×™×, ×˜×‘×œ××•×ª ×•×™×™×¦×•×.</p>
                             </div>
                             <div class="brand-command-logos">
                               <div class="logo-wrap logo-wrap--campaign">
-                                <img id="brand-logo" alt="לוגו עושים טוב בצהוב" />
+                                <img id="brand-logo" alt="×œ×•×’×• ×¢×•×©×™× ×˜×•×‘ ×‘×¦×”×•×‘" />
                               </div>
                               <div class="logo-wrap logo-wrap--organization">
-                                <img id="brand-org-logo" alt="לוגו אחים לסמל" />
+                                <img id="brand-org-logo" alt="×œ×•×’×• ××—×™× ×œ×¡×ž×œ" />
                               </div>
                             </div>
                           </div>
-                          <div class="hero-meta-grid" aria-label="נתוני כותרת">
+                          <div class="hero-meta-grid" aria-label="× ×ª×•× ×™ ×›×•×ª×¨×ª">
                             <div class="hero-meta">
-                              <span>טווח נתונים פעיל</span>
+                              <span>×˜×•×•×— × ×ª×•× ×™× ×¤×¢×™×œ</span>
                               <strong id="admin-window-label">-</strong>
                             </div>
                             <div class="hero-meta">
-                              <span>עדכון אחרון</span>
+                              <span>×¢×“×›×•×Ÿ ××—×¨×•×Ÿ</span>
                               <strong id="admin-last-updated">-</strong>
                             </div>
                             <div class="hero-meta">
-                              <span>קובץ מקור</span>
+                              <span>×§×•×‘×¥ ×ž×§×•×¨</span>
                               <strong id="admin-source-file">-</strong>
                             </div>
                             <div class="hero-meta">
-                              <span>רשומות פעילות</span>
+                              <span>×¨×©×•×ž×•×ª ×¤×¢×™×œ×•×ª</span>
                               <strong id="admin-record-count">-</strong>
                             </div>
                           </div>
@@ -3224,54 +3235,55 @@ def build_fragment(
                           <div class="section-header">
                             <div>
                               <h3>Control Center</h3>
-                              <div class="text-small text-muted">מרכז שליטה לקבצים, למסננים וליעדים. כל היכולות הקיימות נשמרות, רק מוצגות בצורה מדויקת ונוחה יותר.</div>
+                              <div class="text-small text-muted">×ž×¨×›×– ×©×œ×™×˜×” ×œ×§×‘×¦×™×, ×œ×ž×¡× × ×™× ×•×œ×™×¢×“×™×. ×›×œ ×”×™×›×•×œ×•×ª ×”×§×™×™×ž×•×ª × ×©×ž×¨×•×ª, ×¨×§ ×ž×•×¦×’×•×ª ×‘×¦×•×¨×” ×ž×“×•×™×§×ª ×•× ×•×—×” ×™×•×ª×¨.</div>
                             </div>
                           </div>
                           <div class="control-groups">
                             <section class="control-group">
                               <div class="control-group-header">
-                                <h4>נתונים</h4>
-                                <p>קבצי הבסיס, ההשוואה והפרסים</p>
+                                <h4>× ×ª×•× ×™×</h4>
+                                <p>×§×‘×¦×™ ×”×‘×¡×™×¡, ×”×”×©×•×•××” ×•×”×¤×¨×¡×™×</p>
                               </div>
                               <div class="filters-grid filters-grid--three">
                                 <label class="form-label">
-                                  קובץ עסקאות
+                                  ×§×•×‘×¥ ×¢×¡×§××•×ª
                                   <input id="csv-upload" class="form-control" type="file" accept=".csv,text/csv" />
                                 </label>
                                 <label class="form-label">
-                                  קובץ השוואה
+                                  ×§×•×‘×¥ ×”×©×•×•××”
                                   <input id="compare-upload" class="form-control" type="file" accept=".csv,text/csv" />
                                 </label>
                                 <label class="form-label">
-                                  החלפת טבלת פרסים (אופציונלי)
+                                  ×”×—×œ×¤×ª ×˜×‘×œ×ª ×¤×¨×¡×™× (××•×¤×¦×™×•× ×œ×™)
                                   <input id="prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" />
                                 </label>
                               </div>
-                              <div id="import-status" class="status-note text-small" aria-live="polite">טבלת הפרסים הקבועה כבר טעונה במערכת. העלאת קובץ פרסים היא אופציונלית בלבד ונועדה רק להחלפה יזומה.</div>
+                              <div id="import-status" class="status-note text-small" aria-live="polite">×˜×‘×œ×ª ×”×¤×¨×¡×™× ×”×§×‘×•×¢×” ×›×‘×¨ ×˜×¢×•× ×” ×‘×ž×¢×¨×›×ª. ×”×¢×œ××ª ×§×•×‘×¥ ×¤×¨×¡×™× ×”×™× ××•×¤×¦×™×•× ×œ×™×ª ×‘×œ×‘×“ ×•× ×•×¢×“×” ×¨×§ ×œ×”×—×œ×¤×” ×™×–×•×ž×”.</div>
                             </section>
 
                             <section class="control-group">
                               <div class="control-group-header">
-                                <h4>מקור נתונים</h4>
-                                <p>בחירה בין העלאת קובץ ידנית לבין חיבור ל-API של מערכת הגיוס לצורך משיכה שוטפת לאורך הקמפיין</p>
+                                <h4>×ž×§×•×¨ × ×ª×•× ×™×</h4>
+                                <p>×‘×—×™×¨×” ×‘×™×Ÿ ×”×¢×œ××ª ×§×•×‘×¥ ×™×“× ×™×ª ×œ×‘×™×Ÿ ×—×™×‘×•×¨ ×œ-API ×©×œ ×ž×¢×¨×›×ª ×”×’×™×•×¡ ×œ×¦×•×¨×š ×ž×©×™×›×” ×©×•×˜×¤×ª ×œ××•×¨×š ×”×§×ž×¤×™×™×Ÿ</p>
                               </div>
                               <div class="filters-grid filters-grid--three">
                                 <label class="form-label">
-                                  מקור פעיל
+                                  ×ž×§×•×¨ ×¤×¢×™×œ
                                   <select id="source-mode" class="form-select">
-                                    <option value="file">קובץ CSV / Excel</option>
-                                    <option value="api">API של מערכת הגיוס</option>
+                                    <option value="file">×§×•×‘×¥ CSV / Excel</option>
+                                    <option value="api">API ×©×œ ×ž×¢×¨×›×ª ×”×’×™×•×¡</option>
+                                    <option value="google_sheets">Google Sheets</option>
                                   </select>
                                 </label>
                                 <label class="form-label">
-                                  שיטת בקשה
+                                  ×©×™×˜×ª ×‘×§×©×”
                                   <select id="source-api-method" class="form-select">
                                     <option value="GET">GET</option>
                                     <option value="POST">POST</option>
                                   </select>
                                 </label>
                                 <label class="form-label">
-                                  פורמט תגובה
+                                  ×¤×•×¨×ž×˜ ×ª×’×•×‘×”
                                   <select id="source-api-format" class="form-select">
                                     <option value="csv">CSV</option>
                                     <option value="json">JSON</option>
@@ -3281,83 +3293,122 @@ def build_fragment(
                               <div id="source-api-fields">
                                 <div class="filters-grid">
                                   <label class="form-label">
-                                    כתובת endpoint
+                                    ×›×ª×•×‘×ª endpoint
                                     <input id="source-api-endpoint" class="form-control" type="url" placeholder="https://api.example.org/campaign/export" dir="ltr" />
                                   </label>
                                   <label class="form-label">
-                                    נתיב לרשומות ב-JSON
+                                    × ×ª×™×‘ ×œ×¨×©×•×ž×•×ª ×‘-JSON
                                     <input id="source-api-records-path" class="form-control" type="text" placeholder="data.records" dir="ltr" />
                                   </label>
                                   <label class="form-label">
-                                    אימות
+                                    ××™×ž×•×ª
                                     <select id="source-api-auth-type" class="form-select">
-                                      <option value="none">ללא אימות</option>
+                                      <option value="none">×œ×œ× ××™×ž×•×ª</option>
                                       <option value="bearer">Bearer Token</option>
                                     </select>
                                   </label>
                                   <label class="form-label">
-                                    רענון אוטומטי בדקות
+                                    ×¨×¢× ×•×Ÿ ××•×˜×•×ž×˜×™ ×‘×“×§×•×ª
                                     <input id="source-api-auto-refresh" class="form-control" type="number" min="0" step="1" placeholder="5" />
                                   </label>
                                   <label class="form-label">
                                     Bearer Token
-                                    <input id="source-api-bearer-token" class="form-control" type="password" autocomplete="off" placeholder="השאר/י ריק כדי לשמור את הערך הקיים" dir="ltr" />
+                                    <input id="source-api-bearer-token" class="form-control" type="password" autocomplete="off" placeholder="×”×©××¨/×™ ×¨×™×§ ×›×“×™ ×œ×©×ž×•×¨ ××ª ×”×¢×¨×š ×”×§×™×™×" dir="ltr" />
                                   </label>
                                 </div>
                                 <div class="filters-grid">
                                   <label class="form-label">
-                                    Headers נוספים
+                                    Headers × ×•×¡×¤×™×
                                     <textarea id="source-api-headers" class="form-control settings-textarea" placeholder="X-Client-Id: 12345&#10;X-Campaign: osim26" dir="ltr"></textarea>
                                   </label>
                                   <label class="form-label">
-                                    Body לבקשת POST
+                                    Body ×œ×‘×§×©×ª POST
                                     <textarea id="source-api-body" class="form-control settings-textarea" placeholder='{"campaign":"osim_tov_betzahov26"}' dir="ltr"></textarea>
                                   </label>
                                 </div>
                                 <label class="form-label">
-                                  מיפוי שדות JSON לשדות הדשבורד
+                                  ×ž×™×¤×•×™ ×©×“×•×ª JSON ×œ×©×“×•×ª ×”×“×©×‘×•×¨×“
                                   <textarea id="source-api-field-map" class="form-control settings-textarea" dir="ltr"></textarea>
                                 </label>
                               </div>
-                              <div class="control-actions control-actions--inline">
-                                <button id="save-source-config" class="button-secondary action-button secondary" type="button">שמירת חיבור מקור</button>
-                                <button id="refresh-source-api" class="button-primary action-button" type="button">משיכת נתונים מהמערכת</button>
+                              <div id="source-google-fields" hidden>
+                                <div class="filters-grid">
+                                  <label class="form-label">
+                                    ×§×™×©×•×¨ ×œ-Google Sheets
+                                    <input id="source-google-url" class="form-control" type="url" placeholder="https://docs.google.com/spreadsheets/d/..." dir="ltr" />
+                                  </label>
+                                  <label class="form-label">
+                                    Spreadsheet ID
+                                    <input id="source-google-id" class="form-control" type="text" placeholder="1AbCdEf..." dir="ltr" />
+                                  </label>
+                                  <label class="form-label">
+                                    GID
+                                    <input id="source-google-gid" class="form-control" type="text" placeholder="0" dir="ltr" />
+                                  </label>
+                                  <label class="form-label">
+                                    Sheet Name
+                                    <input id="source-google-sheet-name" class="form-control" type="text" placeholder="Sheet1" dir="ltr" />
+                                  </label>
+                                  <label class="form-label">
+                                    Range
+                                    <input id="source-google-range" class="form-control" type="text" placeholder="Sheet1!A:Z" dir="ltr" />
+                                  </label>
+                                  <label class="form-label">
+                                    ×©×™×˜×ª ×’×™×©×”
+                                    <select id="source-google-access-mode" class="form-select">
+                                      <option value="public_csv">Public CSV export</option>
+                                      <option value="service_account">Service Account</option>
+                                    </select>
+                                  </label>
+                                  <label class="form-label">
+                                    ×¡× ×›×¨×•×Ÿ ××•×˜×•×ž×˜×™ ×‘×“×§×•×ª
+                                    <input id="source-google-sync-interval" class="form-control" type="number" min="1" step="1" placeholder="5" />
+                                  </label>
+                                </div>
+                                <label class="form-label">
+                                  ×ž×™×¤×•×™ ×©×“×•×ª Google Sheets ×œ×©×“×•×ª ×”×ž×¢×¨×›×ª
+                                  <textarea id="source-google-field-map" class="form-control settings-textarea" dir="ltr"></textarea>
+                                </label>
                               </div>
-                              <div id="source-config-status" class="status-note text-small" aria-live="polite">כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה.</div>
+                              <div class="control-actions control-actions--inline">
+                                <button id="save-source-config" class="button-secondary action-button secondary" type="button">×©×ž×™×¨×ª ×—×™×‘×•×¨ ×ž×§×•×¨</button>
+                                <button id="refresh-source-api" class="button-primary action-button" type="button">×ž×©×™×›×ª × ×ª×•× ×™× ×ž×”×ž×¢×¨×›×ª</button>
+                              </div>
+                              <div id="source-config-status" class="status-note text-small" aria-live="polite">×›×¨×’×¢ ×”×ž×¢×¨×›×ª ×¢×•×‘×“×ª ×¢×œ ×‘×¡×™×¡ ×§×•×‘×¥. ×›×©×”-API ×™×”×™×” ×ž×•×›×Ÿ, ××¤×©×¨ ×™×”×™×” ×œ×¢×‘×•×¨ ×œ×ž×¦×‘ ×ž×©×™×›×” ×™×©×™×¨×”.</div>
                             </section>
 
                             <section class="control-group">
                               <div class="control-group-header">
-                                <h4>זמן</h4>
-                                <p>יום פרויקט, תאריך מדויק, טווח תאריכים ושעות</p>
+                                <h4>×–×ž×Ÿ</h4>
+                                <p>×™×•× ×¤×¨×•×™×§×˜, ×ª××¨×™×š ×ž×“×•×™×§, ×˜×•×•×— ×ª××¨×™×›×™× ×•×©×¢×•×ª</p>
                               </div>
                               <div class="filters-grid filters-grid--three">
                                 <label class="form-label">
-                                  יום פרויקט
+                                  ×™×•× ×¤×¨×•×™×§×˜
                                   <select id="project-day-filter" class="form-select"></select>
                                 </label>
                                 <label class="form-label">
-                                  תאריך מדויק
+                                  ×ª××¨×™×š ×ž×“×•×™×§
                                   <select id="date-exact" class="form-select"></select>
                                 </label>
                                 <label class="form-label">
-                                  שעה
+                                  ×©×¢×”
                                   <select id="hour-filter" class="form-select"></select>
                                 </label>
                                 <label class="form-label">
-                                  תאריך התחלה
+                                  ×ª××¨×™×š ×”×ª×—×œ×”
                                   <input id="date-from" class="form-control" type="date" />
                                 </label>
                                 <label class="form-label">
-                                  תאריך סיום
+                                  ×ª××¨×™×š ×¡×™×•×
                                   <input id="date-to" class="form-control" type="date" />
                                 </label>
                                 <label class="form-label">
-                                  משעה
+                                  ×ž×©×¢×”
                                   <select id="hour-from-filter" class="form-select"></select>
                                 </label>
                                 <label class="form-label">
-                                  עד שעה
+                                  ×¢×“ ×©×¢×”
                                   <select id="hour-to-filter" class="form-select"></select>
                                 </label>
                               </div>
@@ -3365,74 +3416,74 @@ def build_fragment(
 
                             <section class="control-group">
                               <div class="control-group-header">
-                                <h4>אנשים וסכומים</h4>
-                                <p>פילוח לפי שגריר, תורם וסכום</p>
+                                <h4>×× ×©×™× ×•×¡×›×•×ž×™×</h4>
+                                <p>×¤×™×œ×•×— ×œ×¤×™ ×©×’×¨×™×¨, ×ª×•×¨× ×•×¡×›×•×</p>
                               </div>
                               <div class="filters-grid">
                                 <label class="form-label">
-                                  שגריר/ה
+                                  ×©×’×¨×™×¨/×”
                                   <select id="ambassador-filter" class="form-select"></select>
                                 </label>
                                 <label class="form-label">
-                                  שם התורם/ת
-                                  <input id="donor-filter" class="form-control" type="text" placeholder="חיפוש לפי שם תורם" />
+                                  ×©× ×”×ª×•×¨×/×ª
+                                  <input id="donor-filter" class="form-control" type="text" placeholder="×—×™×¤×•×© ×œ×¤×™ ×©× ×ª×•×¨×" />
                                 </label>
                                 <label class="form-label">
-                                  סכום מינימלי
-                                  <input id="amount-min-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 180" />
+                                  ×¡×›×•× ×ž×™× ×™×ž×œ×™
+                                  <input id="amount-min-filter" class="form-control" type="number" min="0" step="50" placeholder="×œ×ž×©×œ 180" />
                                 </label>
                                 <label class="form-label">
-                                  סכום מקסימלי
-                                  <input id="amount-max-filter" class="form-control" type="number" min="0" step="50" placeholder="למשל 5000" />
+                                  ×¡×›×•× ×ž×§×¡×™×ž×œ×™
+                                  <input id="amount-max-filter" class="form-control" type="number" min="0" step="50" placeholder="×œ×ž×©×œ 5000" />
                                 </label>
                               </div>
                             </section>
 
                             <section class="control-group">
                               <div class="control-group-header">
-                                <h4>יעדים</h4>
-                                <p>מדדי יעד כוללים ויומיים</p>
+                                <h4>×™×¢×“×™×</h4>
+                                <p>×ž×“×“×™ ×™×¢×“ ×›×•×œ×œ×™× ×•×™×•×ž×™×™×</p>
                               </div>
                               <div class="filters-grid">
                                 <label class="form-label">
-                                  יעד כולל
-                                  <input id="goal-total" class="form-control" type="number" min="0" step="100" placeholder="למשל 1500000" />
+                                  ×™×¢×“ ×›×•×œ×œ
+                                  <input id="goal-total" class="form-control" type="number" min="0" step="100" placeholder="×œ×ž×©×œ 1500000" />
                                 </label>
                                 <label class="form-label">
-                                  יעד יומי
-                                  <input id="goal-daily" class="form-control" type="number" min="0" step="100" placeholder="למשל 150000" />
+                                  ×™×¢×“ ×™×•×ž×™
+                                  <input id="goal-daily" class="form-control" type="number" min="0" step="100" placeholder="×œ×ž×©×œ 150000" />
                                 </label>
                               </div>
                             </section>
 
                             <section class="control-group">
                               <div class="control-group-header">
-                                <h4>איפוס נתוני עבודה</h4>
-                                <p>ניקוי מהיר של נתוני הניתוח כדי לטעון קבצים חדשים מבלי לפגוע בעיצוב הקמפיין ובהגדרות המנהלים</p>
+                                <h4>××™×¤×•×¡ × ×ª×•× ×™ ×¢×‘×•×“×”</h4>
+                                <p>× ×™×§×•×™ ×ž×”×™×¨ ×©×œ × ×ª×•× ×™ ×”× ×™×ª×•×— ×›×“×™ ×œ×˜×¢×•×Ÿ ×§×‘×¦×™× ×—×“×©×™× ×ž×‘×œ×™ ×œ×¤×’×•×¢ ×‘×¢×™×¦×•×‘ ×”×§×ž×¤×™×™×Ÿ ×•×‘×”×’×“×¨×•×ª ×”×ž× ×”×œ×™×</p>
                               </div>
                               <div class="status-note text-small">
-                                האיפוס מחזיר את קובץ הבסיס, קובץ ההשוואה, רשימת השגרירים וטבלת הפרסים למצב ברירת המחדל המקומי, ומנקה את שדות ההעלאה הפעילים.
+                                ×”××™×¤×•×¡ ×ž×—×–×™×¨ ××ª ×§×•×‘×¥ ×”×‘×¡×™×¡, ×§×•×‘×¥ ×”×”×©×•×•××”, ×¨×©×™×ž×ª ×”×©×’×¨×™×¨×™× ×•×˜×‘×œ×ª ×”×¤×¨×¡×™× ×œ×ž×¦×‘ ×‘×¨×™×¨×ª ×”×ž×—×“×œ ×”×ž×§×•×ž×™, ×•×ž× ×§×” ××ª ×©×“×•×ª ×”×”×¢×œ××” ×”×¤×¢×™×œ×™×.
                               </div>
                               <div class="control-actions control-actions--inline">
-                                <button id="reset-working-data" class="button-secondary action-button secondary" type="button">איפוס נתוני עבודה</button>
+                                <button id="reset-working-data" class="button-secondary action-button secondary" type="button">××™×¤×•×¡ × ×ª×•× ×™ ×¢×‘×•×“×”</button>
                               </div>
                             </section>
                           </div>
                           <div class="control-actions">
-                            <button id="export-filtered" class="button-primary action-button" type="button">ייצוא הנתונים המסוננים</button>
-                            <button id="clear-compare" class="button-secondary action-button secondary" type="button">ניקוי קובץ ההשוואה</button>
-                            <button id="clear-filters" class="button-ghost" type="button">ניקוי מסננים</button>
+                            <button id="export-filtered" class="button-primary action-button" type="button">×™×™×¦×•× ×”× ×ª×•× ×™× ×”×ž×¡×•× × ×™×</button>
+                            <button id="clear-compare" class="button-secondary action-button secondary" type="button">× ×™×§×•×™ ×§×•×‘×¥ ×”×”×©×•×•××”</button>
+                            <button id="clear-filters" class="button-ghost" type="button">× ×™×§×•×™ ×ž×¡× × ×™×</button>
                           </div>
-                          <div id="active-filter-summary" class="status-chip active-filter-summary" aria-live="polite">אין מסננים פעילים</div>
+                          <div id="active-filter-summary" class="status-chip active-filter-summary" aria-live="polite">××™×Ÿ ×ž×¡× × ×™× ×¤×¢×™×œ×™×</div>
                           <div id="control-note" class="status-note text-small" aria-live="polite"></div>
                         </aside>
                       </section>
 
-                      <section id="metrics-grid" class="metric-grid" aria-label="מדדי סיכום"></section>
+                      <section id="metrics-grid" class="metric-grid" aria-label="×ž×“×“×™ ×¡×™×›×•×"></section>
 
                       <section class="dashboard-section">
                         <div class="section-header">
-                          <h3>יעדים מול ביצוע</h3>
+                          <h3>×™×¢×“×™× ×ž×•×œ ×‘×™×¦×•×¢</h3>
                           <div id="goals-summary" class="text-small text-muted"></div>
                         </div>
                         <div id="goals-board" class="analysis-shell"></div>
@@ -3440,7 +3491,7 @@ def build_fragment(
 
                       <section class="dashboard-section">
                         <div class="section-header">
-                          <h3>מה דורש תשומת לב עכשיו</h3>
+                          <h3>×ž×” ×“×•×¨×© ×ª×©×•×ž×ª ×œ×‘ ×¢×›×©×™×•</h3>
                           <div id="executive-summary" class="text-small text-muted"></div>
                         </div>
                         <div id="executive-board" class="analysis-shell"></div>
@@ -3450,23 +3501,23 @@ def build_fragment(
                         <div class="chart-panel chart-card app-card">
                           <div class="section-header">
                             <div class="chart-header-copy">
-                              <span class="chart-overline">מבט מגמה</span>
-                              <h3>מגמה יומית</h3>
+                              <span class="chart-overline">×ž×‘×˜ ×ž×’×ž×”</span>
+                              <h3>×ž×’×ž×” ×™×•×ž×™×ª</h3>
                               <div id="daily-chart-summary" class="chart-insights" aria-live="polite"></div>
                             </div>
-                            <div class="data-toolbar metric-toolbar" data-metric-group="daily" aria-label="בחירת מדד לגרף היומי">
-                              <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="amount">סכום גיוס</button>
-                              <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="count">מספר עסקאות</button>
-                              <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="average">ממוצע לעסקה</button>
+                            <div class="data-toolbar metric-toolbar" data-metric-group="daily" aria-label="×‘×—×™×¨×ª ×ž×“×“ ×œ×’×¨×£ ×”×™×•×ž×™">
+                              <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="amount">×¡×›×•× ×’×™×•×¡</button>
+                              <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="count">×ž×¡×¤×¨ ×¢×¡×§××•×ª</button>
+                              <button class="metric-toggle" type="button" data-metric-select="daily-metric-select" data-value="average">×ž×ž×•×¦×¢ ×œ×¢×¡×§×”</button>
                             </div>
                           </div>
-                          <select id="daily-metric-select" class="visually-hidden-select" aria-label="בחירת מדד לגרף יומי">
-                            <option value="amount">סכום גיוס</option>
-                            <option value="count">מספר עסקאות</option>
-                            <option value="average">ממוצע לעסקה</option>
+                          <select id="daily-metric-select" class="visually-hidden-select" aria-label="×‘×—×™×¨×ª ×ž×“×“ ×œ×’×¨×£ ×™×•×ž×™">
+                            <option value="amount">×¡×›×•× ×’×™×•×¡</option>
+                            <option value="count">×ž×¡×¤×¨ ×¢×¡×§××•×ª</option>
+                            <option value="average">×ž×ž×•×¦×¢ ×œ×¢×¡×§×”</option>
                           </select>
                           <div id="daily-chart" class="chart-surface"></div>
-                          <div class="chart-footnote">לחיצה על עמוד או נקודה בגרף תסנן את הדשבורד לאותו יום.</div>
+                          <div class="chart-footnote">×œ×—×™×¦×” ×¢×œ ×¢×ž×•×“ ××• × ×§×•×“×” ×‘×’×¨×£ ×ª×¡× ×Ÿ ××ª ×”×“×©×‘×•×¨×“ ×œ××•×ª×• ×™×•×.</div>
                         </div>
                         <div id="daily-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                       </section>
@@ -3475,25 +3526,25 @@ def build_fragment(
                         <div class="chart-panel chart-card app-card">
                           <div class="section-header">
                             <div class="chart-header-copy">
-                              <span class="chart-overline">עומסים לפי זמן</span>
-                              <h3>מפת חום לגיוס כספים</h3>
+                              <span class="chart-overline">×¢×•×ž×¡×™× ×œ×¤×™ ×–×ž×Ÿ</span>
+                              <h3>×ž×¤×ª ×—×•× ×œ×’×™×•×¡ ×›×¡×¤×™×</h3>
                               <div id="heatmap-summary" class="chart-insights" aria-live="polite"></div>
                               <div class="legend-row text-small text-muted">
-                                <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 214, 41, 0.18); border: 1px solid rgba(17, 29, 74, 0.14);"></span>עוצמה נמוכה</span>
-                                <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 214, 41, 0.95); border: 1px solid rgba(17, 29, 74, 0.14);"></span>עוצמה גבוהה</span>
+                                <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 214, 41, 0.18); border: 1px solid rgba(17, 29, 74, 0.14);"></span>×¢×•×¦×ž×” × ×ž×•×›×”</span>
+                                <span class="legend-item"><span class="legend-swatch" style="background: rgba(255, 214, 41, 0.95); border: 1px solid rgba(17, 29, 74, 0.14);"></span>×¢×•×¦×ž×” ×’×‘×•×”×”</span>
                               </div>
                             </div>
-                            <div class="data-toolbar metric-toolbar" data-metric-group="heatmap" aria-label="בחירת מדד למפת החום">
-                              <button class="metric-toggle" type="button" data-metric-select="heatmap-metric-select" data-value="amount">סכום גיוס</button>
-                              <button class="metric-toggle" type="button" data-metric-select="heatmap-metric-select" data-value="count">מספר עסקאות</button>
+                            <div class="data-toolbar metric-toolbar" data-metric-group="heatmap" aria-label="×‘×—×™×¨×ª ×ž×“×“ ×œ×ž×¤×ª ×”×—×•×">
+                              <button class="metric-toggle" type="button" data-metric-select="heatmap-metric-select" data-value="amount">×¡×›×•× ×’×™×•×¡</button>
+                              <button class="metric-toggle" type="button" data-metric-select="heatmap-metric-select" data-value="count">×ž×¡×¤×¨ ×¢×¡×§××•×ª</button>
                             </div>
                           </div>
-                          <select id="heatmap-metric-select" class="visually-hidden-select" aria-label="בחירת מדד למפת החום">
-                            <option value="amount">סכום גיוס</option>
-                            <option value="count">מספר עסקאות</option>
+                          <select id="heatmap-metric-select" class="visually-hidden-select" aria-label="×‘×—×™×¨×ª ×ž×“×“ ×œ×ž×¤×ª ×”×—×•×">
+                            <option value="amount">×¡×›×•× ×’×™×•×¡</option>
+                            <option value="count">×ž×¡×¤×¨ ×¢×¡×§××•×ª</option>
                           </select>
                           <div id="heatmap-chart" class="chart-surface chart-surface--wide"></div>
-                          <div class="chart-footnote">לחיצה על תא במפה תפעיל פילוח משולב של יום ושעה.</div>
+                          <div class="chart-footnote">×œ×—×™×¦×” ×¢×œ ×ª× ×‘×ž×¤×” ×ª×¤×¢×™×œ ×¤×™×œ×•×— ×ž×©×•×œ×‘ ×©×œ ×™×•× ×•×©×¢×”.</div>
                         </div>
                         <div id="heatmap-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                       </section>
@@ -3502,28 +3553,28 @@ def build_fragment(
                         <div class="chart-panel chart-card app-card">
                           <div class="section-header">
                             <div class="chart-header-copy">
-                              <span class="chart-overline">פעילות שגרירים</span>
-                              <h3>תנועת שגרירים</h3>
+                              <span class="chart-overline">×¤×¢×™×œ×•×ª ×©×’×¨×™×¨×™×</span>
+                              <h3>×ª× ×•×¢×ª ×©×’×¨×™×¨×™×</h3>
                               <div id="movement-summary" class="chart-insights" aria-live="polite"></div>
                             </div>
-                            <div class="data-toolbar metric-toolbar" data-metric-group="movement" aria-label="בחירת מדד לתנועת השגרירים">
-                              <button class="metric-toggle" type="button" data-metric-select="movement-metric-select" data-value="amount">סכום גיוס</button>
-                              <button class="metric-toggle" type="button" data-metric-select="movement-metric-select" data-value="count">מספר עסקאות</button>
+                            <div class="data-toolbar metric-toolbar" data-metric-group="movement" aria-label="×‘×—×™×¨×ª ×ž×“×“ ×œ×ª× ×•×¢×ª ×”×©×’×¨×™×¨×™×">
+                              <button class="metric-toggle" type="button" data-metric-select="movement-metric-select" data-value="amount">×¡×›×•× ×’×™×•×¡</button>
+                              <button class="metric-toggle" type="button" data-metric-select="movement-metric-select" data-value="count">×ž×¡×¤×¨ ×¢×¡×§××•×ª</button>
                             </div>
                           </div>
-                          <select id="movement-metric-select" class="visually-hidden-select" aria-label="בחירת מדד לתנועת שגרירים">
-                            <option value="amount">סכום גיוס</option>
-                            <option value="count">מספר עסקאות</option>
+                          <select id="movement-metric-select" class="visually-hidden-select" aria-label="×‘×—×™×¨×ª ×ž×“×“ ×œ×ª× ×•×¢×ª ×©×’×¨×™×¨×™×">
+                            <option value="amount">×¡×›×•× ×’×™×•×¡</option>
+                            <option value="count">×ž×¡×¤×¨ ×¢×¡×§××•×ª</option>
                           </select>
                           <div id="movement-chart" class="chart-surface chart-surface--wide"></div>
-                          <div class="chart-footnote">לחיצה על שגריר או על תא במטריצה תעדכן את כל המסכים לפי אותו חיתוך.</div>
+                          <div class="chart-footnote">×œ×—×™×¦×” ×¢×œ ×©×’×¨×™×¨ ××• ×¢×œ ×ª× ×‘×ž×˜×¨×™×¦×” ×ª×¢×“×›×Ÿ ××ª ×›×œ ×”×ž×¡×›×™× ×œ×¤×™ ××•×ª×• ×—×™×ª×•×š.</div>
                         </div>
                         <div id="movement-tooltip" class="tooltip" role="status" aria-live="polite"></div>
                       </section>
 
                       <section class="dashboard-section">
                         <div class="section-header">
-                          <h3>דירוגים ופילוחים</h3>
+                          <h3>×“×™×¨×•×’×™× ×•×¤×™×œ×•×—×™×</h3>
                           <div id="segment-summary" class="text-small text-muted"></div>
                         </div>
                         <div id="segment-board" class="analysis-shell"></div>
@@ -3531,7 +3582,7 @@ def build_fragment(
 
                       <section class="dashboard-section">
                         <div class="section-header">
-                          <h3>איכות נתונים וסיכונים</h3>
+                          <h3>××™×›×•×ª × ×ª×•× ×™× ×•×¡×™×›×•× ×™×</h3>
                           <div id="quality-summary" class="text-small text-muted"></div>
                         </div>
                         <div id="quality-board" class="analysis-shell"></div>
@@ -3539,7 +3590,7 @@ def build_fragment(
 
                       <section class="dashboard-section">
                         <div class="section-header">
-                          <h3>ולידציה של קבצי הקלט</h3>
+                          <h3>×•×œ×™×“×¦×™×” ×©×œ ×§×‘×¦×™ ×”×§×œ×˜</h3>
                           <div id="validation-summary" class="text-small text-muted"></div>
                         </div>
                         <div id="validation-board" class="analysis-shell"></div>
@@ -3547,7 +3598,7 @@ def build_fragment(
 
                       <section class="dashboard-section">
                         <div class="section-header">
-                          <h3>השוואת קבצים</h3>
+                          <h3>×”×©×•×•××ª ×§×‘×¦×™×</h3>
                           <div id="comparison-summary" class="text-small text-muted"></div>
                         </div>
                         <div id="comparison-board" class="comparison-shell"></div>
@@ -3555,10 +3606,10 @@ def build_fragment(
 
                       <section class="dashboard-section">
                         <div class="section-header">
-                          <h3>טבלת הרשומות</h3>
+                          <h3>×˜×‘×œ×ª ×”×¨×©×•×ž×•×ª</h3>
                           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
                             <div id="table-summary" class="text-small text-muted"></div>
-                            <button id="table-toggle" class="button-ghost" type="button" aria-expanded="false" aria-controls="table-panel">הצג רשומות</button>
+                            <button id="table-toggle" class="button-ghost" type="button" aria-expanded="false" aria-controls="table-panel">×”×¦×’ ×¨×©×•×ž×•×ª</button>
                           </div>
                         </div>
                         <div id="table-panel" class="table-panel" hidden>
@@ -3570,8 +3621,8 @@ def build_fragment(
                     <div id="admin-tab-panel-design" class="admin-tab-panel" hidden>
                       <section class="dashboard-section">
                         <div class="section-header">
-                          <h3>עיצוב, טקסטים ומדיה של עמוד הפרויקט</h3>
-                          <div class="text-small text-muted">כל מה שקשור לבאנר, מדיה, צבעים, פונטים, טקסטים וסכומי התרומה של עמוד הפרויקט הציבורי מרוכז כאן.</div>
+                          <h3>×¢×™×¦×•×‘, ×˜×§×¡×˜×™× ×•×ž×“×™×” ×©×œ ×¢×ž×•×“ ×”×¤×¨×•×™×§×˜</h3>
+                          <div class="text-small text-muted">×›×œ ×ž×” ×©×§×©×•×¨ ×œ×‘×× ×¨, ×ž×“×™×”, ×¦×‘×¢×™×, ×¤×•× ×˜×™×, ×˜×§×¡×˜×™× ×•×¡×›×•×ž×™ ×”×ª×¨×•×ž×” ×©×œ ×¢×ž×•×“ ×”×¤×¨×•×™×§×˜ ×”×¦×™×‘×•×¨×™ ×ž×¨×•×›×– ×›××Ÿ.</div>
                         </div>
                         <div id="campaign-designer-panel" class="app-card app-card--elevated"></div>
                       </section>
@@ -3670,6 +3721,15 @@ def build_fragment(
                 sourceApiBody: root.querySelector("#source-api-body"),
                 sourceApiFieldMap: root.querySelector("#source-api-field-map"),
                 sourceApiFields: root.querySelector("#source-api-fields"),
+                sourceGoogleUrl: root.querySelector("#source-google-url"),
+                sourceGoogleId: root.querySelector("#source-google-id"),
+                sourceGoogleGid: root.querySelector("#source-google-gid"),
+                sourceGoogleSheetName: root.querySelector("#source-google-sheet-name"),
+                sourceGoogleRange: root.querySelector("#source-google-range"),
+                sourceGoogleAccessMode: root.querySelector("#source-google-access-mode"),
+                sourceGoogleSyncInterval: root.querySelector("#source-google-sync-interval"),
+                sourceGoogleFieldMap: root.querySelector("#source-google-field-map"),
+                sourceGoogleFields: root.querySelector("#source-google-fields"),
                 saveSourceConfig: root.querySelector("#save-source-config"),
                 refreshSourceApi: root.querySelector("#refresh-source-api"),
                 sourceConfigStatus: root.querySelector("#source-config-status"),
@@ -3805,26 +3865,26 @@ def build_fragment(
                   adminTab: "insights",
                   campaignBuilderStep: 1,
                   campaignSettingsStatus: {
-                    message: "ההגדרות נשמרות מקומית בדפדפן זה בלבד.",
+                    message: "×”×”×’×“×¨×•×ª × ×©×ž×¨×•×ª ×ž×§×•×ž×™×ª ×‘×“×¤×“×¤×Ÿ ×–×” ×‘×œ×‘×“.",
                     tone: "neutral",
                   },
                   campaignBuilderStatus: {
-                    message: "טיוטת הקמפיין עדיין לא נשמרה בשרת.",
+                    message: "×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ ×¢×“×™×™×Ÿ ×œ× × ×©×ž×¨×” ×‘×©×¨×ª.",
                     tone: "neutral",
                   },
                   ambassadorDirectoryStatus: {
-                    message: "עדיין לא נטען קובץ שגרירים. אפשר להעלות CSV כדי לייצר לינקים אישיים.",
+                    message: "×¢×“×™×™×Ÿ ×œ× × ×˜×¢×Ÿ ×§×•×‘×¥ ×©×’×¨×™×¨×™×. ××¤×©×¨ ×œ×”×¢×œ×•×ª CSV ×›×“×™ ×œ×™×™×¦×¨ ×œ×™× ×§×™× ××™×©×™×™×.",
                     tone: "neutral",
                   },
                   sourceConfigStatus: {
-                    message: "כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה.",
+                    message: "×›×¨×’×¢ ×”×ž×¢×¨×›×ª ×¢×•×‘×“×ª ×¢×œ ×‘×¡×™×¡ ×§×•×‘×¥. ×›×©×”-API ×™×”×™×” ×ž×•×›×Ÿ, ××¤×©×¨ ×™×”×™×” ×œ×¢×‘×•×¨ ×œ×ž×¦×‘ ×ž×©×™×›×” ×™×©×™×¨×”.",
                     tone: "neutral",
                   },
                 },
               };
 
               if (state.ambassadorDirectory.length) {
-                setAmbassadorDirectoryStatus(`${state.ambassadorDirectory.length} שגרירים נטענו מהאחסון המקומי עם לינקים אישיים פעילים.`, "success");
+                setAmbassadorDirectoryStatus(`${state.ambassadorDirectory.length} ×©×’×¨×™×¨×™× × ×˜×¢× ×• ×ž×”××—×¡×•×Ÿ ×”×ž×§×•×ž×™ ×¢× ×œ×™× ×§×™× ××™×©×™×™× ×¤×¢×™×œ×™×.`, "success");
               }
 
               function cloneSerializable(value) {
@@ -3861,6 +3921,24 @@ def build_fragment(
                     bodyText: "",
                     fieldMapText: JSON.stringify(getDefaultSourceFieldMap(), null, 2),
                   },
+                  googleSheets: {
+                    spreadsheetUrl: "",
+                    spreadsheetId: "",
+                    gid: "",
+                    sheetName: "",
+                    range: "",
+                    accessMode: "public_csv",
+                    syncEnabled: true,
+                    syncIntervalMinutes: 5,
+                    fieldMapText: JSON.stringify(getDefaultSourceFieldMap(), null, 2),
+                    lastSyncedAt: "",
+                    lastSuccessfulSyncAt: "",
+                    lastChecksum: "",
+                    lastRowCount: 0,
+                    lastStatus: "idle",
+                    lastMessage: "",
+                    lastSourceLabel: "",
+                  },
                 };
               }
 
@@ -3876,7 +3954,7 @@ def build_fragment(
                 }
                 const parsed = JSON.parse(raw);
                 if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-                  throw new Error("יש להזין אובייקט JSON תקין במיפוי השדות.");
+                  throw new Error("×™×© ×œ×”×–×™×Ÿ ××•×‘×™×™×§×˜ JSON ×ª×§×™×Ÿ ×‘×ž×™×¤×•×™ ×”×©×“×•×ª.");
                 }
                 return parsed;
               }
@@ -3885,15 +3963,26 @@ def build_fragment(
                 const defaults = getDefaultSourceConfig();
                 const candidate = value && typeof value === "object" ? value : {};
                 const apiCandidate = candidate.api && typeof candidate.api === "object" ? candidate.api : {};
+                const googleSheetsCandidate = candidate.googleSheets && typeof candidate.googleSheets === "object" ? candidate.googleSheets : {};
                 let fieldMapText = defaults.api.fieldMapText;
                 try {
                   fieldMapText = JSON.stringify(parseJsonObjectText(apiCandidate.fieldMapText, getDefaultSourceFieldMap()), null, 2);
                 } catch (_error) {
                   fieldMapText = defaults.api.fieldMapText;
                 }
+                let googleFieldMapText = defaults.googleSheets.fieldMapText;
+                try {
+                  googleFieldMapText = JSON.stringify(
+                    parseJsonObjectText(googleSheetsCandidate.fieldMapText, getDefaultSourceFieldMap()),
+                    null,
+                    2
+                  );
+                } catch (_error) {
+                  googleFieldMapText = defaults.googleSheets.fieldMapText;
+                }
                 const bearerToken = String(apiCandidate.bearerToken || "").trim();
                 return {
-                  mode: candidate.mode === "api" ? "api" : "file",
+                  mode: candidate.mode === "google_sheets" ? "google_sheets" : candidate.mode === "api" ? "api" : "file",
                   api: {
                     endpoint: String(apiCandidate.endpoint || "").trim(),
                     method: String(apiCandidate.method || defaults.api.method).trim().toUpperCase() === "POST" ? "POST" : "GET",
@@ -3907,12 +3996,35 @@ def build_fragment(
                     bodyText: String(apiCandidate.bodyText || "").replaceAll("\\r\\n", "\\n").trim(),
                     fieldMapText,
                   },
+                  googleSheets: {
+                    spreadsheetUrl: String(googleSheetsCandidate.spreadsheetUrl || "").trim(),
+                    spreadsheetId: String(googleSheetsCandidate.spreadsheetId || "").trim(),
+                    gid: String(googleSheetsCandidate.gid || "").trim(),
+                    sheetName: String(googleSheetsCandidate.sheetName || "").trim(),
+                    range: String(googleSheetsCandidate.range || "").trim(),
+                    accessMode: String(googleSheetsCandidate.accessMode || defaults.googleSheets.accessMode).trim().toLowerCase() === "service_account"
+                      ? "service_account"
+                      : "public_csv",
+                    syncEnabled: googleSheetsCandidate.syncEnabled !== false,
+                    syncIntervalMinutes: normalizePositiveInteger(
+                      googleSheetsCandidate.syncIntervalMinutes,
+                      defaults.googleSheets.syncIntervalMinutes
+                    ),
+                    fieldMapText: googleFieldMapText,
+                    lastSyncedAt: String(googleSheetsCandidate.lastSyncedAt || "").trim(),
+                    lastSuccessfulSyncAt: String(googleSheetsCandidate.lastSuccessfulSyncAt || "").trim(),
+                    lastChecksum: String(googleSheetsCandidate.lastChecksum || "").trim(),
+                    lastRowCount: normalizePositiveInteger(googleSheetsCandidate.lastRowCount, 0),
+                    lastStatus: String(googleSheetsCandidate.lastStatus || "idle").trim().toLowerCase() || "idle",
+                    lastMessage: String(googleSheetsCandidate.lastMessage || "").trim(),
+                    lastSourceLabel: String(googleSheetsCandidate.lastSourceLabel || "").trim(),
+                  },
                 };
               }
 
               function setSourceConfigStatus(message, tone = "neutral") {
                 state.ui.sourceConfigStatus = {
-                  message: String(message || "כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה."),
+                  message: String(message || "×›×¨×’×¢ ×”×ž×¢×¨×›×ª ×¢×•×‘×“×ª ×¢×œ ×‘×¡×™×¡ ×§×•×‘×¥. ×›×©×”-API ×™×”×™×” ×ž×•×›×Ÿ, ××¤×©×¨ ×™×”×™×” ×œ×¢×‘×•×¨ ×œ×ž×¦×‘ ×ž×©×™×›×” ×™×©×™×¨×”."),
                   tone: String(tone || "neutral"),
                 };
                 if (!elements.sourceConfigStatus) {
@@ -3924,14 +4036,14 @@ def build_fragment(
 
               function getSourceConfigStatus() {
                 return state.ui.sourceConfigStatus || {
-                  message: "כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה.",
+                  message: "×›×¨×’×¢ ×”×ž×¢×¨×›×ª ×¢×•×‘×“×ª ×¢×œ ×‘×¡×™×¡ ×§×•×‘×¥. ×›×©×”-API ×™×”×™×” ×ž×•×›×Ÿ, ××¤×©×¨ ×™×”×™×” ×œ×¢×‘×•×¨ ×œ×ž×¦×‘ ×ž×©×™×›×” ×™×©×™×¨×”.",
                   tone: "neutral",
                 };
               }
 
               function buildBaseValidationSnapshot(rows, label) {
                 return {
-                  label: label || "קובץ בסיס",
+                  label: label || "×§×•×‘×¥ ×‘×¡×™×¡",
                   totalRows: rows.length,
                   validRows: rows,
                   errors: [],
@@ -3939,7 +4051,7 @@ def build_fragment(
                   missingColumns: [],
                   invalidDateRows: 0,
                   invalidAmountRows: 0,
-                  missingAmbassadorRows: rows.filter((row) => row.ambassador === "ללא שיוך").length,
+                  missingAmbassadorRows: rows.filter((row) => row.ambassador === "×œ×œ× ×©×™×•×š").length,
                   missingEmailRows: rows.filter((row) => !row.email).length,
                   duplicateIdCount: 0,
                 };
@@ -3965,7 +4077,7 @@ def build_fragment(
                 storePrizeModel(state.prizeModel);
                 state.ambassadorDirectory = [];
                 storeAmbassadorDirectory([]);
-                setAmbassadorDirectoryStatus("רשימת השגרירים נוקתה. אפשר להעלות CSV חדש בכל עת.", "neutral");
+                setAmbassadorDirectoryStatus("×¨×©×™×ž×ª ×”×©×’×¨×™×¨×™× × ×•×§×ª×”. ××¤×©×¨ ×œ×”×¢×œ×•×ª CSV ×—×“×© ×‘×›×œ ×¢×ª.", "neutral");
                 state.filters = getDefaultFilters(state.meta);
                 state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
                 applyAmbassadorContextFromUrl();
@@ -3983,7 +4095,7 @@ def build_fragment(
                   ambassadorUpload.value = "";
                 }
                 resetFilterOptions();
-                setImportMessage("נתוני העבודה אופסו. אפשר להעלות עכשיו קובץ עסקאות, קובץ השוואה, קובץ פרסים או קובץ שגרירים חדשים.", "success");
+                setImportMessage("× ×ª×•× ×™ ×”×¢×‘×•×“×” ××•×¤×¡×•. ××¤×©×¨ ×œ×”×¢×œ×•×ª ×¢×›×©×™×• ×§×•×‘×¥ ×¢×¡×§××•×ª, ×§×•×‘×¥ ×”×©×•×•××”, ×§×•×‘×¥ ×¤×¨×¡×™× ××• ×§×•×‘×¥ ×©×’×¨×™×¨×™× ×—×“×©×™×.", "success");
               }
 
               function getDefaultFilters(meta) {
@@ -4026,8 +4138,8 @@ def build_fragment(
 
               function getDefaultPrizeStatusMessage() {
                 return hasPrizeModelContent(state.prizeModel)
-                  ? "טבלת הפרסים הקבועה כבר טעונה במערכת. העלאת קובץ פרסים היא אופציונלית בלבד ונועדה רק להחלפה יזומה."
-                  : "המערכת מוכנה לקבלת קבצים. קובץ לא תקין לא ידרוס את הנתונים הפעילים.";
+                  ? "×˜×‘×œ×ª ×”×¤×¨×¡×™× ×”×§×‘×•×¢×” ×›×‘×¨ ×˜×¢×•× ×” ×‘×ž×¢×¨×›×ª. ×”×¢×œ××ª ×§×•×‘×¥ ×¤×¨×¡×™× ×”×™× ××•×¤×¦×™×•× ×œ×™×ª ×‘×œ×‘×“ ×•× ×•×¢×“×” ×¨×§ ×œ×”×—×œ×¤×” ×™×–×•×ž×”."
+                  : "×”×ž×¢×¨×›×ª ×ž×•×›× ×” ×œ×§×‘×œ×ª ×§×‘×¦×™×. ×§×•×‘×¥ ×œ× ×ª×§×™×Ÿ ×œ× ×™×“×¨×•×¡ ××ª ×”× ×ª×•× ×™× ×”×¤×¢×™×œ×™×.";
               }
 
               function readStoredGoals() {
@@ -4112,6 +4224,15 @@ def build_fragment(
                   .replace(/^[-_]+|[-_]+$/g, "");
               }
 
+              function deriveAmbassadorNicknameFromEmail(email) {
+                const normalizedEmail = String(email || "").trim().toLowerCase();
+                const atIndex = normalizedEmail.lastIndexOf("@");
+                if (atIndex <= 0 || atIndex === normalizedEmail.length - 1) {
+                  return "";
+                }
+                return normalizeUrlSlug(normalizedEmail.slice(0, atIndex));
+              }
+
               function normalizeAmbassadorDirectory(records) {
                 if (!Array.isArray(records)) {
                   return [];
@@ -4122,7 +4243,7 @@ def build_fragment(
                     const fullName = String(record?.fullName || record?.name || "").trim();
                     const email = String(record?.email || "").trim().toLowerCase();
                     const phone = String(record?.phone || "").trim();
-                    const nickname = normalizeUrlSlug(record?.nickname || record?.slug || "");
+                    const nickname = normalizeUrlSlug(record?.nickname || record?.slug || "") || deriveAmbassadorNicknameFromEmail(email);
                     if (!fullName || !nickname) {
                       return null;
                     }
@@ -4166,7 +4287,7 @@ def build_fragment(
 
               function setAmbassadorDirectoryStatus(message, tone = "neutral") {
                 state.ui.ambassadorDirectoryStatus = {
-                  message: String(message || "עדיין לא נטען קובץ שגרירים. אפשר להעלות CSV כדי לייצר לינקים אישיים."),
+                  message: String(message || "×¢×“×™×™×Ÿ ×œ× × ×˜×¢×Ÿ ×§×•×‘×¥ ×©×’×¨×™×¨×™×. ××¤×©×¨ ×œ×”×¢×œ×•×ª CSV ×›×“×™ ×œ×™×™×¦×¨ ×œ×™× ×§×™× ××™×©×™×™×."),
                   tone: String(tone || "neutral"),
                 };
                 const status = elements.campaignDesignerPanel?.querySelector("[data-ambassador-status]");
@@ -4183,7 +4304,7 @@ def build_fragment(
 
               function getAmbassadorDirectoryStatus() {
                 return state.ui.ambassadorDirectoryStatus || {
-                  message: "עדיין לא נטען קובץ שגרירים. אפשר להעלות CSV כדי לייצר לינקים אישיים.",
+                  message: "×¢×“×™×™×Ÿ ×œ× × ×˜×¢×Ÿ ×§×•×‘×¥ ×©×’×¨×™×¨×™×. ××¤×©×¨ ×œ×”×¢×œ×•×ª CSV ×›×“×™ ×œ×™×™×¦×¨ ×œ×™× ×§×™× ××™×©×™×™×.",
                   tone: "neutral",
                 };
               }
@@ -4221,20 +4342,25 @@ def build_fragment(
 
                 const missingRows = [];
                 const duplicateNicknames = [];
+                const generatedNicknames = [];
                 const records = [];
                 const seenNicknames = new Set();
 
                 rawRows.forEach((row, index) => {
-                  const fullName = pickValue(row, ["full_name", "Full Name", "name", "Name", "שם מלא"]);
-                  const email = pickValue(row, ["email", "Email", "מייל", "דואל"]);
-                  const phone = pickValue(row, ["phone", "Phone", "טלפון", "mobile"]);
-                  const nickname = normalizeUrlSlug(pickValue(row, ["nickname", "Nickname", "alias", "slug", "כינוי"]));
-                  const team = pickValue(row, ["team", "Team", "group", "קבוצה", "צוות"]);
-                  const personalTarget = pickValue(row, ["personal_target", "target", "Target", "יעד אישי"]);
-                  const status = pickValue(row, ["status", "Status", "סטטוס"]);
+                  const fullName = pickValue(row, ["full_name", "Full Name", "name", "Name", "×©× ×ž×œ×"]);
+                  const email = pickValue(row, ["email", "Email", "×ž×™×™×œ", "×“×•××œ"]);
+                  const phone = pickValue(row, ["phone", "Phone", "×˜×œ×¤×•×Ÿ", "mobile"]);
+                  const suppliedNickname = normalizeUrlSlug(pickValue(row, ["nickname", "Nickname", "alias", "slug", "×›×™× ×•×™"]));
+                  const nickname = suppliedNickname || deriveAmbassadorNicknameFromEmail(email);
+                  const team = pickValue(row, ["team", "Team", "group", "×§×‘×•×¦×”", "×¦×•×•×ª"]);
+                  const personalTarget = pickValue(row, ["personal_target", "target", "Target", "×™×¢×“ ××™×©×™"]);
+                  const status = pickValue(row, ["status", "Status", "×¡×˜×˜×•×¡"]);
                   if (!fullName || !nickname) {
                     missingRows.push(index + 2);
                     return;
+                  }
+                  if (!suppliedNickname) {
+                    generatedNicknames.push(index + 2);
                   }
                   if (seenNicknames.has(nickname)) {
                     duplicateNicknames.push(nickname);
@@ -4256,6 +4382,7 @@ def build_fragment(
                   records: normalizeAmbassadorDirectory(records),
                   missingRows,
                   duplicateNicknames,
+                  generatedNicknames,
                   totalRows: rawRows.length,
                 };
               }
@@ -4325,7 +4452,7 @@ def build_fragment(
 
               function setCampaignSettingsStatus(message, tone = "neutral") {
                 state.ui.campaignSettingsStatus = {
-                  message: String(message || "ההגדרות נשמרות מקומית בדפדפן זה בלבד."),
+                  message: String(message || "×”×”×’×“×¨×•×ª × ×©×ž×¨×•×ª ×ž×§×•×ž×™×ª ×‘×“×¤×“×¤×Ÿ ×–×” ×‘×œ×‘×“."),
                   tone: String(tone || "neutral"),
                 };
                 const status = elements.campaignDesignerPanel?.querySelector("[data-settings-status]");
@@ -4342,21 +4469,21 @@ def build_fragment(
 
               function getCampaignSettingsStatus() {
                 return state.ui.campaignSettingsStatus || {
-                  message: "ההגדרות נשמרות מקומית בדפדפן זה בלבד.",
+                  message: "×”×”×’×“×¨×•×ª × ×©×ž×¨×•×ª ×ž×§×•×ž×™×ª ×‘×“×¤×“×¤×Ÿ ×–×” ×‘×œ×‘×“.",
                   tone: "neutral",
                 };
               }
 
               function getCampaignBuilderStatus() {
                 return state.ui.campaignBuilderStatus || {
-                  message: "טיוטת הקמפיין עדיין לא נשמרה בשרת.",
+                  message: "×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ ×¢×“×™×™×Ÿ ×œ× × ×©×ž×¨×” ×‘×©×¨×ª.",
                   tone: "neutral",
                 };
               }
 
               function setCampaignBuilderStatus(message, tone = "neutral") {
                 state.ui.campaignBuilderStatus = {
-                  message: String(message || "טיוטת הקמפיין עדיין לא נשמרה בשרת."),
+                  message: String(message || "×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ ×¢×“×™×™×Ÿ ×œ× × ×©×ž×¨×” ×‘×©×¨×ª."),
                   tone: String(tone || "neutral"),
                 };
                 const status = elements.campaignDesignerPanel?.querySelector("[data-builder-status]");
@@ -4373,8 +4500,8 @@ def build_fragment(
 
               function persistCampaignPageSettings(
                 settings,
-                successMessage = "ההגדרות נשמרו מקומית בדפדפן זה.",
-                failureMessage = "ההגדרות עודכנו בתצוגה הנוכחית, אבל לא נשמרו בדפדפן. ייתכן שנפח האחסון המקומי התמלא."
+                successMessage = "×”×”×’×“×¨×•×ª × ×©×ž×¨×• ×ž×§×•×ž×™×ª ×‘×“×¤×“×¤×Ÿ ×–×”.",
+                failureMessage = "×”×”×’×“×¨×•×ª ×¢×•×“×›× ×• ×‘×ª×¦×•×’×” ×”× ×•×›×—×™×ª, ××‘×œ ×œ× × ×©×ž×¨×• ×‘×“×¤×“×¤×Ÿ. ×™×™×ª×›×Ÿ ×©× ×¤×— ×”××—×¡×•×Ÿ ×”×ž×§×•×ž×™ ×”×ª×ž×œ×."
               ) {
                 const persisted = storeCampaignPageSettings(settings);
                 if (persisted) {
@@ -4389,7 +4516,7 @@ def build_fragment(
                 const start = basics?.startDate ? formatDate(basics.startDate) : "";
                 const end = basics?.endDate ? formatDate(basics.endDate) : "";
                 if (start && end) {
-                  return `${start}–${end}`;
+                  return `${start}â€“${end}`;
                 }
                 return start || end || INITIAL_CAMPAIGN_PAGE_SETTINGS.projectDatesLabel || "";
               }
@@ -5052,7 +5179,7 @@ def build_fragment(
                 const currentRegistry = syncCampaignRegistryFromState({ persistRegistry: false });
                 const currentScope = getActiveCampaignIdentity(currentRegistry, currentRegistry.activeCampaignId);
                 const snapshot = createDefaultCampaignSnapshot();
-                const name = getUniqueCampaignName("קמפיין חדש", currentRegistry);
+                const name = getUniqueCampaignName("×§×ž×¤×™×™×Ÿ ×—×“×©", currentRegistry);
                 const slug = getUniqueCampaignSlug("new-campaign", currentRegistry);
                 snapshot.basics.campaignName = name;
                 snapshot.basics.slug = slug;
@@ -5078,13 +5205,13 @@ def build_fragment(
                 applyCampaignBuilderConfig(entry.config, { preserveSourceConfig: false });
                 persistActiveCampaignLegacyState();
                 storeCampaignRegistry(nextRegistry);
-                setCampaignBuilderStatus(`נוצר קמפיין חדש: ${name}.`, "success");
+                setCampaignBuilderStatus(`× ×•×¦×¨ ×§×ž×¤×™×™×Ÿ ×—×“×©: ${name}.`, "success");
                 return entry;
               }
 
               function formatCampaignSavedAt(isoText) {
                 if (!isoText) {
-                  return "טרם נשמר";
+                  return "×˜×¨× × ×©×ž×¨";
                 }
                 return formatDateTime(isoText);
               }
@@ -5101,61 +5228,61 @@ def build_fragment(
                 const permissions = snapshot.permissions || {};
 
                 if (basics.campaignName) {
-                  ready.push(`זהות קמפיין: ${basics.campaignName}`);
+                  ready.push(`×–×”×•×ª ×§×ž×¤×™×™×Ÿ: ${basics.campaignName}`);
                 } else {
-                  blocking.push("חסרה כותרת קמפיין.");
+                  blocking.push("×—×¡×¨×” ×›×•×ª×¨×ª ×§×ž×¤×™×™×Ÿ.");
                 }
                 if (basics.slug) {
-                  ready.push(`Slug ציבורי: ${basics.slug}`);
+                  ready.push(`Slug ×¦×™×‘×•×¨×™: ${basics.slug}`);
                 } else {
-                  blocking.push("חסר slug ציבורי.");
+                  blocking.push("×—×¡×¨ slug ×¦×™×‘×•×¨×™.");
                 }
                 if (Number(basics.target || 0) > 0) {
-                  ready.push(`יעד קמפיין: ${formatAmount(basics.target)}`);
+                  ready.push(`×™×¢×“ ×§×ž×¤×™×™×Ÿ: ${formatAmount(basics.target)}`);
                 } else {
-                  blocking.push("יש להגדיר יעד גיוס גדול מ־0.");
+                  blocking.push("×™×© ×œ×”×’×“×™×¨ ×™×¢×“ ×’×™×•×¡ ×’×“×•×œ ×žÖ¾0.");
                 }
                 if (basics.startDate && basics.endDate) {
-                  ready.push(`חלון קמפיין: ${formatDate(basics.startDate)} עד ${formatDate(basics.endDate)}`);
+                  ready.push(`×—×œ×•×Ÿ ×§×ž×¤×™×™×Ÿ: ${formatDate(basics.startDate)} ×¢×“ ${formatDate(basics.endDate)}`);
                   if (`${basics.endDate}T${basics.endTime || "23:59"}` < `${basics.startDate}T${basics.startTime || "00:00"}`) {
-                    blocking.push("תאריך/שעת הסיום מוקדמים מתאריך/שעת ההתחלה.");
+                    blocking.push("×ª××¨×™×š/×©×¢×ª ×”×¡×™×•× ×ž×•×§×“×ž×™× ×ž×ª××¨×™×š/×©×¢×ª ×”×”×ª×—×œ×”.");
                   }
                 } else {
-                  blocking.push("יש להגדיר תאריכי התחלה וסיום.");
+                  blocking.push("×™×© ×œ×”×’×“×™×¨ ×ª××¨×™×›×™ ×”×ª×—×œ×” ×•×¡×™×•×.");
                 }
                 if (donation.presets?.length) {
-                  ready.push(`${formatNumber(donation.presets.length)} סכומי תרומה מוכנים.`);
+                  ready.push(`${formatNumber(donation.presets.length)} ×¡×›×•×ž×™ ×ª×¨×•×ž×” ×ž×•×›× ×™×.`);
                 } else {
-                  blocking.push("אין סכומי תרומה מוגדרים.");
+                  blocking.push("××™×Ÿ ×¡×›×•×ž×™ ×ª×¨×•×ž×” ×ž×•×’×“×¨×™×.");
                 }
                 if (donation.externalDonationUrl) {
-                  ready.push("קיים handoff לסליקה חיצונית.");
+                  ready.push("×§×™×™× handoff ×œ×¡×œ×™×§×” ×—×™×¦×•× ×™×ª.");
                 } else {
-                  blocking.push("חסר קישור חיצוני להמשך התרומה.");
+                  blocking.push("×—×¡×¨ ×§×™×©×•×¨ ×—×™×¦×•× ×™ ×œ×”×ž×©×š ×”×ª×¨×•×ž×”.");
                 }
                 if (ambassadors.records?.length) {
-                  ready.push(`${formatNumber(ambassadors.records.length)} שגרירים מוכנים.`);
+                  ready.push(`${formatNumber(ambassadors.records.length)} ×©×’×¨×™×¨×™× ×ž×•×›× ×™×.`);
                 } else {
-                  warnings.push("עדיין לא נטענו שגרירים.");
+                  warnings.push("×¢×“×™×™×Ÿ ×œ× × ×˜×¢× ×• ×©×’×¨×™×¨×™×.");
                 }
                 if (goals.placePrizes?.length || goals.tierPrizes?.length) {
-                  ready.push("מודל פרסים פעיל.");
+                  ready.push("×ž×•×“×œ ×¤×¨×¡×™× ×¤×¢×™×œ.");
                 } else {
-                  warnings.push("אין טבלת פרסים פעילה.");
+                  warnings.push("××™×Ÿ ×˜×‘×œ×ª ×¤×¨×¡×™× ×¤×¢×™×œ×”.");
                 }
                 if (dataSource.mode === "api") {
                   if (dataSource.api?.endpoint) {
-                    ready.push("חיבור API הוגדר.");
+                    ready.push("×—×™×‘×•×¨ API ×”×•×’×“×¨.");
                   } else {
-                    blocking.push("מצב API נבחר אך חסר endpoint.");
+                    blocking.push("×ž×¦×‘ API × ×‘×—×¨ ××š ×—×¡×¨ endpoint.");
                   }
                 } else {
-                  warnings.push("המערכת במצב טעינת קובץ ולא במצב API.");
+                  warnings.push("×”×ž×¢×¨×›×ª ×‘×ž×¦×‘ ×˜×¢×™× ×ª ×§×•×‘×¥ ×•×œ× ×‘×ž×¦×‘ API.");
                 }
                 if ((permissions.admins?.length || 0) + (permissions.managers?.length || 0) > 0) {
-                  ready.push("הוגדרו בעלי גישה ניהולית לקמפיין.");
+                  ready.push("×”×•×’×“×¨×• ×‘×¢×œ×™ ×’×™×©×” × ×™×”×•×œ×™×ª ×œ×§×ž×¤×™×™×Ÿ.");
                 } else {
-                  warnings.push("לא הוגדרו עדיין תפקידי מנהלים בתוך ה־builder.");
+                  warnings.push("×œ× ×”×•×’×“×¨×• ×¢×“×™×™×Ÿ ×ª×¤×§×™×“×™ ×ž× ×”×œ×™× ×‘×ª×•×š ×”Ö¾builder.");
                 }
                 return { ready, warnings, blocking };
               }
@@ -5194,16 +5321,16 @@ def build_fragment(
                 if (template === "emergency") {
                   nextBuilder.basics.status = "scheduled";
                   nextBuilder.basics.endDate = nextBuilder.basics.startDate || nextBuilder.basics.endDate;
-                  state.campaignPage.primaryCtaLabel = "לתרומה מיידית";
+                  state.campaignPage.primaryCtaLabel = "×œ×ª×¨×•×ž×” ×ž×™×™×“×™×ª";
                 } else if (template === "community") {
-                  state.campaignPage.primaryCtaLabel = "מצטרפים לקמפיין הקהילתי";
+                  state.campaignPage.primaryCtaLabel = "×ž×¦×˜×¨×¤×™× ×œ×§×ž×¤×™×™×Ÿ ×”×§×”×™×œ×ª×™";
                 } else if (template === "long-running") {
                   nextBuilder.basics.status = "live";
                 } else {
                   state.campaignPage.primaryCtaLabel = INITIAL_CAMPAIGN_PAGE_SETTINGS.primaryCtaLabel;
                 }
                 state.campaignBuilder = normalizeCampaignBuilderConfig(nextBuilder);
-                queueCampaignBuilderAutosave("תבנית הקמפיין עודכנה ונשמרת בטיוטה.");
+                queueCampaignBuilderAutosave("×ª×‘× ×™×ª ×”×§×ž×¤×™×™×Ÿ ×¢×•×“×›× ×” ×•× ×©×ž×¨×ª ×‘×˜×™×•×˜×”.");
               }
 
               function duplicateCampaignBuilderDraft() {
@@ -5239,7 +5366,7 @@ def build_fragment(
                 applyCampaignBuilderConfig(entry.config, { preserveSourceConfig: false });
                 persistActiveCampaignLegacyState();
                 storeCampaignRegistry(nextRegistry);
-                setCampaignBuilderStatus(`נוצר קמפיין משוכפל חדש עבור ${copyName}.`, "success");
+                setCampaignBuilderStatus(`× ×•×¦×¨ ×§×ž×¤×™×™×Ÿ ×ž×©×•×›×¤×œ ×—×“×© ×¢×‘×•×¨ ${copyName}.`, "success");
                 renderCampaignDesigner(true);
                 renderProjectPage();
               }
@@ -5253,7 +5380,7 @@ def build_fragment(
                 }
               }
 
-              function queueCampaignBuilderAutosave(message = "טיוטת הקמפיין נשמרת...") {
+              function queueCampaignBuilderAutosave(message = "×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ × ×©×ž×¨×ª...") {
                 clearCampaignBuilderAutosaveTimer();
                 setCampaignBuilderStatus(message, "neutral");
                 campaignBuilderAutosaveTimerId = window.setTimeout(() => {
@@ -5267,7 +5394,7 @@ def build_fragment(
                 const scope = getActiveCampaignIdentity(localRegistry, localRegistry.activeCampaignId);
                 const persistedLocal = [storeCampaignRegistry(localRegistry), persistActiveCampaignLegacyState()].every(Boolean);
                 if (!persistedLocal && !options.silent) {
-                  setCampaignBuilderStatus("חלק מהטיוטה לא נשמר מקומית בדפדפן.", "warning");
+                  setCampaignBuilderStatus("×—×œ×§ ×ž×”×˜×™×•×˜×” ×œ× × ×©×ž×¨ ×ž×§×•×ž×™×ª ×‘×“×¤×“×¤×Ÿ.", "warning");
                 }
                 const endpoint = buildScopedAdminEndpoint("campaign-config", scope);
                 if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
@@ -5277,7 +5404,7 @@ def build_fragment(
                     updatedAt: state.campaignBuilder.meta.lastSavedAt,
                     updatedBy: state.campaignBuilder.meta.lastSavedBy,
                   });
-                  setCampaignBuilderStatus(`טיוטת קמפיין נשמרה מקומית · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                  setCampaignBuilderStatus(`×˜×™×•×˜×ª ×§×ž×¤×™×™×Ÿ × ×©×ž×¨×” ×ž×§×•×ž×™×ª Â· ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                   return snapshot;
                 }
                 const { response, payload } = await authRequest(endpoint, {
@@ -5285,7 +5412,7 @@ def build_fragment(
                   body: { config: localRegistry },
                 });
                 if (!response.ok) {
-                  throw new Error(payload?.message || "שמירת טיוטת הקמפיין בשרת נכשלה.");
+                  throw new Error(payload?.message || "×©×ž×™×¨×ª ×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ ×‘×©×¨×ª × ×›×©×œ×”.");
                 }
                 applyServerScope(payload, scope);
                 state.campaignBuilder.meta.lastSavedAt = payload?.updatedAt || new Date().toISOString();
@@ -5296,7 +5423,7 @@ def build_fragment(
                   updatedAt: state.campaignBuilder.meta.lastSavedAt,
                   updatedBy: state.campaignBuilder.meta.lastSavedBy,
                 });
-                setCampaignBuilderStatus(`נשמר בשרת · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                setCampaignBuilderStatus(`× ×©×ž×¨ ×‘×©×¨×ª Â· ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                 return getCampaignRegistryActiveEntry(state.campaignRegistry)?.config || snapshot;
               }
 
@@ -5336,13 +5463,13 @@ def build_fragment(
                       updatedAt: state.campaignBuilder.meta.lastSavedAt,
                       updatedBy: state.campaignBuilder.meta.lastSavedBy,
                     });
-                    setCampaignBuilderStatus(`נטען מהשרת · ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                    setCampaignBuilderStatus(`× ×˜×¢×Ÿ ×ž×”×©×¨×ª Â· ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                     return state.campaignBuilder;
                   }
                 } catch (_error) {
                   state.auth.campaignConfigLoaded = false;
                 }
-                setCampaignBuilderStatus("לא נטענה טיוטת שרת. עובדים כרגע על הגדרות מקומיות.", "warning");
+                setCampaignBuilderStatus("×œ× × ×˜×¢× ×” ×˜×™×•×˜×ª ×©×¨×ª. ×¢×•×‘×“×™× ×›×¨×’×¢ ×¢×œ ×”×’×“×¨×•×ª ×ž×§×•×ž×™×•×ª.", "warning");
                 return state.campaignBuilder;
               }
 
@@ -5464,7 +5591,7 @@ def build_fragment(
               }
 
               function getLocalAdminEntryHint() {
-                return "כדי להיכנס לפאנל הניהול יש לפתוח את המערכת דרך http://127.0.0.1:8767/ או דרך http://127.0.0.1:8766/yellow-project-dashboard-browser.html ולא דרך קובץ file:// מקומי.";
+                return "×›×“×™ ×œ×”×™×›× ×¡ ×œ×¤×× ×œ ×”× ×™×”×•×œ ×™×© ×œ×¤×ª×•×— ××ª ×”×ž×¢×¨×›×ª ×“×¨×š http://127.0.0.1:8767/ ××• ×“×¨×š http://127.0.0.1:8766/yellow-project-dashboard-browser.html ×•×œ× ×“×¨×š ×§×•×‘×¥ file:// ×ž×§×•×ž×™.";
               }
 
               function buildAuthUrl(path) {
@@ -5755,15 +5882,15 @@ def build_fragment(
                   elements.loginPasswordSetupNote.style.display = state.auth.setupMode ? "" : "none";
                 }
                 if (elements.loginButton) {
-                  elements.loginButton.textContent = state.auth.setupMode ? "שמירת סיסמה וכניסה" : "כניסה לפאנל הניהול";
+                  elements.loginButton.textContent = state.auth.setupMode ? "×©×ž×™×¨×ª ×¡×™×¡×ž×” ×•×›× ×™×¡×”" : "×›× ×™×¡×” ×œ×¤×× ×œ ×”× ×™×”×•×œ";
                 }
                 if (elements.loginModeHint) {
                   if (!canUseBackendAuth()) {
                     elements.loginModeHint.textContent = getLocalAdminEntryHint();
                   } else {
                     elements.loginModeHint.textContent = state.auth.setupMode
-                      ? "זו כניסה ראשונה למייל הזה. בחרו סיסמה אישית, אשרו אותה והמערכת תשמור אותה בשרת המקומי."
-                      : "הכניסה נשמרת ב-session מקומי מאובטח בשרת. בפריסה ציבורית יש להפעיל HTTPS וניהול secrets מסודר.";
+                      ? "×–×• ×›× ×™×¡×” ×¨××©×•× ×” ×œ×ž×™×™×œ ×”×–×”. ×‘×—×¨×• ×¡×™×¡×ž×” ××™×©×™×ª, ××©×¨×• ××•×ª×” ×•×”×ž×¢×¨×›×ª ×ª×©×ž×•×¨ ××•×ª×” ×‘×©×¨×ª ×”×ž×§×•×ž×™."
+                      : "×”×›× ×™×¡×” × ×©×ž×¨×ª ×‘-session ×ž×§×•×ž×™ ×ž××•×‘×˜×— ×‘×©×¨×ª. ×‘×¤×¨×™×¡×” ×¦×™×‘×•×¨×™×ª ×™×© ×œ×”×¤×¢×™×œ HTTPS ×•× ×™×”×•×œ secrets ×ž×¡×•×“×¨.";
                   }
                 }
                 if (elements.loginPassword) {
@@ -5873,13 +6000,13 @@ def build_fragment(
                 const { response, payload } = await authRequest(endpoint);
                 if (!response.ok || !Array.isArray(payload?.rows) || !payload?.meta) {
                   state.auth.adminDatasetLoaded = false;
-                  throw new Error(payload?.message || "טעינת הנתונים המוגנים נכשלה.");
+                  throw new Error(payload?.message || "×˜×¢×™× ×ª ×”× ×ª×•× ×™× ×”×ž×•×’× ×™× × ×›×©×œ×”.");
                 }
 
                 applyServerScope(payload, scope);
                 state.rows = enrichRows(payload.rows, payload.meta);
                 state.meta = payload.meta;
-                state.sourceLabel = payload.sourceLabel || "קובץ בסיס מאובטח";
+                state.sourceLabel = payload.sourceLabel || "×§×•×‘×¥ ×‘×¡×™×¡ ×ž××•×‘×˜×—";
                 state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
                 state.auth.adminDatasetLoaded = true;
                 state.filters = getDefaultFilters(state.meta);
@@ -5923,7 +6050,7 @@ def build_fragment(
 
                 state.rows = enrichRows(payload.rows, payload.meta);
                 state.meta = payload.meta;
-                state.sourceLabel = payload.sourceLabel || "קובץ בסיס ציבורי";
+                state.sourceLabel = payload.sourceLabel || "×§×•×‘×¥ ×‘×¡×™×¡ ×¦×™×‘×•×¨×™";
                 state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
                 state.filters = getDefaultFilters(state.meta);
                 resetFilterOptions();
@@ -5945,16 +6072,27 @@ def build_fragment(
                 elements.sourceApiAutoRefresh.value = String(config.api.autoRefreshMinutes ?? 5);
                 elements.sourceApiBearerToken.value = "";
                 elements.sourceApiBearerToken.placeholder = config.api.hasBearerToken
-                  ? "קיים token שמור בשרת. הזן/י ערך חדש רק אם רוצים להחליף."
-                  : "השאר/י ריק כדי לעבוד ללא token";
+                  ? "×§×™×™× token ×©×ž×•×¨ ×‘×©×¨×ª. ×”×–×Ÿ/×™ ×¢×¨×š ×—×“×© ×¨×§ ×× ×¨×•×¦×™× ×œ×”×—×œ×™×£."
+                  : "×”×©××¨/×™ ×¨×™×§ ×›×“×™ ×œ×¢×‘×•×“ ×œ×œ× token";
                 elements.sourceApiHeaders.value = config.api.headersText;
                 elements.sourceApiBody.value = config.api.bodyText;
                 elements.sourceApiFieldMap.value = config.api.fieldMapText;
+                elements.sourceGoogleUrl.value = config.googleSheets.spreadsheetUrl;
+                elements.sourceGoogleId.value = config.googleSheets.spreadsheetId;
+                elements.sourceGoogleGid.value = config.googleSheets.gid;
+                elements.sourceGoogleSheetName.value = config.googleSheets.sheetName;
+                elements.sourceGoogleRange.value = config.googleSheets.range;
+                elements.sourceGoogleAccessMode.value = config.googleSheets.accessMode;
+                elements.sourceGoogleSyncInterval.value = String(config.googleSheets.syncIntervalMinutes ?? 5);
+                elements.sourceGoogleFieldMap.value = config.googleSheets.fieldMapText;
                 if (elements.sourceApiFields) {
                   elements.sourceApiFields.hidden = config.mode !== "api";
                 }
+                if (elements.sourceGoogleFields) {
+                  elements.sourceGoogleFields.hidden = config.mode !== "google_sheets";
+                }
                 if (elements.refreshSourceApi) {
-                  elements.refreshSourceApi.disabled = config.mode !== "api";
+                  elements.refreshSourceApi.disabled = config.mode === "file";
                 }
                 const status = getSourceConfigStatus();
                 setSourceConfigStatus(status.message, status.tone);
@@ -5974,15 +6112,17 @@ def build_fragment(
                     state.sourceConfig = normalizeSourceConfig(payload.config);
                     setSourceConfigStatus(
                       state.sourceConfig.mode === "api"
-                        ? "חיבור ה-API נטען מהשרת ומוכן למשיכה או לרענון אוטומטי."
-                        : "מקור הנתונים הפעיל נשאר על טעינת קובץ ידנית.",
+                        ? "×—×™×‘×•×¨ ×”-API × ×˜×¢×Ÿ ×ž×”×©×¨×ª ×•×ž×•×›×Ÿ ×œ×ž×©×™×›×” ××• ×œ×¨×¢× ×•×Ÿ ××•×˜×•×ž×˜×™."
+                        : state.sourceConfig.mode === "google_sheets"
+                          ? "×—×™×‘×•×¨ Google Sheets × ×˜×¢×Ÿ ×ž×”×©×¨×ª ×•×ž×•×›×Ÿ ×œ×¡× ×›×¨×•×Ÿ ×™×“× ×™ ××• ×ž×ª×•×–×ž×Ÿ."
+                          : "×ž×§×•×¨ ×”× ×ª×•× ×™× ×”×¤×¢×™×œ × ×©××¨ ×¢×œ ×˜×¢×™× ×ª ×§×•×‘×¥ ×™×“× ×™×ª.",
                       "success"
                     );
                   } else {
-                    setSourceConfigStatus(payload?.message || "לא ניתן היה לטעון את הגדרות מקור הנתונים מהשרת.", "warning");
+                    setSourceConfigStatus(payload?.message || "×œ× × ×™×ª×Ÿ ×”×™×” ×œ×˜×¢×•×Ÿ ××ª ×”×’×“×¨×•×ª ×ž×§×•×¨ ×”× ×ª×•× ×™× ×ž×”×©×¨×ª.", "warning");
                   }
                 } catch (_error) {
-                  setSourceConfigStatus("השרת זמין לחיבור מנהלים, אך הגדרות מקור הנתונים לא נטענו כרגע.", "warning");
+                  setSourceConfigStatus("×”×©×¨×ª ×–×ž×™×Ÿ ×œ×—×™×‘×•×¨ ×ž× ×”×œ×™×, ××š ×”×’×“×¨×•×ª ×ž×§×•×¨ ×”× ×ª×•× ×™× ×œ× × ×˜×¢× ×• ×›×¨×’×¢.", "warning");
                 }
                 renderSourceConfigControls();
                 return state.sourceConfig;
@@ -6004,8 +6144,27 @@ def build_fragment(
                     bodyText: elements.sourceApiBody?.value || "",
                     fieldMapText: elements.sourceApiFieldMap?.value || "",
                   },
+                  googleSheets: {
+                    spreadsheetUrl: elements.sourceGoogleUrl?.value || "",
+                    spreadsheetId: elements.sourceGoogleId?.value || "",
+                    gid: elements.sourceGoogleGid?.value || "",
+                    sheetName: elements.sourceGoogleSheetName?.value || "",
+                    range: elements.sourceGoogleRange?.value || "",
+                    accessMode: elements.sourceGoogleAccessMode?.value || "public_csv",
+                    syncEnabled: true,
+                    syncIntervalMinutes: elements.sourceGoogleSyncInterval?.value || state.sourceConfig.googleSheets.syncIntervalMinutes,
+                    fieldMapText: elements.sourceGoogleFieldMap?.value || "",
+                    lastSyncedAt: state.sourceConfig.googleSheets.lastSyncedAt,
+                    lastSuccessfulSyncAt: state.sourceConfig.googleSheets.lastSuccessfulSyncAt,
+                    lastChecksum: state.sourceConfig.googleSheets.lastChecksum,
+                    lastRowCount: state.sourceConfig.googleSheets.lastRowCount,
+                    lastStatus: state.sourceConfig.googleSheets.lastStatus,
+                    lastMessage: state.sourceConfig.googleSheets.lastMessage,
+                    lastSourceLabel: state.sourceConfig.googleSheets.lastSourceLabel,
+                  },
                 });
                 parseJsonObjectText(nextConfig.api.fieldMapText, getDefaultSourceFieldMap());
+                parseJsonObjectText(nextConfig.googleSheets.fieldMapText, getDefaultSourceFieldMap());
                 return nextConfig;
               }
 
@@ -6013,7 +6172,7 @@ def build_fragment(
                 const scope = options.scope || getActiveCampaignIdentity();
                 const endpoint = buildScopedAdminEndpoint("source-config", scope);
                 if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
-                  throw new Error("שמירת חיבור API זמינה רק למנהלים מחוברים דרך שרת הניהול.");
+                  throw new Error("×©×ž×™×¨×ª ×—×™×‘×•×¨ API ×–×ž×™× ×” ×¨×§ ×œ×ž× ×”×œ×™× ×ž×—×•×‘×¨×™× ×“×¨×š ×©×¨×ª ×”× ×™×”×•×œ.");
                 }
                 const nextConfig = collectSourceConfigFromControls();
                 const { response, payload } = await authRequest(endpoint, {
@@ -6021,14 +6180,14 @@ def build_fragment(
                   body: { config: nextConfig },
                 });
                 if (!response.ok) {
-                  throw new Error(payload?.message || "שמירת הגדרות מקור הנתונים נכשלה.");
+                  throw new Error(payload?.message || "×©×ž×™×¨×ª ×”×’×“×¨×•×ª ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×›×©×œ×”.");
                 }
                 applyServerScope(payload, scope);
                 state.sourceConfig = normalizeSourceConfig(payload?.config || nextConfig);
                 renderSourceConfigControls();
                 syncSourceAutoRefresh();
                 if (!options.silent) {
-                  setSourceConfigStatus(payload?.message || "חיבור מקור הנתונים נשמר בהצלחה.", "success");
+                  setSourceConfigStatus(payload?.message || "×—×™×‘×•×¨ ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×©×ž×¨ ×‘×”×¦×œ×—×”.", "success");
                 }
                 return state.sourceConfig;
               }
@@ -6068,7 +6227,7 @@ def build_fragment(
                 if (Array.isArray(payload?.items)) {
                   return payload.items;
                 }
-                throw new Error("תגובת ה-API לא כוללת מערך רשומות. יש לעדכן את recordsPath או את מבנה התגובה.");
+                throw new Error("×ª×’×•×‘×ª ×”-API ×œ× ×›×•×œ×œ×ª ×ž×¢×¨×š ×¨×©×•×ž×•×ª. ×™×© ×œ×¢×“×›×Ÿ ××ª recordsPath ××• ××ª ×ž×‘× ×” ×”×ª×’×•×‘×”.");
               }
 
               function mapJsonRecordsToRawRows(records, fieldMapText) {
@@ -6116,7 +6275,7 @@ def build_fragment(
                 const scope = options.scope || getActiveCampaignIdentity();
                 const endpoint = buildScopedAdminEndpoint("source-refresh", scope);
                 if (!canUseBackendAuth() || !endpoint || !isManagerAuthenticated()) {
-                  throw new Error("משיכת נתונים מה-API זמינה רק למנהלים מחוברים דרך שרת הניהול.");
+                  throw new Error("משיכת נתונים ממקור חיצוני זמינה רק למנהלים מחוברים דרך שרת הניהול.");
                 }
                 if (sourceRefreshInFlight) {
                   return false;
@@ -6125,26 +6284,30 @@ def build_fragment(
                 try {
                   const { response, payload } = await authRequest(endpoint, { method: "POST" });
                   if (!response.ok) {
-                    throw new Error(payload?.message || "משיכת הנתונים מהמערכת החיצונית נכשלה.");
+                    throw new Error(payload?.message || "משיכת הנתונים ממערכת המקור נכשלה.");
                   }
-                  const ingested = ingestApiRefreshPayload(payload);
                   applyServerScope(payload, scope);
-                  state.validation.base = ingested.validation;
-                  if (hasBlockingValidation(ingested.validation)) {
-                    throw new Error("ה-API החזיר נתונים, אך הם לא עומדים במבנה הנדרש לדשבורד.");
+                  if (payload?.payload || Array.isArray(payload?.rows)) {
+                    const ingested = ingestApiRefreshPayload(payload);
+                    state.validation.base = ingested.validation;
+                    if (hasBlockingValidation(ingested.validation)) {
+                      throw new Error("מערכת המקור החזירה נתונים, אך הם לא עומדים במבנה הנדרש לדשבורד.");
+                    }
+                    state.meta = ingested.meta;
+                    state.rows = enrichRows(ingested.normalized, ingested.meta);
+                    state.sourceLabel = payload?.sourceLabel || "Source sync";
+                    state.filters = getDefaultFilters(ingested.meta);
+                    state.auth.adminDatasetLoaded = true;
+                    resetFilterOptions();
+                  } else {
+                    await loadAdminDataset(scope);
                   }
-                  state.meta = ingested.meta;
-                  state.rows = enrichRows(ingested.normalized, ingested.meta);
-                  state.sourceLabel = payload?.sourceLabel || "API source";
-                  state.filters = getDefaultFilters(ingested.meta);
-                  state.auth.adminDatasetLoaded = true;
-                  resetFilterOptions();
                   setSourceConfigStatus(
-                    `הנתונים נמשכו מה-API בהצלחה${payload?.fetchedAt ? ` · עדכון אחרון ${formatDateTime(payload.fetchedAt)}` : ""}.`,
+                    `הנתונים סונכרנו בהצלחה${payload?.fetchedAt ? ` · עדכון אחרון ${formatDateTime(payload.fetchedAt)}` : ""}.`,
                     "success"
                   );
                   if (!options.silent) {
-                    setImportMessage(`הנתונים נמשכו בהצלחה ממערכת המקור במקום טעינת קובץ ידנית.`, "success");
+                    setImportMessage("הנתונים נמשכו בהצלחה ממערכת המקור במקום טעינת קובץ ידנית.", "success");
                   }
                   if (options.render !== false) {
                     renderAll();
@@ -6159,18 +6322,27 @@ def build_fragment(
                 clearSourceRefreshTimer();
                 const config = normalizeSourceConfig(state.sourceConfig);
                 state.sourceConfig = config;
-                if (!isManagerAuthenticated() || config.mode !== "api") {
+                if (!isManagerAuthenticated() || config.mode === "file") {
                   return;
                 }
-                const refreshMinutes = Number(config.api.autoRefreshMinutes || 0);
+                const refreshMinutes = Number(
+                  config.mode === "google_sheets"
+                    ? config.googleSheets.syncIntervalMinutes || 0
+                    : config.api.autoRefreshMinutes || 0
+                );
                 if (!Number.isFinite(refreshMinutes) || refreshMinutes < 1) {
                   return;
                 }
                 sourceRefreshTimerId = window.setInterval(async () => {
                   try {
-                    await refreshSourceDataFromApi({ silent: true });
+                    if (config.mode === "google_sheets") {
+                      await loadAdminDataset(getActiveCampaignIdentity());
+                      renderAll();
+                    } else {
+                      await refreshSourceDataFromApi({ silent: true });
+                    }
                   } catch (error) {
-                    setSourceConfigStatus(`הרענון האוטומטי מה-API נכשל: ${error?.message || "שגיאה לא ידועה"}`, "warning");
+                    setSourceConfigStatus(`הרענון האוטומטי ממקור הנתונים נכשל: ${error?.message || "שגיאה לא ידועה"}`, "warning");
                   }
                 }, refreshMinutes * 60 * 1000);
               }
@@ -6199,7 +6371,7 @@ def build_fragment(
                     try {
                       await loadAdminDataset(scope);
                       setImportMessage(
-                        `${error?.message || "משיכת הנתונים מה-API נכשלה."} נטען בינתיים מאגר הבסיס המוגן.`,
+                        `${error?.message || "×ž×©×™×›×ª ×”× ×ª×•× ×™× ×ž×”-API × ×›×©×œ×”."} × ×˜×¢×Ÿ ×‘×™× ×ª×™×™× ×ž××’×¨ ×”×‘×¡×™×¡ ×”×ž×•×’×Ÿ.`,
                         "warning"
                       );
                       return true;
@@ -6234,14 +6406,14 @@ def build_fragment(
                 }
                 elements.tablePanel.hidden = !state.ui.tableExpanded;
                 elements.tableToggle.setAttribute("aria-expanded", String(state.ui.tableExpanded));
-                elements.tableToggle.textContent = state.ui.tableExpanded ? "הסתר רשומות" : "הצג רשומות";
+                elements.tableToggle.textContent = state.ui.tableExpanded ? "×”×¡×ª×¨ ×¨×©×•×ž×•×ª" : "×”×¦×’ ×¨×©×•×ž×•×ª";
               }
 
               function renderBrandAssets() {
                 const settings = normalizeCampaignPageSettings(state.campaignPage || INITIAL_CAMPAIGN_PAGE_SETTINGS);
                 const campaignLogo = String(settings.campaignLogoUrl || INITIAL_CAMPAIGN_LOGO || "").trim();
                 const organizationLogo = String(settings.organizationLogoUrl || INITIAL_ORG_LOGO || "").trim();
-                const organizationName = String(state.campaignBuilder?.basics?.organizationName || "").trim() || "הארגון";
+                const organizationName = String(state.campaignBuilder?.basics?.organizationName || "").trim() || "×”××¨×’×•×Ÿ";
                 const primary = sanitizeHexColor(settings.theme?.primary, "#111D4A");
                 const secondary = sanitizeHexColor(settings.theme?.secondary, "#24377C");
                 const accent = sanitizeHexColor(settings.theme?.accent, "#FFD629");
@@ -6252,38 +6424,38 @@ def build_fragment(
                 root.style.setProperty("--topbar-accent", accent);
                 if (elements.topbarCampaignLogo) {
                   elements.topbarCampaignLogo.src = campaignLogo;
-                  elements.topbarCampaignLogo.alt = settings.title ? `לוגו ${settings.title}` : "לוגו הקמפיין";
+                  elements.topbarCampaignLogo.alt = settings.title ? `×œ×•×’×• ${settings.title}` : "×œ×•×’×• ×”×§×ž×¤×™×™×Ÿ";
                 }
                 if (elements.topbarLogo) {
                   elements.topbarLogo.src = organizationLogo;
-                  elements.topbarLogo.alt = `לוגו ${organizationName}`;
+                  elements.topbarLogo.alt = `×œ×•×’×• ${organizationName}`;
                 }
                 if (elements.publicLogo) {
                   elements.publicLogo.src = campaignLogo;
-                  elements.publicLogo.alt = settings.title ? `לוגו ${settings.title}` : "לוגו הקמפיין";
+                  elements.publicLogo.alt = settings.title ? `×œ×•×’×• ${settings.title}` : "×œ×•×’×• ×”×§×ž×¤×™×™×Ÿ";
                 }
                 if (elements.publicOrgLogo) {
                   elements.publicOrgLogo.src = organizationLogo;
-                  elements.publicOrgLogo.alt = `לוגו ${organizationName}`;
+                  elements.publicOrgLogo.alt = `×œ×•×’×• ${organizationName}`;
                 }
                 if (elements.loginCampaignLogo) {
                   elements.loginCampaignLogo.src = campaignLogo;
-                  elements.loginCampaignLogo.alt = settings.title ? `לוגו ${settings.title}` : "לוגו הקמפיין";
+                  elements.loginCampaignLogo.alt = settings.title ? `×œ×•×’×• ${settings.title}` : "×œ×•×’×• ×”×§×ž×¤×™×™×Ÿ";
                 }
                 if (elements.loginOrgLogo) {
                   elements.loginOrgLogo.src = organizationLogo;
-                  elements.loginOrgLogo.alt = `לוגו ${organizationName}`;
+                  elements.loginOrgLogo.alt = `×œ×•×’×• ${organizationName}`;
                 }
                 if (elements.logo) {
                   elements.logo.src = campaignLogo;
-                  elements.logo.alt = settings.title ? `לוגו ${settings.title}` : "לוגו הקמפיין";
+                  elements.logo.alt = settings.title ? `×œ×•×’×• ${settings.title}` : "×œ×•×’×• ×”×§×ž×¤×™×™×Ÿ";
                 }
                 if (elements.brandOrgLogo) {
                   elements.brandOrgLogo.src = organizationLogo;
-                  elements.brandOrgLogo.alt = `לוגו ${organizationName}`;
+                  elements.brandOrgLogo.alt = `×œ×•×’×• ${organizationName}`;
                 }
                 if (elements.topbarTitle) {
-                  elements.topbarTitle.textContent = "מערכת ניהול קמפיין";
+                  elements.topbarTitle.textContent = "×ž×¢×¨×›×ª × ×™×”×•×œ ×§×ž×¤×™×™×Ÿ";
                 }
               }
 
@@ -6293,83 +6465,83 @@ def build_fragment(
                 }
                 elements.pageRules.innerHTML = `
                   <article class="legal-hero app-card app-card--elevated">
-                    <h2>תקנון השתתפות</h2>
-                    <p>עמוד זה מציג נוסח תקנון שמבוסס על הקובץ "תקנון ראש השנה 2025", אך הותאם כבסיס עבודה לחלון הפרויקט הנוכחי: 23.08.2026 עד 01.09.2026. לפני שימוש חיצוני או פרסום יש להשלים התאמה משפטית סופית.</p>
+                    <h2>×ª×§× ×•×Ÿ ×”×©×ª×ª×¤×•×ª</h2>
+                    <p>×¢×ž×•×“ ×–×” ×ž×¦×™×’ × ×•×¡×— ×ª×§× ×•×Ÿ ×©×ž×‘×•×¡×¡ ×¢×œ ×”×§×•×‘×¥ "×ª×§× ×•×Ÿ ×¨××© ×”×©× ×” 2025", ××š ×”×•×ª×× ×›×‘×¡×™×¡ ×¢×‘×•×“×” ×œ×—×œ×•×Ÿ ×”×¤×¨×•×™×§×˜ ×”× ×•×›×—×™: 23.08.2026 ×¢×“ 01.09.2026. ×œ×¤× ×™ ×©×™×ž×•×© ×—×™×¦×•× ×™ ××• ×¤×¨×¡×•× ×™×© ×œ×”×©×œ×™× ×”×ª××ž×” ×ž×©×¤×˜×™×ª ×¡×•×¤×™×ª.</p>
                   </article>
                   <div class="legal-layout">
                     <aside class="legal-sidebar app-card">
                       <div class="section-header">
-                        <h3>תוכן עניינים</h3>
+                        <h3>×ª×•×›×Ÿ ×¢× ×™×™× ×™×</h3>
                       </div>
-                      <nav aria-label="תוכן עניינים - תקנון">
-                        <a href="#rules-section-1">1. כללי התחרות ומטרותיה</a>
-                        <a href="#rules-section-2">2. מבנה התחרות והתנהלותה</a>
-                        <a href="#rules-section-3">3. ההשתתפות בתחרות</a>
-                        <a href="#rules-section-4">4. תנאים ומגבלות</a>
-                        <a href="#rules-section-5">5. תנאים ומגבלות - המארגנים</a>
+                      <nav aria-label="×ª×•×›×Ÿ ×¢× ×™×™× ×™× - ×ª×§× ×•×Ÿ">
+                        <a href="#rules-section-1">1. ×›×œ×œ×™ ×”×ª×—×¨×•×ª ×•×ž×˜×¨×•×ª×™×”</a>
+                        <a href="#rules-section-2">2. ×ž×‘× ×” ×”×ª×—×¨×•×ª ×•×”×ª× ×”×œ×•×ª×”</a>
+                        <a href="#rules-section-3">3. ×”×”×©×ª×ª×¤×•×ª ×‘×ª×—×¨×•×ª</a>
+                        <a href="#rules-section-4">4. ×ª× ××™× ×•×ž×’×‘×œ×•×ª</a>
+                        <a href="#rules-section-5">5. ×ª× ××™× ×•×ž×’×‘×œ×•×ª - ×”×ž××¨×’× ×™×</a>
                       </nav>
                     </aside>
                     <article class="legal-document app-card legal-layout__content">
                       <section id="rules-section-1">
-                        <h3>1. כללי התחרות ומטרותיה</h3>
-                        <p>מטרת הפרויקט היא איסוף סכום כסף גדול ככל הניתן עבור רכישת מוצרי מזון שייארזו ויחולקו לנזקקים, בהתאם ליעדי הקמפיין הפעיל.</p>
+                        <h3>1. ×›×œ×œ×™ ×”×ª×—×¨×•×ª ×•×ž×˜×¨×•×ª×™×”</h3>
+                        <p>×ž×˜×¨×ª ×”×¤×¨×•×™×§×˜ ×”×™× ××™×¡×•×£ ×¡×›×•× ×›×¡×£ ×’×“×•×œ ×›×›×œ ×”× ×™×ª×Ÿ ×¢×‘×•×¨ ×¨×›×™×©×ª ×ž×•×¦×¨×™ ×ž×–×•×Ÿ ×©×™×™××¨×–×• ×•×™×—×•×œ×§×• ×œ× ×–×§×§×™×, ×‘×”×ª×× ×œ×™×¢×“×™ ×”×§×ž×¤×™×™×Ÿ ×”×¤×¢×™×œ.</p>
                         <ol>
-                          <li>התרומות ייאספו באמצעות פלטפורמת גיוס הכספים <strong>giveback</strong>, באמצעות מתנדבים, להלן: שגרירים, אשר יתרימו כספים דרך לינק, קישור, פרטי לכל שגריר.</li>
-                          <li>עם סיום התחרות יוכרז כמנצח השגריר שבאמצעות הקישור הפרטי שלו נתרם סכום הכסף הגבוה ביותר. הבא בתור יוכרז כזוכה במקום השני וכך הלאה.</li>
-                          <li>התקנון מנוסח בלשון זכר אך מיועד לשני המינים.</li>
+                          <li>×”×ª×¨×•×ž×•×ª ×™×™××¡×¤×• ×‘××ž×¦×¢×•×ª ×¤×œ×˜×¤×•×¨×ž×ª ×’×™×•×¡ ×”×›×¡×¤×™× <strong>giveback</strong>, ×‘××ž×¦×¢×•×ª ×ž×ª× ×“×‘×™×, ×œ×”×œ×Ÿ: ×©×’×¨×™×¨×™×, ××©×¨ ×™×ª×¨×™×ž×• ×›×¡×¤×™× ×“×¨×š ×œ×™× ×§, ×§×™×©×•×¨, ×¤×¨×˜×™ ×œ×›×œ ×©×’×¨×™×¨.</li>
+                          <li>×¢× ×¡×™×•× ×”×ª×—×¨×•×ª ×™×•×›×¨×– ×›×ž× ×¦×— ×”×©×’×¨×™×¨ ×©×‘××ž×¦×¢×•×ª ×”×§×™×©×•×¨ ×”×¤×¨×˜×™ ×©×œ×• × ×ª×¨× ×¡×›×•× ×”×›×¡×£ ×”×’×‘×•×” ×‘×™×•×ª×¨. ×”×‘× ×‘×ª×•×¨ ×™×•×›×¨×– ×›×–×•×›×” ×‘×ž×§×•× ×”×©× ×™ ×•×›×š ×”×œ××”.</li>
+                          <li>×”×ª×§× ×•×Ÿ ×ž× ×•×¡×— ×‘×œ×©×•×Ÿ ×–×›×¨ ××š ×ž×™×•×¢×“ ×œ×©× ×™ ×”×ž×™× ×™×.</li>
                         </ol>
                       </section>
                       <section id="rules-section-2">
-                        <h3>2. מבנה התחרות והתנהלותה</h3>
-                        <p>מסמך המקור מגדיר חלון תחרות מפורש, את תקופת הזמינות של הקישורים ואת ההבחנה בין קישורים אישיים לבין הקישור הכללי.</p>
+                        <h3>2. ×ž×‘× ×” ×”×ª×—×¨×•×ª ×•×”×ª× ×”×œ×•×ª×”</h3>
+                        <p>×ž×¡×ž×š ×”×ž×§×•×¨ ×ž×’×“×™×¨ ×—×œ×•×Ÿ ×ª×—×¨×•×ª ×ž×¤×•×¨×©, ××ª ×ª×§×•×¤×ª ×”×–×ž×™× ×•×ª ×©×œ ×”×§×™×©×•×¨×™× ×•××ª ×”×”×‘×—× ×” ×‘×™×Ÿ ×§×™×©×•×¨×™× ××™×©×™×™× ×œ×‘×™×Ÿ ×”×§×™×©×•×¨ ×”×›×œ×œ×™.</p>
                         <ol>
-                          <li>התחרות תתקיים החל מיום א', 23.08.2026, ועד יום ג', 01.09.2026, להלן: זמני התחרות.</li>
-                          <li>הקישורים להתרמה יישארו זמינים בהתאם להנחיית הנהלת הקמפיין, אך לצורך דירוג השגרירים בתחרות יילקחו בחשבון רק תרומות שהתקבלו במהלך זמני התחרות המעודכנים.</li>
-                          <li>לצד הקישורים האישיים שיוקצו לכל שגריר, ניתן יהיה להעביר תרומות לפרויקט גם דרך קישור שאינו שייך לאף שגריר, להלן: הקישור הכללי.</li>
-                          <li>סכום התרומות הכולל בפרויקט יורכב מסך הסכומים שנאספו בקישורים האישיים, בתוספת הסכום שנאסף בקישור הכללי.</li>
+                          <li>×”×ª×—×¨×•×ª ×ª×ª×§×™×™× ×”×—×œ ×ž×™×•× ×', 23.08.2026, ×•×¢×“ ×™×•× ×’', 01.09.2026, ×œ×”×œ×Ÿ: ×–×ž× ×™ ×”×ª×—×¨×•×ª.</li>
+                          <li>×”×§×™×©×•×¨×™× ×œ×”×ª×¨×ž×” ×™×™×©××¨×• ×–×ž×™× ×™× ×‘×”×ª×× ×œ×”× ×—×™×™×ª ×”× ×”×œ×ª ×”×§×ž×¤×™×™×Ÿ, ××š ×œ×¦×•×¨×š ×“×™×¨×•×’ ×”×©×’×¨×™×¨×™× ×‘×ª×—×¨×•×ª ×™×™×œ×§×—×• ×‘×—×©×‘×•×Ÿ ×¨×§ ×ª×¨×•×ž×•×ª ×©×”×ª×§×‘×œ×• ×‘×ž×”×œ×š ×–×ž× ×™ ×”×ª×—×¨×•×ª ×”×ž×¢×•×“×›× ×™×.</li>
+                          <li>×œ×¦×“ ×”×§×™×©×•×¨×™× ×”××™×©×™×™× ×©×™×•×§×¦×• ×œ×›×œ ×©×’×¨×™×¨, × ×™×ª×Ÿ ×™×”×™×” ×œ×”×¢×‘×™×¨ ×ª×¨×•×ž×•×ª ×œ×¤×¨×•×™×§×˜ ×’× ×“×¨×š ×§×™×©×•×¨ ×©××™× ×• ×©×™×™×š ×œ××£ ×©×’×¨×™×¨, ×œ×”×œ×Ÿ: ×”×§×™×©×•×¨ ×”×›×œ×œ×™.</li>
+                          <li>×¡×›×•× ×”×ª×¨×•×ž×•×ª ×”×›×•×œ×œ ×‘×¤×¨×•×™×§×˜ ×™×•×¨×›×‘ ×ž×¡×š ×”×¡×›×•×ž×™× ×©× ××¡×¤×• ×‘×§×™×©×•×¨×™× ×”××™×©×™×™×, ×‘×ª×•×¡×¤×ª ×”×¡×›×•× ×©× ××¡×£ ×‘×§×™×©×•×¨ ×”×›×œ×œ×™.</li>
                         </ol>
                       </section>
                       <section id="rules-section-3">
-                        <h3>3. ההשתתפות בתחרות</h3>
-                        <p>רשאים להשתתף בתחרות מי שעומדים בכל התנאים הבאים, וההשתתפות עצמה אינה כרוכה בתשלום.</p>
+                        <h3>3. ×”×”×©×ª×ª×¤×•×ª ×‘×ª×—×¨×•×ª</h3>
+                        <p>×¨×©××™× ×œ×”×©×ª×ª×£ ×‘×ª×—×¨×•×ª ×ž×™ ×©×¢×•×ž×“×™× ×‘×›×œ ×”×ª× ××™× ×”×‘××™×, ×•×”×”×©×ª×ª×¤×•×ª ×¢×¦×ž×” ××™× ×” ×›×¨×•×›×” ×‘×ª×©×œ×•×.</p>
                         <ol>
-                          <li>אוהדי מכבי תל אביב.</li>
-                          <li>נרשמו לתחרות כדין ובמועד, על פי תנאי התקנון.</li>
-                          <li>גילם 18 ומעלה.</li>
-                          <li>קטינים מעל גיל 16, מותנה באישור בכתב מהורה או אפוטרופוס.</li>
-                          <li>אינם שופטים בתחרות.</li>
-                          <li>קיבלו אישור לכך ממארגני התחרות.</li>
-                          <li>כתובת דוא"ל פעילה שבה אפשר ליצור איתם קשר.</li>
-                          <li>ההשתתפות בתחרות אינה כרוכה בתשלום.</li>
+                          <li>××•×”×“×™ ×ž×›×‘×™ ×ª×œ ××‘×™×‘.</li>
+                          <li>× ×¨×©×ž×• ×œ×ª×—×¨×•×ª ×›×“×™×Ÿ ×•×‘×ž×•×¢×“, ×¢×œ ×¤×™ ×ª× ××™ ×”×ª×§× ×•×Ÿ.</li>
+                          <li>×’×™×œ× 18 ×•×ž×¢×œ×”.</li>
+                          <li>×§×˜×™× ×™× ×ž×¢×œ ×’×™×œ 16, ×ž×•×ª× ×” ×‘××™×©×•×¨ ×‘×›×ª×‘ ×ž×”×•×¨×” ××• ××¤×•×˜×¨×•×¤×•×¡.</li>
+                          <li>××™× × ×©×•×¤×˜×™× ×‘×ª×—×¨×•×ª.</li>
+                          <li>×§×™×‘×œ×• ××™×©×•×¨ ×œ×›×š ×ž×ž××¨×’× ×™ ×”×ª×—×¨×•×ª.</li>
+                          <li>×›×ª×•×‘×ª ×“×•×"×œ ×¤×¢×™×œ×” ×©×‘×” ××¤×©×¨ ×œ×™×¦×•×¨ ××™×ª× ×§×©×¨.</li>
+                          <li>×”×”×©×ª×ª×¤×•×ª ×‘×ª×—×¨×•×ª ××™× ×” ×›×¨×•×›×” ×‘×ª×©×œ×•×.</li>
                         </ol>
                       </section>
                       <section id="rules-section-4">
-                        <h3>4. תנאים ומגבלות</h3>
-                        <p>סעיף זה מסדיר את אופן שיוך התרומות, את מגבלות ההעברה בין קישורים ואת כללי ההתנהלות של השגרירים מול תורמים, תקשורת וקהלים חיצוניים.</p>
+                        <h3>4. ×ª× ××™× ×•×ž×’×‘×œ×•×ª</h3>
+                        <p>×¡×¢×™×£ ×–×” ×ž×¡×“×™×¨ ××ª ××•×¤×Ÿ ×©×™×•×š ×”×ª×¨×•×ž×•×ª, ××ª ×ž×’×‘×œ×•×ª ×”×”×¢×‘×¨×” ×‘×™×Ÿ ×§×™×©×•×¨×™× ×•××ª ×›×œ×œ×™ ×”×”×ª× ×”×œ×•×ª ×©×œ ×”×©×’×¨×™×¨×™× ×ž×•×œ ×ª×•×¨×ž×™×, ×ª×§×©×•×¨×ª ×•×§×”×œ×™× ×—×™×¦×•× ×™×™×.</p>
                         <ol>
-                          <li>איסוף התרומות הוא אישי לכל שגריר בנפרד, והסכום הקובע לצורך דירוג השגרירים הוא הסכום שנאסף על ידי השגריר כפי שנתרם בקישור האישי.</li>
-                          <li>לא ניתן להעביר תרומות בין שגרירים כך ששגריר יסכים שהסכום שנאסף בקישור האישי שלו יופחת לצד הוספת הסכום לקישור האישי של חברו.</li>
-                          <li>במקרה של הכפלת סכום התרומה המוצע לפרק זמן מסוים, יתווסף הסכום שנתרם על ידי התורמים לקישור האישי אליו נתרם, וסכום זהה מכל תרומה במהלך תקופת ההכפלה יתווסף לקישור הכללי. לא ייצבר סכום כפול בקישור האישי במהלך תקופת ההכפלה.</li>
-                          <li>בפרויקט ייקחו חלק נציגים של קבוצות המועדון השונות וכן ידוענים המזוהים כאוהדי קבוצת מכבי תל אביב בענפי הספורט השונים. פנייה לשחקני מחלקות המועדון השונות או לידוענים בבקשה לתרומה או לפרסום קישור לתרומה לפרויקט תיעשה אך ורק על ידי מארגני התחרות או באישור מי מהם, ואך ורק לתרומה לקישור הכללי.</li>
-                          <li>פנייה לאמצעי התקשורת, אתרי ספורט, אתרי חדשות וגופים טלוויזיוניים שונים, או שימוש באמצעי תקשורת מסחריים, ייעשו אך ורק על ידי נציגי העמותה ובפרסומים בשם העמותה יוצג הקישור הכללי בלבד.</li>
-                          <li>שגרירים רשאים לבצע פניות לתורמים פוטנציאליים בכל אמצעי תקשורת אישי, ובכלל זה רשתות חברתיות, יישומונים המאפשרים משלוח מסרים מיידיים, שיחות טלפון וכמובן שיחות פנים אל פנים.</li>
-                          <li>משתתף שיפריע להתנהלות התקינה של הפרויקט או ינהג בחוסר כבוד כלפי חבריו, השתתפותו בתחרות תיפסל.</li>
-                          <li>השגרירים המשתתפים בתחרות מתחייבים לנהוג באופן מכובד ומכבד המייצג את ערכי העמותה ורוח ההתנדבות, ולהימנע מביטויים גזעניים, מבזים או משפילים כלפי כל אדם.</li>
+                          <li>××™×¡×•×£ ×”×ª×¨×•×ž×•×ª ×”×•× ××™×©×™ ×œ×›×œ ×©×’×¨×™×¨ ×‘× ×¤×¨×“, ×•×”×¡×›×•× ×”×§×•×‘×¢ ×œ×¦×•×¨×š ×“×™×¨×•×’ ×”×©×’×¨×™×¨×™× ×”×•× ×”×¡×›×•× ×©× ××¡×£ ×¢×œ ×™×“×™ ×”×©×’×¨×™×¨ ×›×¤×™ ×©× ×ª×¨× ×‘×§×™×©×•×¨ ×”××™×©×™.</li>
+                          <li>×œ× × ×™×ª×Ÿ ×œ×”×¢×‘×™×¨ ×ª×¨×•×ž×•×ª ×‘×™×Ÿ ×©×’×¨×™×¨×™× ×›×š ×©×©×’×¨×™×¨ ×™×¡×›×™× ×©×”×¡×›×•× ×©× ××¡×£ ×‘×§×™×©×•×¨ ×”××™×©×™ ×©×œ×• ×™×•×¤×—×ª ×œ×¦×“ ×”×•×¡×¤×ª ×”×¡×›×•× ×œ×§×™×©×•×¨ ×”××™×©×™ ×©×œ ×—×‘×¨×•.</li>
+                          <li>×‘×ž×§×¨×” ×©×œ ×”×›×¤×œ×ª ×¡×›×•× ×”×ª×¨×•×ž×” ×”×ž×•×¦×¢ ×œ×¤×¨×§ ×–×ž×Ÿ ×ž×¡×•×™×, ×™×ª×•×•×¡×£ ×”×¡×›×•× ×©× ×ª×¨× ×¢×œ ×™×“×™ ×”×ª×•×¨×ž×™× ×œ×§×™×©×•×¨ ×”××™×©×™ ××œ×™×• × ×ª×¨×, ×•×¡×›×•× ×–×”×” ×ž×›×œ ×ª×¨×•×ž×” ×‘×ž×”×œ×š ×ª×§×•×¤×ª ×”×”×›×¤×œ×” ×™×ª×•×•×¡×£ ×œ×§×™×©×•×¨ ×”×›×œ×œ×™. ×œ× ×™×™×¦×‘×¨ ×¡×›×•× ×›×¤×•×œ ×‘×§×™×©×•×¨ ×”××™×©×™ ×‘×ž×”×œ×š ×ª×§×•×¤×ª ×”×”×›×¤×œ×”.</li>
+                          <li>×‘×¤×¨×•×™×§×˜ ×™×™×§×—×• ×—×œ×§ × ×¦×™×’×™× ×©×œ ×§×‘×•×¦×•×ª ×”×ž×•×¢×“×•×Ÿ ×”×©×•× ×•×ª ×•×›×Ÿ ×™×“×•×¢× ×™× ×”×ž×–×•×”×™× ×›××•×”×“×™ ×§×‘×•×¦×ª ×ž×›×‘×™ ×ª×œ ××‘×™×‘ ×‘×¢× ×¤×™ ×”×¡×¤×•×¨×˜ ×”×©×•× ×™×. ×¤× ×™×™×” ×œ×©×—×§× ×™ ×ž×—×œ×§×•×ª ×”×ž×•×¢×“×•×Ÿ ×”×©×•× ×•×ª ××• ×œ×™×“×•×¢× ×™× ×‘×‘×§×©×” ×œ×ª×¨×•×ž×” ××• ×œ×¤×¨×¡×•× ×§×™×©×•×¨ ×œ×ª×¨×•×ž×” ×œ×¤×¨×•×™×§×˜ ×ª×™×¢×©×” ××š ×•×¨×§ ×¢×œ ×™×“×™ ×ž××¨×’× ×™ ×”×ª×—×¨×•×ª ××• ×‘××™×©×•×¨ ×ž×™ ×ž×”×, ×•××š ×•×¨×§ ×œ×ª×¨×•×ž×” ×œ×§×™×©×•×¨ ×”×›×œ×œ×™.</li>
+                          <li>×¤× ×™×™×” ×œ××ž×¦×¢×™ ×”×ª×§×©×•×¨×ª, ××ª×¨×™ ×¡×¤×•×¨×˜, ××ª×¨×™ ×—×“×©×•×ª ×•×’×•×¤×™× ×˜×œ×•×•×™×–×™×•× ×™×™× ×©×•× ×™×, ××• ×©×™×ž×•×© ×‘××ž×¦×¢×™ ×ª×§×©×•×¨×ª ×ž×¡×—×¨×™×™×, ×™×™×¢×©×• ××š ×•×¨×§ ×¢×œ ×™×“×™ × ×¦×™×’×™ ×”×¢×ž×•×ª×” ×•×‘×¤×¨×¡×•×ž×™× ×‘×©× ×”×¢×ž×•×ª×” ×™×•×¦×’ ×”×§×™×©×•×¨ ×”×›×œ×œ×™ ×‘×œ×‘×“.</li>
+                          <li>×©×’×¨×™×¨×™× ×¨×©××™× ×œ×‘×¦×¢ ×¤× ×™×•×ª ×œ×ª×•×¨×ž×™× ×¤×•×˜× ×¦×™××œ×™×™× ×‘×›×œ ××ž×¦×¢×™ ×ª×§×©×•×¨×ª ××™×©×™, ×•×‘×›×œ×œ ×–×” ×¨×©×ª×•×ª ×—×‘×¨×ª×™×•×ª, ×™×™×©×•×ž×•× ×™× ×”×ž××¤×©×¨×™× ×ž×©×œ×•×— ×ž×¡×¨×™× ×ž×™×™×“×™×™×, ×©×™×—×•×ª ×˜×œ×¤×•×Ÿ ×•×›×ž×•×‘×Ÿ ×©×™×—×•×ª ×¤× ×™× ××œ ×¤× ×™×.</li>
+                          <li>×ž×©×ª×ª×£ ×©×™×¤×¨×™×¢ ×œ×”×ª× ×”×œ×•×ª ×”×ª×§×™× ×” ×©×œ ×”×¤×¨×•×™×§×˜ ××• ×™× ×”×’ ×‘×—×•×¡×¨ ×›×‘×•×“ ×›×œ×¤×™ ×—×‘×¨×™×•, ×”×©×ª×ª×¤×•×ª×• ×‘×ª×—×¨×•×ª ×ª×™×¤×¡×œ.</li>
+                          <li>×”×©×’×¨×™×¨×™× ×”×ž×©×ª×ª×¤×™× ×‘×ª×—×¨×•×ª ×ž×ª×—×™×™×‘×™× ×œ× ×”×•×’ ×‘××•×¤×Ÿ ×ž×›×•×‘×“ ×•×ž×›×‘×“ ×”×ž×™×™×¦×’ ××ª ×¢×¨×›×™ ×”×¢×ž×•×ª×” ×•×¨×•×— ×”×”×ª× ×“×‘×•×ª, ×•×œ×”×™×ž× ×¢ ×ž×‘×™×˜×•×™×™× ×’×–×¢× ×™×™×, ×ž×‘×–×™× ××• ×ž×©×¤×™×œ×™× ×›×œ×¤×™ ×›×œ ××“×.</li>
                         </ol>
                       </section>
                       <section id="rules-section-5">
-                        <h3>5. תנאים ומגבלות - המארגנים</h3>
-                        <p>סעיף זה עוסק בשיקול הדעת של המארגנים, אי האפשרות לערער, שימוש בחומרי תוכן שיפורסמו והגבלת האחריות של הארגון ומנהלי התחרות.</p>
+                        <h3>5. ×ª× ××™× ×•×ž×’×‘×œ×•×ª - ×”×ž××¨×’× ×™×</h3>
+                        <p>×¡×¢×™×£ ×–×” ×¢×•×¡×§ ×‘×©×™×§×•×œ ×”×“×¢×ª ×©×œ ×”×ž××¨×’× ×™×, ××™ ×”××¤×©×¨×•×ª ×œ×¢×¨×¢×¨, ×©×™×ž×•×© ×‘×—×•×ž×¨×™ ×ª×•×›×Ÿ ×©×™×¤×•×¨×¡×ž×• ×•×”×’×‘×œ×ª ×”××—×¨×™×•×ª ×©×œ ×”××¨×’×•×Ÿ ×•×ž× ×”×œ×™ ×”×ª×—×¨×•×ª.</p>
                         <ol>
-                          <li>הנהלת הארגון רשאית להפסיק את התחרות או לשנות את תנאיה בכל עת. מארגני התחרות רשאים ליצור קשר עם משתתפי התחרות בהקשר רלוונטי בכל עת.</li>
-                          <li>בחירת הפרסים שיחולקו לזוכי התחרות תהיה כפופה לשיקול דעתם של מארגני התחרות בלבד. הפרסים המפורסמים למשתתפי התחרות עשויים להשתנות בהתאם לשיקול דעת מנהלי הארגון והנהלת מועדון הכדורגל מכבי תל אביב, ולא תקום בכך כל זכות או תביעה לשגרירים המשתתפים בתחרות.</li>
-                          <li>לא יתאפשר לערער על החלטת השופטים או על כל החלטה מנהלתית של מארגני התחרות או מנהלי הארגון.</li>
-                          <li>מארגני התחרות רשאים להשתמש לצרכי הפרויקט בכל תמונה או רשומה ברשתות החברתיות שיפיצו השגרירים המשתתפים בתחרות. אין בכך כדי לפגוע בזכויות הצלם על תמונות שתפורסמנה על ידי השגרירים המשתתפים בתחרות בכל הקשר אחר.</li>
-                          <li>מנהלי הארגון ומארגני התחרות אינם נושאים באחריות כלשהי לכל נזקי גוף או רכוש או לכל פגיעה אחרת שתיגרם למשתתפי התחרות. אין בקיום התחרות כדי להרחיב כל אחריות שחלה על מארגני הפרויקט.</li>
-                          <li>בהרשמה לתחרות נותנים השגרירים המשתתפים בתחרות הסכמתם המלאה לכל תנאי התחרות המפורטים לעיל, וכן מצהירים כי הם עומדים בכל התנאים הדרושים לצורך השתתפות בתחרות.</li>
-                          <li>אין באמור לעיל כדי לפגוע בכל זכות הקנויה למארגני התחרות או באפשרות פנייה לערכאות משפטיות בגין הפרה של כללי התחרות על ידי מי מהמועמדים להשתתף בתחרות, מהמשתתפים בה או מי מטעמם.</li>
+                          <li>×”× ×”×œ×ª ×”××¨×’×•×Ÿ ×¨×©××™×ª ×œ×”×¤×¡×™×§ ××ª ×”×ª×—×¨×•×ª ××• ×œ×©× ×•×ª ××ª ×ª× ××™×” ×‘×›×œ ×¢×ª. ×ž××¨×’× ×™ ×”×ª×—×¨×•×ª ×¨×©××™× ×œ×™×¦×•×¨ ×§×©×¨ ×¢× ×ž×©×ª×ª×¤×™ ×”×ª×—×¨×•×ª ×‘×”×§×©×¨ ×¨×œ×•×•× ×˜×™ ×‘×›×œ ×¢×ª.</li>
+                          <li>×‘×—×™×¨×ª ×”×¤×¨×¡×™× ×©×™×—×•×œ×§×• ×œ×–×•×›×™ ×”×ª×—×¨×•×ª ×ª×”×™×” ×›×¤×•×¤×” ×œ×©×™×§×•×œ ×“×¢×ª× ×©×œ ×ž××¨×’× ×™ ×”×ª×—×¨×•×ª ×‘×œ×‘×“. ×”×¤×¨×¡×™× ×”×ž×¤×•×¨×¡×ž×™× ×œ×ž×©×ª×ª×¤×™ ×”×ª×—×¨×•×ª ×¢×©×•×™×™× ×œ×”×©×ª× ×•×ª ×‘×”×ª×× ×œ×©×™×§×•×œ ×“×¢×ª ×ž× ×”×œ×™ ×”××¨×’×•×Ÿ ×•×”× ×”×œ×ª ×ž×•×¢×“×•×Ÿ ×”×›×“×•×¨×’×œ ×ž×›×‘×™ ×ª×œ ××‘×™×‘, ×•×œ× ×ª×§×•× ×‘×›×š ×›×œ ×–×›×•×ª ××• ×ª×‘×™×¢×” ×œ×©×’×¨×™×¨×™× ×”×ž×©×ª×ª×¤×™× ×‘×ª×—×¨×•×ª.</li>
+                          <li>×œ× ×™×ª××¤×©×¨ ×œ×¢×¨×¢×¨ ×¢×œ ×”×—×œ×˜×ª ×”×©×•×¤×˜×™× ××• ×¢×œ ×›×œ ×”×—×œ×˜×” ×ž× ×”×œ×ª×™×ª ×©×œ ×ž××¨×’× ×™ ×”×ª×—×¨×•×ª ××• ×ž× ×”×œ×™ ×”××¨×’×•×Ÿ.</li>
+                          <li>×ž××¨×’× ×™ ×”×ª×—×¨×•×ª ×¨×©××™× ×œ×”×©×ª×ž×© ×œ×¦×¨×›×™ ×”×¤×¨×•×™×§×˜ ×‘×›×œ ×ª×ž×•× ×” ××• ×¨×©×•×ž×” ×‘×¨×©×ª×•×ª ×”×—×‘×¨×ª×™×•×ª ×©×™×¤×™×¦×• ×”×©×’×¨×™×¨×™× ×”×ž×©×ª×ª×¤×™× ×‘×ª×—×¨×•×ª. ××™×Ÿ ×‘×›×š ×›×“×™ ×œ×¤×’×•×¢ ×‘×–×›×•×™×•×ª ×”×¦×œ× ×¢×œ ×ª×ž×•× ×•×ª ×©×ª×¤×•×¨×¡×ž× ×” ×¢×œ ×™×“×™ ×”×©×’×¨×™×¨×™× ×”×ž×©×ª×ª×¤×™× ×‘×ª×—×¨×•×ª ×‘×›×œ ×”×§×©×¨ ××—×¨.</li>
+                          <li>×ž× ×”×œ×™ ×”××¨×’×•×Ÿ ×•×ž××¨×’× ×™ ×”×ª×—×¨×•×ª ××™× × × ×•×©××™× ×‘××—×¨×™×•×ª ×›×œ×©×”×™ ×œ×›×œ × ×–×§×™ ×’×•×£ ××• ×¨×›×•×© ××• ×œ×›×œ ×¤×’×™×¢×” ××—×¨×ª ×©×ª×™×’×¨× ×œ×ž×©×ª×ª×¤×™ ×”×ª×—×¨×•×ª. ××™×Ÿ ×‘×§×™×•× ×”×ª×—×¨×•×ª ×›×“×™ ×œ×”×¨×—×™×‘ ×›×œ ××—×¨×™×•×ª ×©×—×œ×” ×¢×œ ×ž××¨×’× ×™ ×”×¤×¨×•×™×§×˜.</li>
+                          <li>×‘×”×¨×©×ž×” ×œ×ª×—×¨×•×ª × ×•×ª× ×™× ×”×©×’×¨×™×¨×™× ×”×ž×©×ª×ª×¤×™× ×‘×ª×—×¨×•×ª ×”×¡×›×ž×ª× ×”×ž×œ××” ×œ×›×œ ×ª× ××™ ×”×ª×—×¨×•×ª ×”×ž×¤×•×¨×˜×™× ×œ×¢×™×œ, ×•×›×Ÿ ×ž×¦×”×™×¨×™× ×›×™ ×”× ×¢×•×ž×“×™× ×‘×›×œ ×”×ª× ××™× ×”×“×¨×•×©×™× ×œ×¦×•×¨×š ×”×©×ª×ª×¤×•×ª ×‘×ª×—×¨×•×ª.</li>
+                          <li>××™×Ÿ ×‘××ž×•×¨ ×œ×¢×™×œ ×›×“×™ ×œ×¤×’×•×¢ ×‘×›×œ ×–×›×•×ª ×”×§× ×•×™×” ×œ×ž××¨×’× ×™ ×”×ª×—×¨×•×ª ××• ×‘××¤×©×¨×•×ª ×¤× ×™×™×” ×œ×¢×¨×›××•×ª ×ž×©×¤×˜×™×•×ª ×‘×’×™×Ÿ ×”×¤×¨×” ×©×œ ×›×œ×œ×™ ×”×ª×—×¨×•×ª ×¢×œ ×™×“×™ ×ž×™ ×ž×”×ž×•×¢×ž×“×™× ×œ×”×©×ª×ª×£ ×‘×ª×—×¨×•×ª, ×ž×”×ž×©×ª×ª×¤×™× ×‘×” ××• ×ž×™ ×ž×˜×¢×ž×.</li>
                         </ol>
-                        <p><strong>כתובת הקשר שמופיעה במסמך המקור:</strong> <a href="mailto:achimlasemel@gmail.com">achimlasemel@gmail.com</a></p>
+                        <p><strong>×›×ª×•×‘×ª ×”×§×©×¨ ×©×ž×•×¤×™×¢×” ×‘×ž×¡×ž×š ×”×ž×§×•×¨:</strong> <a href="mailto:achimlasemel@gmail.com">achimlasemel@gmail.com</a></p>
                       </section>
                     </article>
                   </div>
@@ -6415,14 +6587,14 @@ def build_fragment(
                 });
                 if (nextTab === "design") {
                   if (isManagerAuthenticated() && !state.auth.campaignConfigLoaded) {
-                    setCampaignBuilderStatus("טוענים את הגדרות הקמפיין מהשרת...", "warning");
+                    setCampaignBuilderStatus("×˜×•×¢× ×™× ××ª ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ ×ž×”×©×¨×ª...", "warning");
                     ensureCampaignBuilderConfigLoaded()
                       .then(() => {
                         renderAll();
                       })
                       .catch((error) => {
                         setCampaignBuilderStatus(
-                          error?.message || "טעינת הגדרות הקמפיין נכשלה. מוצגות בינתיים ההגדרות המקומיות.",
+                          error?.message || "×˜×¢×™× ×ª ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ × ×›×©×œ×”. ×ž×•×¦×’×•×ª ×‘×™× ×ª×™×™× ×”×”×’×“×¨×•×ª ×”×ž×§×•×ž×™×•×ª.",
                           "warning"
                         );
                         renderCampaignDesigner();
@@ -6436,7 +6608,7 @@ def build_fragment(
               function refreshAccessUi() {
                 const isManager = isManagerAuthenticated();
                 const isAdminPage = state.ui.page === "admin";
-                elements.sessionStatus.textContent = isManager ? `מחובר/ת כמנהל/ת: ${state.session.email}` : "מצב ניהול: אורח/ת";
+                elements.sessionStatus.textContent = isManager ? `×ž×—×•×‘×¨/×ª ×›×ž× ×”×œ/×ª: ${state.session.email}` : "×ž×¦×‘ × ×™×”×•×œ: ××•×¨×—/×ª";
                 elements.sessionStatus.hidden = !isAdminPage;
                 if (elements.topbarMeta) {
                   elements.topbarMeta.hidden = !isAdminPage;
@@ -6446,7 +6618,7 @@ def build_fragment(
                 elements.adminLock.hidden = isManager;
                 elements.adminContent.hidden = !isManager;
                 if (isAdminPage && !isManager) {
-                  setLoginMessage("יש להזין מייל מורשה וסיסמה כדי לצפות בדשבורד הניהולי.");
+                  setLoginMessage("×™×© ×œ×”×–×™×Ÿ ×ž×™×™×œ ×ž×•×¨×©×” ×•×¡×™×¡×ž×” ×›×“×™ ×œ×¦×¤×•×ª ×‘×“×©×‘×•×¨×“ ×”× ×™×”×•×œ×™.");
                 }
                 if (isManager) {
                   setAdminTab(state.ui.adminTab);
@@ -6518,7 +6690,7 @@ def build_fragment(
                   defaultFrom: projectDates[0] || uniqueDates[0] || "",
                   defaultTo: projectDates[projectDates.length - 1] || uniqueDates[uniqueDates.length - 1] || "",
                   rowCount: rows.length,
-                  projectWindowLabel: projectDates.length ? `${projectDates[0]} עד ${projectDates[projectDates.length - 1]}` : "",
+                  projectWindowLabel: projectDates.length ? `${projectDates[0]} ×¢×“ ${projectDates[projectDates.length - 1]}` : "",
                 };
               }
 
@@ -6541,11 +6713,11 @@ def build_fragment(
                   const dayIndex = projectIndex.get(date) || null;
                   return {
                     ...row,
-                    ambassador: row.ambassador && row.ambassador.trim() ? row.ambassador.trim() : "ללא שיוך",
-                    donor: row.donor && row.donor.trim() ? row.donor.trim() : "ללא שם",
-                    city: row.city && row.city.trim() ? row.city.trim() : "ללא עיר",
+                    ambassador: row.ambassador && row.ambassador.trim() ? row.ambassador.trim() : "×œ×œ× ×©×™×•×š",
+                    donor: row.donor && row.donor.trim() ? row.donor.trim() : "×œ×œ× ×©×",
+                    city: row.city && row.city.trim() ? row.city.trim() : "×œ×œ× ×¢×™×¨",
                     projectDay: dayIndex,
-                    projectDayLabel: dayIndex ? `יום ${dayIndex}` : "מחוץ לחלון",
+                    projectDayLabel: dayIndex ? `×™×•× ${dayIndex}` : "×ž×—×•×¥ ×œ×—×œ×•×Ÿ",
                   };
                 });
               }
@@ -6656,22 +6828,22 @@ def build_fragment(
                 const warnings = [];
 
                 if (missingColumns.length) {
-                  errors.push(`חסרות עמודות חובה: ${missingColumns.join(", ")}`);
+                  errors.push(`×—×¡×¨×•×ª ×¢×ž×•×“×•×ª ×—×•×‘×”: ${missingColumns.join(", ")}`);
                 }
                 if (invalidDateRows.length) {
-                  errors.push(`${invalidDateRows.length} רשומות עם תאריך/שעה לא תקין בקובץ ${label}.`);
+                  errors.push(`${invalidDateRows.length} ×¨×©×•×ž×•×ª ×¢× ×ª××¨×™×š/×©×¢×” ×œ× ×ª×§×™×Ÿ ×‘×§×•×‘×¥ ${label}.`);
                 }
                 if (invalidAmountRows.length) {
-                  errors.push(`${invalidAmountRows.length} רשומות עם סכום חסר או לא מספרי בקובץ ${label}.`);
+                  errors.push(`${invalidAmountRows.length} ×¨×©×•×ž×•×ª ×¢× ×¡×›×•× ×—×¡×¨ ××• ×œ× ×ž×¡×¤×¨×™ ×‘×§×•×‘×¥ ${label}.`);
                 }
                 if (missingAmbassadorRows.length) {
-                  warnings.push(`${missingAmbassadorRows.length} רשומות ללא שיוך שגריר/ה.`);
+                  warnings.push(`${missingAmbassadorRows.length} ×¨×©×•×ž×•×ª ×œ×œ× ×©×™×•×š ×©×’×¨×™×¨/×”.`);
                 }
                 if (missingEmailRows.length) {
-                  warnings.push(`${missingEmailRows.length} רשומות ללא אימייל תורם.`);
+                  warnings.push(`${missingEmailRows.length} ×¨×©×•×ž×•×ª ×œ×œ× ××™×ž×™×™×œ ×ª×•×¨×.`);
                 }
                 if (duplicateIdCount) {
-                  warnings.push(`${duplicateIdCount} רשומות עם מזהי עסקה כפולים אפשריים.`);
+                  warnings.push(`${duplicateIdCount} ×¨×©×•×ž×•×ª ×¢× ×ž×–×”×™ ×¢×¡×§×” ×›×¤×•×œ×™× ××¤×©×¨×™×™×.`);
                 }
 
                 return {
@@ -6719,10 +6891,10 @@ def build_fragment(
                       date: createdIso.slice(0, 10),
                       hour: Number(timePart.split(":")[0]),
                       email: String(raw["email"] || "").trim().toLowerCase(),
-                      donor: String(raw["full_name"] || "").trim() || "ללא שם",
-                      ambassador: String(raw["Ambassador name"] || "").trim() || "ללא שיוך",
+                      donor: String(raw["full_name"] || "").trim() || "×œ×œ× ×©×",
+                      ambassador: String(raw["Ambassador name"] || "").trim() || "×œ×œ× ×©×™×•×š",
                       amount: Number.parseFloat(String(raw["total"] || "0").trim() || "0") || 0,
-                      city: String(raw["city"] || "").trim() || "ללא עיר",
+                      city: String(raw["city"] || "").trim() || "×œ×œ× ×¢×™×¨",
                       status: String(raw["charged_success"] || "").trim().toLowerCase() === "true" ? "success" : "failed",
                       chargeResult: String(raw["charge_result"] || "").trim(),
                     };
@@ -6743,7 +6915,7 @@ def build_fragment(
                 const placePrizes = (model.placePrizes || [])
                   .map((item) => ({
                     place: Number(item.place),
-                    label: String(item.label || `מקום ${item.place}`),
+                    label: String(item.label || `×ž×§×•× ${item.place}`),
                     prize: String(item.prize || "").trim(),
                   }))
                   .filter((item) => item.place && item.prize)
@@ -6770,13 +6942,13 @@ def build_fragment(
                 const errors = [];
 
                 if (!normalized.placePrizes.length) {
-                  warnings.push("לא זוהו פרסי מיקומים תקפים.");
+                  warnings.push("×œ× ×–×•×”×• ×¤×¨×¡×™ ×ž×™×§×•×ž×™× ×ª×§×¤×™×.");
                 }
                 if (!normalized.tierPrizes.length) {
-                  warnings.push("לא זוהו מדרגות פרס תקפות.");
+                  warnings.push("×œ× ×–×•×”×• ×ž×“×¨×’×•×ª ×¤×¨×¡ ×ª×§×¤×•×ª.");
                 }
                 if (!normalized.placePrizes.length && !normalized.tierPrizes.length) {
-                  errors.push(`לא נמצאו פרסים תקפים בקובץ ${label}.`);
+                  errors.push(`×œ× × ×ž×¦××• ×¤×¨×¡×™× ×ª×§×¤×™× ×‘×§×•×‘×¥ ${label}.`);
                 }
 
                 return {
@@ -6805,7 +6977,7 @@ def build_fragment(
                   const left = cells[0] || "";
                   const right = cells[1] || "";
 
-                  if (!inTiers && left.startsWith("מקום")) {
+                  if (!inTiers && left.startsWith("×ž×§×•×")) {
                     const digits = left.replace(/\\D+/g, "");
                     if (digits) {
                       placePrizes.push({ place: Number(digits), label: left, prize: right });
@@ -6813,7 +6985,7 @@ def build_fragment(
                     return;
                   }
 
-                  if (left === "מדרגות פרס") {
+                  if (left === "×ž×“×¨×’×•×ª ×¤×¨×¡") {
                     inTiers = true;
                     return;
                   }
@@ -6822,7 +6994,7 @@ def build_fragment(
                     const threshold = coerceNumber(left);
                     if (threshold !== null && right) {
                       placePrizes.sort((a, b) => a.place - b.place);
-                    } else if (left.includes("לא ניתן לקבל יותר מפרס אחד")) {
+                    } else if (left.includes("×œ× × ×™×ª×Ÿ ×œ×§×‘×œ ×™×•×ª×¨ ×ž×¤×¨×¡ ××—×“")) {
                       tierRuleNote = left;
                     }
                   }
@@ -6833,7 +7005,7 @@ def build_fragment(
                 rows.slice(1).forEach((cells) => {
                   const left = cells[0] || "";
                   const right = cells[1] || "";
-                  if (left === "מדרגות פרס") {
+                  if (left === "×ž×“×¨×’×•×ª ×¤×¨×¡") {
                     inTiers = true;
                     return;
                   }
@@ -6857,19 +7029,19 @@ def build_fragment(
                 );
                 const hourOptions = Array.from({ length: 24 }, (_, hour) => `<option value="${hour}">${formatHourLabel(hour)}</option>`);
                 const dayOptions = [
-                  { value: "all", label: "כל הימים" },
+                  { value: "all", label: "×›×œ ×”×™×ž×™×" },
                   ...filterMeta.projectDates.map((date, index) => ({
                     value: String(index + 1),
-                    label: `יום ${index + 1} · ${formatShortDate(date)}`,
+                    label: `×™×•× ${index + 1} Â· ${formatShortDate(date)}`,
                   })),
                 ];
 
                 if (filterMeta.uniqueDates.length > filterMeta.projectDates.length) {
-                  dayOptions.push({ value: "overflow", label: "מחוץ לעשרת הימים" });
+                  dayOptions.push({ value: "overflow", label: "×ž×—×•×¥ ×œ×¢×©×¨×ª ×”×™×ž×™×" });
                 }
 
                 elements.ambassador.innerHTML = [
-                  `<option value="all">כל השגרירים</option>`,
+                  `<option value="all">×›×œ ×”×©×’×¨×™×¨×™×</option>`,
                   ...ambassadors.map((value) => `<option value="${escapeAttribute(value)}">${escapeHtml(value)}</option>`),
                 ].join("");
 
@@ -6878,22 +7050,22 @@ def build_fragment(
                   .join("");
 
                 elements.dateExact.innerHTML = [
-                  `<option value="all">כל התאריכים</option>`,
+                  `<option value="all">×›×œ ×”×ª××¨×™×›×™×</option>`,
                   ...filterMeta.uniqueDates.map((date) => `<option value="${date}">${escapeHtml(formatDate(date))}</option>`),
                 ].join("");
 
                 elements.hour.innerHTML = [
-                  `<option value="all">כל השעות</option>`,
+                  `<option value="all">×›×œ ×”×©×¢×•×ª</option>`,
                   ...hourOptions,
                 ].join("");
 
                 elements.hourFrom.innerHTML = [
-                  `<option value="all">משעה כלשהי</option>`,
+                  `<option value="all">×ž×©×¢×” ×›×œ×©×”×™</option>`,
                   ...hourOptions,
                 ].join("");
 
                 elements.hourTo.innerHTML = [
-                  `<option value="all">עד שעה כלשהי</option>`,
+                  `<option value="all">×¢×“ ×©×¢×” ×›×œ×©×”×™</option>`,
                   ...hourOptions,
                 ].join("");
 
@@ -7010,7 +7182,7 @@ def build_fragment(
               function buildLeaderboard(rows) {
                 const grouped = new Map();
                 rows.forEach((row) => {
-                  if (!row.ambassador || row.ambassador === "ללא שיוך") {
+                  if (!row.ambassador || row.ambassador === "×œ×œ× ×©×™×•×š") {
                     return;
                   }
                   const current = grouped.get(row.ambassador) || { ambassador: row.ambassador, total: 0, deals: 0 };
@@ -7043,7 +7215,7 @@ def build_fragment(
 
               function formatSignedPercentPoints(value) {
                 const prefix = value > 0 ? "+" : value < 0 ? "-" : "";
-                return `${prefix}${Math.abs(value * 100).toFixed(1)} נק'`;
+                return `${prefix}${Math.abs(value * 100).toFixed(1)} × ×§'`;
               }
 
               function formatSignedPercent(value) {
@@ -7056,7 +7228,7 @@ def build_fragment(
                 const deals = rows.length;
                 const successCount = rows.filter((row) => row.status === "success").length;
                 const successRate = deals ? successCount / deals : 0;
-                const ambassadorSet = new Set(rows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך"));
+                const ambassadorSet = new Set(rows.map((row) => row.ambassador).filter((value) => value && value !== "×œ×œ× ×©×™×•×š"));
                 const leaderboard = buildLeaderboard(rows);
                 const topAmbassador = leaderboard[0] || null;
                 const topAmbassadorShare = topAmbassador && total ? topAmbassador.total / total : 0;
@@ -7085,8 +7257,8 @@ def build_fragment(
               }
 
               function buildComparisonModel(baseRows, compareRows) {
-                const base = buildDatasetSummary(baseRows, state.sourceLabel || "קובץ בסיס");
-                const compare = buildDatasetSummary(compareRows, state.compare.label || "קובץ השוואה");
+                const base = buildDatasetSummary(baseRows, state.sourceLabel || "×§×•×‘×¥ ×‘×¡×™×¡");
+                const compare = buildDatasetSummary(compareRows, state.compare.label || "×§×•×‘×¥ ×”×©×•×•××”");
                 const overlap = [...base.ambassadorSet].filter((ambassador) => compare.ambassadorSet.has(ambassador));
                 const totalDelta = compare.total - base.total;
                 const dealsDelta = compare.deals - base.deals;
@@ -7097,41 +7269,41 @@ def build_fragment(
                 const weakerLabel = totalDelta >= 0 ? base.label : compare.label;
 
                 const facts = [
-                  `${strongerLabel} מוביל בסך הגיוס בפער של ${formatSignedCurrency(totalDelta)} לעומת ${weakerLabel}.`,
-                  `${compare.label} מציג ${formatSignedNumber(dealsDelta)} עסקאות ביחס ל-${base.label}, וממוצע לעסקה של ${formatAmount(compare.average)} מול ${formatAmount(base.average)}.`,
-                  `יש ${formatNumber(overlap.length)} שגרירים משותפים בין שני הקבצים, מתוך ${formatNumber(base.ambassadorCount)} ו-${formatNumber(compare.ambassadorCount)} שגרירים פעילים.`,
+                  `${strongerLabel} ×ž×•×‘×™×œ ×‘×¡×š ×”×’×™×•×¡ ×‘×¤×¢×¨ ×©×œ ${formatSignedCurrency(totalDelta)} ×œ×¢×•×ž×ª ${weakerLabel}.`,
+                  `${compare.label} ×ž×¦×™×’ ${formatSignedNumber(dealsDelta)} ×¢×¡×§××•×ª ×‘×™×—×¡ ×œ-${base.label}, ×•×ž×ž×•×¦×¢ ×œ×¢×¡×§×” ×©×œ ${formatAmount(compare.average)} ×ž×•×œ ${formatAmount(base.average)}.`,
+                  `×™×© ${formatNumber(overlap.length)} ×©×’×¨×™×¨×™× ×ž×©×•×ª×¤×™× ×‘×™×Ÿ ×©× ×™ ×”×§×‘×¦×™×, ×ž×ª×•×š ${formatNumber(base.ambassadorCount)} ×•-${formatNumber(compare.ambassadorCount)} ×©×’×¨×™×¨×™× ×¤×¢×™×œ×™×.`,
                 ];
 
                 const critical = [];
                 if (base.total > 0 && compare.total < base.total * 0.85) {
-                  critical.push(`${compare.label} נמוך ביותר מ-15% בסך הגיוס מול ${base.label}. כדאי לבדוק אם חסרות רשומות, שעות פעילות או שגרירים פעילים.`);
+                  critical.push(`${compare.label} × ×ž×•×š ×‘×™×•×ª×¨ ×ž-15% ×‘×¡×š ×”×’×™×•×¡ ×ž×•×œ ${base.label}. ×›×“××™ ×œ×‘×“×•×§ ×× ×—×¡×¨×•×ª ×¨×©×•×ž×•×ª, ×©×¢×•×ª ×¤×¢×™×œ×•×ª ××• ×©×’×¨×™×¨×™× ×¤×¢×™×œ×™×.`);
                 }
                 if (compare.successRate + 0.03 < base.successRate) {
-                  critical.push(`שיעור ההצלחה של ${compare.label} נמוך ב-${formatSignedPercentPoints(successDelta)} לעומת ${base.label}. זה פער שמצדיק בדיקת כשלי גבייה.`);
+                  critical.push(`×©×™×¢×•×¨ ×”×”×¦×œ×—×” ×©×œ ${compare.label} × ×ž×•×š ×‘-${formatSignedPercentPoints(successDelta)} ×œ×¢×•×ž×ª ${base.label}. ×–×” ×¤×¢×¨ ×©×ž×¦×“×™×§ ×‘×“×™×§×ª ×›×©×œ×™ ×’×‘×™×™×”.`);
                 }
                 if (compare.ambassadorCount + 2 < base.ambassadorCount) {
-                  critical.push(`${compare.label} מפעיל פחות שגרירים פעילים ב-${formatSignedNumber(ambassadorDelta)} לעומת ${base.label}. זה יכול להסביר האטה בקצב הגיוס.`);
+                  critical.push(`${compare.label} ×ž×¤×¢×™×œ ×¤×—×•×ª ×©×’×¨×™×¨×™× ×¤×¢×™×œ×™× ×‘-${formatSignedNumber(ambassadorDelta)} ×œ×¢×•×ž×ª ${base.label}. ×–×” ×™×›×•×œ ×œ×”×¡×‘×™×¨ ×”××˜×” ×‘×§×¦×‘ ×”×’×™×•×¡.`);
                 }
                 if (!critical.length) {
-                  critical.push(`לא זוהתה חריגה אחת חדה, אבל עדיין יש פער של ${formatSignedCurrency(totalDelta)} בסך הגיוס ו-${formatSignedNumber(dealsDelta)} עסקאות בין שני הקבצים.`);
+                  critical.push(`×œ× ×–×•×”×ª×” ×—×¨×™×’×” ××—×ª ×—×“×”, ××‘×œ ×¢×“×™×™×Ÿ ×™×© ×¤×¢×¨ ×©×œ ${formatSignedCurrency(totalDelta)} ×‘×¡×š ×”×’×™×•×¡ ×•-${formatSignedNumber(dealsDelta)} ×¢×¡×§××•×ª ×‘×™×Ÿ ×©× ×™ ×”×§×‘×¦×™×.`);
                 }
 
                 const insights = [];
                 if (base.topAmbassador && compare.topAmbassador) {
-                  insights.push(`השגריר המוביל ב-${base.label} הוא ${base.topAmbassador.ambassador} עם ${formatAmount(base.topAmbassador.total)}, בעוד שב-${compare.label} מוביל/ה ${compare.topAmbassador.ambassador} עם ${formatAmount(compare.topAmbassador.total)}.`);
+                  insights.push(`×”×©×’×¨×™×¨ ×”×ž×•×‘×™×œ ×‘-${base.label} ×”×•× ${base.topAmbassador.ambassador} ×¢× ${formatAmount(base.topAmbassador.total)}, ×‘×¢×•×“ ×©×‘-${compare.label} ×ž×•×‘×™×œ/×” ${compare.topAmbassador.ambassador} ×¢× ${formatAmount(compare.topAmbassador.total)}.`);
                 }
                 if (base.topDay && compare.topDay) {
-                  insights.push(`יום השיא ב-${base.label} הוא ${formatDate(base.topDay.date)}, וב-${compare.label} יום השיא הוא ${formatDate(compare.topDay.date)}. זה עוזר לזהות אם המומנטום זז ליום אחר.`);
+                  insights.push(`×™×•× ×”×©×™× ×‘-${base.label} ×”×•× ${formatDate(base.topDay.date)}, ×•×‘-${compare.label} ×™×•× ×”×©×™× ×”×•× ${formatDate(compare.topDay.date)}. ×–×” ×¢×•×–×¨ ×œ×–×”×•×ª ×× ×”×ž×•×ž× ×˜×•× ×–×– ×œ×™×•× ××—×¨.`);
                 }
                 if (base.peakHour && compare.peakHour) {
-                  insights.push(`שעת השיא השתנתה מ-${String(base.peakHour.hour).padStart(2, "0")}:00 ב-${base.label} ל-${String(compare.peakHour.hour).padStart(2, "0")}:00 ב-${compare.label}.`);
+                  insights.push(`×©×¢×ª ×”×©×™× ×”×©×ª× ×ª×” ×ž-${String(base.peakHour.hour).padStart(2, "0")}:00 ×‘-${base.label} ×œ-${String(compare.peakHour.hour).padStart(2, "0")}:00 ×‘-${compare.label}.`);
                 }
                 const concentrationDelta = compare.topAmbassadorShare - base.topAmbassadorShare;
                 if (Math.abs(concentrationDelta) >= 0.08) {
-                  insights.push(`${compare.label} ${concentrationDelta > 0 ? "תלוי יותר" : "מפוזר יותר"} בשגריר מוביל, עם שינוי של ${formatSignedPercentPoints(concentrationDelta)} בחלקו של המוביל מתוך כלל הגיוס.`);
+                  insights.push(`${compare.label} ${concentrationDelta > 0 ? "×ª×œ×•×™ ×™×•×ª×¨" : "×ž×¤×•×–×¨ ×™×•×ª×¨"} ×‘×©×’×¨×™×¨ ×ž×•×‘×™×œ, ×¢× ×©×™× ×•×™ ×©×œ ${formatSignedPercentPoints(concentrationDelta)} ×‘×—×œ×§×• ×©×œ ×”×ž×•×‘×™×œ ×ž×ª×•×š ×›×œ×œ ×”×’×™×•×¡.`);
                 }
                 if (!insights.length) {
-                  insights.push(`שני הקבצים דומים יחסית במבנה הפעילות שלהם, ולכן עיקר הקריאה צריך להתמקד בפערי הסכום, העסקאות ושיעור ההצלחה.`);
+                  insights.push(`×©× ×™ ×”×§×‘×¦×™× ×“×•×ž×™× ×™×—×¡×™×ª ×‘×ž×‘× ×” ×”×¤×¢×™×œ×•×ª ×©×œ×”×, ×•×œ×›×Ÿ ×¢×™×§×¨ ×”×§×¨×™××” ×¦×¨×™×š ×œ×”×ª×ž×§×“ ×‘×¤×¢×¨×™ ×”×¡×›×•×, ×”×¢×¡×§××•×ª ×•×©×™×¢×•×¨ ×”×”×¦×œ×—×”.`);
                 }
 
                 return {
@@ -7212,7 +7384,7 @@ def build_fragment(
                   selectedFocus = {
                     ambassador: selectedAmbassador.ambassador,
                     total: selectedAmbassador.total,
-                    currentPrize: currentTier ? currentTier.prize : "עדיין ללא פרס",
+                    currentPrize: currentTier ? currentTier.prize : "×¢×“×™×™×Ÿ ×œ×œ× ×¤×¨×¡",
                     nextPrize: nextTier ? nextTier.prize : "",
                     gap: nextTier ? nextTier.threshold - selectedAmbassador.total : 0,
                   };
@@ -7239,8 +7411,8 @@ def build_fragment(
                     groupedByDate.set(dateKey, new Map());
                   }
                   const byAmbassador = groupedByDate.get(dateKey);
-                  const ambassador = row.ambassador || "ללא שיוך";
-                  if (ambassador === "ללא שיוך") {
+                  const ambassador = row.ambassador || "×œ×œ× ×©×™×•×š";
+                  if (ambassador === "×œ×œ× ×©×™×•×š") {
                     return;
                   }
                   const current = byAmbassador.get(ambassador) || { ambassador, total: 0, deals: 0 };
@@ -7276,44 +7448,44 @@ def build_fragment(
               function getActiveFilters() {
                 const summary = [];
                 if (state.filters.ambassador !== "all") {
-                  summary.push(`שגריר: ${state.filters.ambassador}`);
+                  summary.push(`×©×’×¨×™×¨: ${state.filters.ambassador}`);
                 }
                 if (state.filters.projectDay !== "all") {
                   summary.push(
                     state.filters.projectDay === "overflow"
-                      ? "יום פרויקט: מחוץ לעשרת הימים"
-                      : `יום פרויקט: ${state.filters.projectDay}`
+                      ? "×™×•× ×¤×¨×•×™×§×˜: ×ž×—×•×¥ ×œ×¢×©×¨×ª ×”×™×ž×™×"
+                      : `×™×•× ×¤×¨×•×™×§×˜: ${state.filters.projectDay}`
                   );
                 }
                 if (state.filters.dateExact !== "all") {
-                  summary.push(`תאריך: ${formatDate(state.filters.dateExact)}`);
+                  summary.push(`×ª××¨×™×š: ${formatDate(state.filters.dateExact)}`);
                 }
                 if (state.filters.dateFrom || state.filters.dateTo) {
-                  summary.push(`טווח תאריכים: ${state.filters.dateFrom || "התחלה פתוחה"} עד ${state.filters.dateTo || "סיום פתוח"}`);
+                  summary.push(`×˜×•×•×— ×ª××¨×™×›×™×: ${state.filters.dateFrom || "×”×ª×—×œ×” ×¤×ª×•×—×”"} ×¢×“ ${state.filters.dateTo || "×¡×™×•× ×¤×ª×•×—"}`);
                 }
                 if (state.filters.hour !== "all") {
-                  summary.push(`שעה: ${formatHourLabel(state.filters.hour)}`);
+                  summary.push(`×©×¢×”: ${formatHourLabel(state.filters.hour)}`);
                 }
                 if (state.filters.hourFrom !== "all" || state.filters.hourTo !== "all") {
-                  summary.push(`טווח שעות: ${state.filters.hourFrom !== "all" ? formatHourLabel(state.filters.hourFrom) : "ללא התחלה"} עד ${state.filters.hourTo !== "all" ? formatHourLabel(state.filters.hourTo) : "ללא סוף"}`);
+                  summary.push(`×˜×•×•×— ×©×¢×•×ª: ${state.filters.hourFrom !== "all" ? formatHourLabel(state.filters.hourFrom) : "×œ×œ× ×”×ª×—×œ×”"} ×¢×“ ${state.filters.hourTo !== "all" ? formatHourLabel(state.filters.hourTo) : "×œ×œ× ×¡×•×£"}`);
                 }
                 if (state.filters.amountMin !== "" || state.filters.amountMax !== "") {
-                  summary.push(`סכום: ${state.filters.amountMin || "0"} עד ${state.filters.amountMax || "ללא תקרה"} ₪`);
+                  summary.push(`×¡×›×•×: ${state.filters.amountMin || "0"} ×¢×“ ${state.filters.amountMax || "×œ×œ× ×ª×§×¨×”"} â‚ª`);
                 }
                 if (state.filters.donor.trim()) {
-                  summary.push(`תורם: ${state.filters.donor.trim()}`);
+                  summary.push(`×ª×•×¨×: ${state.filters.donor.trim()}`);
                 }
                 return summary;
               }
 
               function getActiveFilterSummary() {
                 const summary = getActiveFilters();
-                return summary.length ? ` | פילוחים פעילים: ${summary.join(" • ")}` : "";
+                return summary.length ? ` | ×¤×™×œ×•×—×™× ×¤×¢×™×œ×™×: ${summary.join(" â€¢ ")}` : "";
               }
 
               function renderActiveFilterSummary() {
                 const summary = getActiveFilters();
-                elements.activeFilterSummary.textContent = summary.length ? `מסננים פעילים: ${summary.join(" • ")}` : "אין מסננים פעילים";
+                elements.activeFilterSummary.textContent = summary.length ? `×ž×¡× × ×™× ×¤×¢×™×œ×™×: ${summary.join(" â€¢ ")}` : "××™×Ÿ ×ž×¡× × ×™× ×¤×¢×™×œ×™×";
               }
 
               function updateMetricToolbarState() {
@@ -7329,9 +7501,9 @@ def build_fragment(
               }
 
               function setControlNote(filteredRows, prizeRows) {
-                const compareText = state.compare.rows.length ? ` | השוואה: ${state.compare.label} (${formatNumber(state.compare.rows.length)} רשומות)` : "";
-                const resetPrefix = isResetDataState() ? "מאופס | " : "";
-                elements.controlNote.textContent = `${resetPrefix}בסיס: ${state.sourceLabel} | חלון ברירת מחדל: ${state.meta.projectWindowLabel || "לא זוהה"} | מוצגות ${formatNumber(filteredRows.length)} עסקאות במסנן | פרסים מחושבים על ${formatNumber(prizeRows.length)} עסקאות בטווח הזמן הנבחר${compareText}${getActiveFilterSummary()}`;
+                const compareText = state.compare.rows.length ? ` | ×”×©×•×•××”: ${state.compare.label} (${formatNumber(state.compare.rows.length)} ×¨×©×•×ž×•×ª)` : "";
+                const resetPrefix = isResetDataState() ? "×ž××•×¤×¡ | " : "";
+                elements.controlNote.textContent = `${resetPrefix}×‘×¡×™×¡: ${state.sourceLabel} | ×—×œ×•×Ÿ ×‘×¨×™×¨×ª ×ž×—×“×œ: ${state.meta.projectWindowLabel || "×œ× ×–×•×”×”"} | ×ž×•×¦×’×•×ª ${formatNumber(filteredRows.length)} ×¢×¡×§××•×ª ×‘×ž×¡× ×Ÿ | ×¤×¨×¡×™× ×ž×—×•×©×‘×™× ×¢×œ ${formatNumber(prizeRows.length)} ×¢×¡×§××•×ª ×‘×˜×•×•×— ×”×–×ž×Ÿ ×”× ×‘×—×¨${compareText}${getActiveFilterSummary()}`;
               }
 
               function renderPublicHeroBadges(prizeRows) {
@@ -7340,54 +7512,54 @@ def build_fragment(
                 const latestCreated = getLatestCreatedIso(prizeRows);
                 const total = sumAmount(prizeRows);
                 const resetState = isResetDataState();
-                const campaignStatus = resetState ? "מאופס" : (prizeRows.length ? "פעיל על בסיס הקובץ הנוכחי" : "ממתין לנתונים");
-                const sourceWindow = state.meta.projectWindowLabel || "לא זוהה";
-                const leaderValue = topLeader ? escapeHtml(topLeader.ambassador) : "טרם נקבע";
+                const campaignStatus = resetState ? "×ž××•×¤×¡" : (prizeRows.length ? "×¤×¢×™×œ ×¢×œ ×‘×¡×™×¡ ×”×§×•×‘×¥ ×”× ×•×›×—×™" : "×ž×ž×ª×™×Ÿ ×œ× ×ª×•× ×™×");
+                const sourceWindow = state.meta.projectWindowLabel || "×œ× ×–×•×”×”";
+                const leaderValue = topLeader ? escapeHtml(topLeader.ambassador) : "×˜×¨× × ×§×‘×¢";
                 const leaderMeta = topLeader
-                  ? `הוביל/ה עד כה עם ${escapeHtml(formatAmount(topLeader.total))}`
-                  : (resetState ? "כל נתוני התרומות נוקו. אפשר להתחיל להזרים נתוני בדיקה חדשים." : "ברגע שייקלטו נתונים יופיע כאן מוביל/ה נוכחי/ת");
-                const updatedText = latestCreated ? escapeHtml(formatDateTime(latestCreated)) : "אין עדכון";
+                  ? `×”×•×‘×™×œ/×” ×¢×“ ×›×” ×¢× ${escapeHtml(formatAmount(topLeader.total))}`
+                  : (resetState ? "×›×œ × ×ª×•× ×™ ×”×ª×¨×•×ž×•×ª × ×•×§×•. ××¤×©×¨ ×œ×”×ª×—×™×œ ×œ×”×–×¨×™× × ×ª×•× ×™ ×‘×“×™×§×” ×—×“×©×™×." : "×‘×¨×’×¢ ×©×™×™×§×œ×˜×• × ×ª×•× ×™× ×™×•×¤×™×¢ ×›××Ÿ ×ž×•×‘×™×œ/×” × ×•×›×—×™/×ª");
+                const updatedText = latestCreated ? escapeHtml(formatDateTime(latestCreated)) : "××™×Ÿ ×¢×“×›×•×Ÿ";
                 const publicBadges = [
                   `
                     <article class="public-snapshot-card public-snapshot-card--primary">
-                      <div class="public-snapshot-label">סך גיוס נוכחי</div>
+                      <div class="public-snapshot-label">×¡×š ×’×™×•×¡ × ×•×›×—×™</div>
                       <div class="public-snapshot-value">${escapeHtml(formatAmount(total))}</div>
-                      <div class="public-snapshot-meta">זהו הסכום המחושב כרגע מתוך טווח הנתונים הפעיל.</div>
+                      <div class="public-snapshot-meta">×–×”×• ×”×¡×›×•× ×”×ž×—×•×©×‘ ×›×¨×’×¢ ×ž×ª×•×š ×˜×•×•×— ×”× ×ª×•× ×™× ×”×¤×¢×™×œ.</div>
                     </article>
                   `,
                   `
                     <article class="public-snapshot-card public-snapshot-card--wide">
-                      <div class="public-snapshot-label">מוביל/ה כרגע</div>
+                      <div class="public-snapshot-label">×ž×•×‘×™×œ/×” ×›×¨×’×¢</div>
                       <div class="public-snapshot-value">${leaderValue}</div>
                       <div class="public-snapshot-meta">${leaderMeta}</div>
                     </article>
                   `,
                   `
                     <article class="public-snapshot-card">
-                      <div class="public-snapshot-label">שגרירים פעילים</div>
+                      <div class="public-snapshot-label">×©×’×¨×™×¨×™× ×¤×¢×™×œ×™×</div>
                       <div class="public-snapshot-value">${escapeHtml(formatNumber(leaderboard.length))}</div>
-                      <div class="public-snapshot-meta">מספר השגרירים עם גיוס בפועל בטווח המוצג.</div>
+                      <div class="public-snapshot-meta">×ž×¡×¤×¨ ×”×©×’×¨×™×¨×™× ×¢× ×’×™×•×¡ ×‘×¤×•×¢×œ ×‘×˜×•×•×— ×”×ž×•×¦×’.</div>
                     </article>
                   `,
                   `
                     <article class="public-snapshot-card">
-                      <div class="public-snapshot-label">חלון פרויקט פעיל</div>
+                      <div class="public-snapshot-label">×—×œ×•×Ÿ ×¤×¨×•×™×§×˜ ×¤×¢×™×œ</div>
                       <div class="public-snapshot-value">${escapeHtml(sourceWindow)}</div>
-                      <div class="public-snapshot-meta">הנתונים מוצגים עבור הטווח הפעיל בקובץ הנוכחי.</div>
+                      <div class="public-snapshot-meta">×”× ×ª×•× ×™× ×ž×•×¦×’×™× ×¢×‘×•×¨ ×”×˜×•×•×— ×”×¤×¢×™×œ ×‘×§×•×‘×¥ ×”× ×•×›×—×™.</div>
                     </article>
                   `,
                   `
                     <article class="public-snapshot-card">
-                      <div class="public-snapshot-label">סטטוס הפרויקט</div>
+                      <div class="public-snapshot-label">×¡×˜×˜×•×¡ ×”×¤×¨×•×™×§×˜</div>
                       <div class="public-snapshot-status">${escapeHtml(campaignStatus)}</div>
-                      <div class="public-snapshot-meta">התצוגה הציבורית משקפת את מצב הנתונים הזמין כרגע.</div>
+                      <div class="public-snapshot-meta">×”×ª×¦×•×’×” ×”×¦×™×‘×•×¨×™×ª ×ž×©×§×¤×ª ××ª ×ž×¦×‘ ×”× ×ª×•× ×™× ×”×–×ž×™×Ÿ ×›×¨×’×¢.</div>
                     </article>
                   `,
                   `
                     <article class="public-snapshot-card">
-                      <div class="public-snapshot-label">עדכון אחרון</div>
+                      <div class="public-snapshot-label">×¢×“×›×•×Ÿ ××—×¨×•×Ÿ</div>
                       <div class="public-snapshot-value">${updatedText}</div>
-                      <div class="public-snapshot-meta">זמן הרשומה האחרונה שנקלטה למסך התקציר.</div>
+                      <div class="public-snapshot-meta">×–×ž×Ÿ ×”×¨×©×•×ž×” ×”××—×¨×•× ×” ×©× ×§×œ×˜×” ×œ×ž×¡×š ×”×ª×§×¦×™×¨.</div>
                     </article>
                   `,
                 ];
@@ -7397,27 +7569,27 @@ def build_fragment(
               function renderHeroBadges(filteredRows, prizeRows, compareRows) {
                 const filteredTotal = sumAmount(filteredRows);
                 const prizeTotal = sumAmount(prizeRows);
-                const ambassadorCount = new Set(prizeRows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך")).size;
+                const ambassadorCount = new Set(prizeRows.map((row) => row.ambassador).filter((value) => value && value !== "×œ×œ× ×©×™×•×š")).size;
                 const latestCreated = getLatestCreatedIso(filteredRows);
                 const resetState = isResetDataState();
                 renderBrandAssets();
                 const badges = [
-                  ...(resetState ? [`<span class="hero-badge">מאופס</span>`] : []),
-                  `<span class="hero-badge">${escapeHtml(formatAmount(filteredTotal))} בתצוגה הפעילה</span>`,
-                  `<span class="hero-badge">${escapeHtml(formatNumber(ambassadorCount))} שגרירים פעילים בטווח</span>`,
-                  `<span class="hero-badge">טווח פרויקט: ${escapeHtml(state.meta.projectWindowLabel || "טווח לא זוהה")}</span>`,
-                  `<span class="hero-badge">בסיס פרסים: ${escapeHtml(formatAmount(prizeTotal))}</span>`,
+                  ...(resetState ? [`<span class="hero-badge">×ž××•×¤×¡</span>`] : []),
+                  `<span class="hero-badge">${escapeHtml(formatAmount(filteredTotal))} ×‘×ª×¦×•×’×” ×”×¤×¢×™×œ×”</span>`,
+                  `<span class="hero-badge">${escapeHtml(formatNumber(ambassadorCount))} ×©×’×¨×™×¨×™× ×¤×¢×™×œ×™× ×‘×˜×•×•×—</span>`,
+                  `<span class="hero-badge">×˜×•×•×— ×¤×¨×•×™×§×˜: ${escapeHtml(state.meta.projectWindowLabel || "×˜×•×•×— ×œ× ×–×•×”×”")}</span>`,
+                  `<span class="hero-badge">×‘×¡×™×¡ ×¤×¨×¡×™×: ${escapeHtml(formatAmount(prizeTotal))}</span>`,
                 ];
                 if (state.compare.rows.length) {
-                  badges.push(`<span class="hero-badge">השוואה: ${escapeHtml(state.compare.label)} · ${escapeHtml(formatAmount(sumAmount(compareRows)))}</span>`);
+                  badges.push(`<span class="hero-badge">×”×©×•×•××”: ${escapeHtml(state.compare.label)} Â· ${escapeHtml(formatAmount(sumAmount(compareRows)))}</span>`);
                 }
                 if (latestCreated) {
-                  badges.push(`<span class="hero-badge">עודכן לאחרונה: ${escapeHtml(formatDateTime(latestCreated))}</span>`);
+                  badges.push(`<span class="hero-badge">×¢×•×“×›×Ÿ ×œ××—×¨×•× ×”: ${escapeHtml(formatDateTime(latestCreated))}</span>`);
                 }
-                elements.adminWindowLabel.textContent = state.meta.projectWindowLabel || "לא זוהה";
-                elements.adminLastUpdated.textContent = latestCreated ? formatDateTime(latestCreated) : (resetState ? "מאופס" : "אין נתונים");
-                elements.adminSourceFile.textContent = state.sourceLabel || "קובץ בסיס";
-                elements.adminRecordCount.textContent = resetState ? "מאופס" : formatNumber(filteredRows.length);
+                elements.adminWindowLabel.textContent = state.meta.projectWindowLabel || "×œ× ×–×•×”×”";
+                elements.adminLastUpdated.textContent = latestCreated ? formatDateTime(latestCreated) : (resetState ? "×ž××•×¤×¡" : "××™×Ÿ × ×ª×•× ×™×");
+                elements.adminSourceFile.textContent = state.sourceLabel || "×§×•×‘×¥ ×‘×¡×™×¡";
+                elements.adminRecordCount.textContent = resetState ? "×ž××•×¤×¡" : formatNumber(filteredRows.length);
                 elements.heroBadges.innerHTML = badges.join("");
               }
 
@@ -7434,14 +7606,14 @@ def build_fragment(
                 const targetPct = totalGoal > 0 ? total / totalGoal : 0;
                 const timeRemainingHours = Math.max(0, Math.round(velocity.bounds.remainingHours));
                 const stats = [
-                  { label: "סכום שגויס", value: totalGoal ? `${formatAmount(total)} / ${formatAmount(totalGoal)}` : formatAmount(total), detail: totalGoal ? `${formatPercent(targetPct)} מהיעד` : "עדיין לא הוגדר יעד" },
-                  { label: "תחזית סיום", value: formatAmount(forecast.projectedFinal), detail: totalGoal ? `${formatPercent(forecast.projectedTargetPct)} מהיעד · ${forecast.confidence}` : forecast.confidenceReason },
-                  { label: "זמן שנותר", value: `${formatNumber(timeRemainingHours)} שעות`, detail: `חלון קמפיין: ${formatPercent(velocity.bounds.elapsedRatio)} הושלם` },
-                  { label: "תרומות", value: formatNumber(rows.length), detail: `ממוצע לתרומה ${formatAmount(average)}` },
-                  { label: "שגרירים פעילים", value: formatNumber(activeAmbassadors), detail: `${formatNumber(ambassadors.length)} שגרירים מזוהים` },
-                  { label: "קצב גיוס נוכחי", value: `${formatAmount(velocity.last3Hours.amountPerHour)}/שעה`, detail: `שינוי ${formatSignedPercent(velocity.changeVsPrevious3Hours.amountRatio)} מול 3 השעות הקודמות` },
+                  { label: "×¡×›×•× ×©×’×•×™×¡", value: totalGoal ? `${formatAmount(total)} / ${formatAmount(totalGoal)}` : formatAmount(total), detail: totalGoal ? `${formatPercent(targetPct)} ×ž×”×™×¢×“` : "×¢×“×™×™×Ÿ ×œ× ×”×•×’×“×¨ ×™×¢×“" },
+                  { label: "×ª×—×–×™×ª ×¡×™×•×", value: formatAmount(forecast.projectedFinal), detail: totalGoal ? `${formatPercent(forecast.projectedTargetPct)} ×ž×”×™×¢×“ Â· ${forecast.confidence}` : forecast.confidenceReason },
+                  { label: "×–×ž×Ÿ ×©× ×•×ª×¨", value: `${formatNumber(timeRemainingHours)} ×©×¢×•×ª`, detail: `×—×œ×•×Ÿ ×§×ž×¤×™×™×Ÿ: ${formatPercent(velocity.bounds.elapsedRatio)} ×”×•×©×œ×` },
+                  { label: "×ª×¨×•×ž×•×ª", value: formatNumber(rows.length), detail: `×ž×ž×•×¦×¢ ×œ×ª×¨×•×ž×” ${formatAmount(average)}` },
+                  { label: "×©×’×¨×™×¨×™× ×¤×¢×™×œ×™×", value: formatNumber(activeAmbassadors), detail: `${formatNumber(ambassadors.length)} ×©×’×¨×™×¨×™× ×ž×–×•×”×™×` },
+                  { label: "×§×¦×‘ ×’×™×•×¡ × ×•×›×—×™", value: `${formatAmount(velocity.last3Hours.amountPerHour)}/×©×¢×”`, detail: `×©×™× ×•×™ ${formatSignedPercent(velocity.changeVsPrevious3Hours.amountRatio)} ×ž×•×œ 3 ×”×©×¢×•×ª ×”×§×•×“×ž×•×ª` },
                   { label: "Campaign Health", value: `${formatNumber(health.score)}/100`, detail: health.label },
-                  { label: "כשלי סליקה", value: formatNumber(rows.filter((row) => row.status === "failed").length), detail: `${formatPercent(rows.length ? rows.filter((row) => row.status === "failed").length / rows.length : 0)} מכלל העסקאות` },
+                  { label: "×›×©×œ×™ ×¡×œ×™×§×”", value: formatNumber(rows.filter((row) => row.status === "failed").length), detail: `${formatPercent(rows.length ? rows.filter((row) => row.status === "failed").length / rows.length : 0)} ×ž×›×œ×œ ×”×¢×¡×§××•×ª` },
                 ];
 
                 elements.metrics.innerHTML = stats
@@ -7473,33 +7645,33 @@ def build_fragment(
                 elements.goalDaily.value = dailyGoal || "";
                 elements.goalsSummary.textContent =
                   totalGoal || dailyGoal
-                    ? `יעד כולל: ${formatAmount(totalGoal)} | יעד יומי: ${formatAmount(dailyGoal)}`
-                    : "עדיין לא הוגדרו יעדים. אפשר להזין יעד כולל ויעד יומי בלוח הבקרה.";
+                    ? `×™×¢×“ ×›×•×œ×œ: ${formatAmount(totalGoal)} | ×™×¢×“ ×™×•×ž×™: ${formatAmount(dailyGoal)}`
+                    : "×¢×“×™×™×Ÿ ×œ× ×”×•×’×“×¨×• ×™×¢×“×™×. ××¤×©×¨ ×œ×”×–×™×Ÿ ×™×¢×“ ×›×•×œ×œ ×•×™×¢×“ ×™×•×ž×™ ×‘×œ×•×— ×”×‘×§×¨×”.";
 
                 elements.goalsBoard.innerHTML = `
                   <div class="signal-grid">
                     <section class="analysis-card">
-                      <h4>יעד כולל</h4>
+                      <h4>×™×¢×“ ×›×•×œ×œ</h4>
                       <ul>
-                        <li>ביצוע בפועל: ${escapeHtml(formatAmount(totalRaised))}</li>
-                        <li>התקדמות מול יעד: ${escapeHtml(totalGoal ? formatPercent(totalProgress) : "לא הוגדר יעד")}</li>
-                        <li>יתרה להשגה: ${escapeHtml(totalGoal ? formatAmount(remainingToTotal) : "לא הוגדר יעד")}</li>
+                        <li>×‘×™×¦×•×¢ ×‘×¤×•×¢×œ: ${escapeHtml(formatAmount(totalRaised))}</li>
+                        <li>×”×ª×§×“×ž×•×ª ×ž×•×œ ×™×¢×“: ${escapeHtml(totalGoal ? formatPercent(totalProgress) : "×œ× ×”×•×’×“×¨ ×™×¢×“")}</li>
+                        <li>×™×ª×¨×” ×œ×”×©×’×”: ${escapeHtml(totalGoal ? formatAmount(remainingToTotal) : "×œ× ×”×•×’×“×¨ ×™×¢×“")}</li>
                       </ul>
                     </section>
                     <section class="analysis-card">
-                      <h4>יעד יומי</h4>
+                      <h4>×™×¢×“ ×™×•×ž×™</h4>
                       <ul>
-                        <li>ממוצע יומי במסנן: ${escapeHtml(formatAmount(currentDailyAverage))}</li>
-                        <li>התקדמות מול יעד יומי: ${escapeHtml(dailyGoal ? formatPercent(dailyProgress) : "לא הוגדר יעד")}</li>
-                        <li>פער יומי נוכחי: ${escapeHtml(dailyGoal ? formatAmount(remainingToDaily) : "לא הוגדר יעד")}</li>
+                        <li>×ž×ž×•×¦×¢ ×™×•×ž×™ ×‘×ž×¡× ×Ÿ: ${escapeHtml(formatAmount(currentDailyAverage))}</li>
+                        <li>×”×ª×§×“×ž×•×ª ×ž×•×œ ×™×¢×“ ×™×•×ž×™: ${escapeHtml(dailyGoal ? formatPercent(dailyProgress) : "×œ× ×”×•×’×“×¨ ×™×¢×“")}</li>
+                        <li>×¤×¢×¨ ×™×•×ž×™ × ×•×›×—×™: ${escapeHtml(dailyGoal ? formatAmount(remainingToDaily) : "×œ× ×”×•×’×“×¨ ×™×¢×“")}</li>
                       </ul>
                     </section>
                     <section class="analysis-card">
-                      <h4>קריאה ניהולית</h4>
+                      <h4>×§×¨×™××” × ×™×”×•×œ×™×ª</h4>
                       <ul>
-                        <li>${escapeHtml(activeDays ? `המסנן מכסה ${formatNumber(activeDays)} ימי פעילות.` : "אין ימי פעילות בטווח הנבחר.")}</li>
-                        <li>${escapeHtml(totalGoal ? (totalRaised >= totalGoal ? "היעד הכולל הושג או נעקף." : `נדרש עוד ${formatAmount(remainingToTotal)} כדי להגיע ליעד הכולל.`) : "כדאי להגדיר יעד כולל כדי למדוד פער לביצוע.")}</li>
-                        <li>${escapeHtml(dailyGoal ? (currentDailyAverage >= dailyGoal ? "הקצב היומי נמצא מעל היעד." : `הקצב היומי נמוך ב-${formatAmount(remainingToDaily)} מהיעד.`) : "כדאי להגדיר יעד יומי כדי להבין אם הקצב בריא.")}</li>
+                        <li>${escapeHtml(activeDays ? `×”×ž×¡× ×Ÿ ×ž×›×¡×” ${formatNumber(activeDays)} ×™×ž×™ ×¤×¢×™×œ×•×ª.` : "××™×Ÿ ×™×ž×™ ×¤×¢×™×œ×•×ª ×‘×˜×•×•×— ×”× ×‘×—×¨.")}</li>
+                        <li>${escapeHtml(totalGoal ? (totalRaised >= totalGoal ? "×”×™×¢×“ ×”×›×•×œ×œ ×”×•×©×’ ××• × ×¢×§×£." : `× ×“×¨×© ×¢×•×“ ${formatAmount(remainingToTotal)} ×›×“×™ ×œ×”×’×™×¢ ×œ×™×¢×“ ×”×›×•×œ×œ.`) : "×›×“××™ ×œ×”×’×“×™×¨ ×™×¢×“ ×›×•×œ×œ ×›×“×™ ×œ×ž×“×•×“ ×¤×¢×¨ ×œ×‘×™×¦×•×¢.")}</li>
+                        <li>${escapeHtml(dailyGoal ? (currentDailyAverage >= dailyGoal ? "×”×§×¦×‘ ×”×™×•×ž×™ × ×ž×¦× ×ž×¢×œ ×”×™×¢×“." : `×”×§×¦×‘ ×”×™×•×ž×™ × ×ž×•×š ×‘-${formatAmount(remainingToDaily)} ×ž×”×™×¢×“.`) : "×›×“××™ ×œ×”×’×“×™×¨ ×™×¢×“ ×™×•×ž×™ ×›×“×™ ×œ×”×‘×™×Ÿ ×× ×”×§×¦×‘ ×‘×¨×™×.")}</li>
                       </ul>
                     </section>
                   </div>
@@ -7510,13 +7682,13 @@ def build_fragment(
                 const items = [state.validation.base, state.validation.compare].filter(Boolean);
                 if (!items.length) {
                   elements.validationSummary.textContent = "";
-                  elements.validationBoard.innerHTML = `<div class="empty-state">העלה קובץ כדי לקבל דוח ולידציה, שגיאות ואזהרות.</div>`;
+                  elements.validationBoard.innerHTML = `<div class="empty-state">×”×¢×œ×” ×§×•×‘×¥ ×›×“×™ ×œ×§×‘×œ ×“×•×— ×•×œ×™×“×¦×™×”, ×©×’×™××•×ª ×•××–×”×¨×•×ª.</div>`;
                   return;
                 }
 
                 const totalErrors = items.reduce((sum, item) => sum + item.errors.length, 0);
                 const totalWarnings = items.reduce((sum, item) => sum + item.warnings.length, 0);
-                elements.validationSummary.textContent = `${formatNumber(totalErrors)} שגיאות | ${formatNumber(totalWarnings)} אזהרות | ${items.length} קובצי קלט מנותחים`;
+                elements.validationSummary.textContent = `${formatNumber(totalErrors)} ×©×’×™××•×ª | ${formatNumber(totalWarnings)} ××–×”×¨×•×ª | ${items.length} ×§×•×‘×¦×™ ×§×œ×˜ ×ž× ×•×ª×—×™×`;
 
                 elements.validationBoard.innerHTML = `
                   <div class="signal-grid">
@@ -7526,9 +7698,9 @@ def build_fragment(
                           <section class="analysis-card quality">
                             <h4>${escapeHtml(item.label)}</h4>
                             <ul>
-                              <li>שורות מקור: ${escapeHtml(formatNumber(item.totalRows))} | שורות תקינות לטעינה: ${escapeHtml(formatNumber(item.validRows.length))}</li>
-                              <li>שגיאות: ${escapeHtml(item.errors.length ? item.errors.join(" | ") : "לא זוהו שגיאות חסימה")}</li>
-                              <li>אזהרות: ${escapeHtml(item.warnings.length ? item.warnings.join(" | ") : "לא זוהו אזהרות")}</li>
+                              <li>×©×•×¨×•×ª ×ž×§×•×¨: ${escapeHtml(formatNumber(item.totalRows))} | ×©×•×¨×•×ª ×ª×§×™× ×•×ª ×œ×˜×¢×™× ×”: ${escapeHtml(formatNumber(item.validRows.length))}</li>
+                              <li>×©×’×™××•×ª: ${escapeHtml(item.errors.length ? item.errors.join(" | ") : "×œ× ×–×•×”×• ×©×’×™××•×ª ×—×¡×™×ž×”")}</li>
+                              <li>××–×”×¨×•×ª: ${escapeHtml(item.warnings.length ? item.warnings.join(" | ") : "×œ× ×–×•×”×• ××–×”×¨×•×ª")}</li>
                             </ul>
                           </section>
                         `
@@ -7552,7 +7724,7 @@ def build_fragment(
               function renderExecutiveBoard(rows) {
                 if (!rows.length) {
                   elements.executiveSummary.textContent = "";
-                  elements.executiveBoard.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור הסיכום הניהולי.</div>`;
+                  elements.executiveBoard.innerHTML = `<div class="empty-state">××™×Ÿ × ×ª×•× ×™× ×œ×”×¦×’×” ×¢×‘×•×¨ ×”×¡×™×›×•× ×”× ×™×”×•×œ×™.</div>`;
                   return;
                 }
 
@@ -7562,38 +7734,38 @@ def build_fragment(
                 const forecast = intelligenceEngine.buildForecastModel(rows, context);
                 const attentionItems = intelligenceEngine.buildAttentionNow(rows, context);
                 const model = buildExecutiveModel(rows);
-                elements.executiveSummary.textContent = `${health.label} · תחזית ${formatAmount(forecast.projectedFinal)} · ${attentionItems.length} נקודות טיפול פתוחות`;
+                elements.executiveSummary.textContent = `${health.label} Â· ×ª×—×–×™×ª ${formatAmount(forecast.projectedFinal)} Â· ${attentionItems.length} × ×§×•×“×•×ª ×˜×™×¤×•×œ ×¤×ª×•×—×•×ª`;
 
                 const cards = [
                   {
                     title: "Campaign Health",
                     items: [
-                      `ציון בריאות הקמפיין עומד על ${formatNumber(health.score)} מתוך 100 ומסווג כ-${health.label}.`,
+                      `×¦×™×•×Ÿ ×‘×¨×™××•×ª ×”×§×ž×¤×™×™×Ÿ ×¢×•×ž×“ ×¢×œ ${formatNumber(health.score)} ×ž×ª×•×š 100 ×•×ž×¡×•×•×’ ×›-${health.label}.`,
                       ...health.reasons.map((item) => item.text),
                     ],
                   },
                   {
                     title: "Forecast & Trajectory",
                     items: [
-                      `תחזית הסיום הנוכחית היא ${formatAmount(forecast.projectedFinal)}.`,
+                      `×ª×—×–×™×ª ×”×¡×™×•× ×”× ×•×›×—×™×ª ×”×™× ${formatAmount(forecast.projectedFinal)}.`,
                       Number(state.goals.total || 0) > 0
-                        ? `המשמעות היא ${formatPercent(forecast.projectedTargetPct)} מהיעד הכולל ו-${forecast.gapOrSurplus >= 0 ? "עודף" : "פער"} של ${formatAmount(Math.abs(forecast.gapOrSurplus))}.`
-                        : "טרם הוגדר יעד כולל, ולכן התחזית מוצגת ללא אחוז יעד.",
-                      `מהירות 3 השעות האחרונות: ${formatAmount(velocity.last3Hours.amountPerHour)}/שעה מול ממוצע קמפיין של ${formatAmount(velocity.campaignAverage.amountPerHour)}/שעה.`,
+                        ? `×”×ž×©×ž×¢×•×ª ×”×™× ${formatPercent(forecast.projectedTargetPct)} ×ž×”×™×¢×“ ×”×›×•×œ×œ ×•-${forecast.gapOrSurplus >= 0 ? "×¢×•×“×£" : "×¤×¢×¨"} ×©×œ ${formatAmount(Math.abs(forecast.gapOrSurplus))}.`
+                        : "×˜×¨× ×”×•×’×“×¨ ×™×¢×“ ×›×•×œ×œ, ×•×œ×›×Ÿ ×”×ª×—×–×™×ª ×ž×•×¦×’×ª ×œ×œ× ××—×•×– ×™×¢×“.",
+                      `×ž×”×™×¨×•×ª 3 ×”×©×¢×•×ª ×”××—×¨×•× ×•×ª: ${formatAmount(velocity.last3Hours.amountPerHour)}/×©×¢×” ×ž×•×œ ×ž×ž×•×¦×¢ ×§×ž×¤×™×™×Ÿ ×©×œ ${formatAmount(velocity.campaignAverage.amountPerHour)}/×©×¢×”.`,
                     ],
                   },
                   {
-                    title: "מה דורש טיפול עכשיו?",
+                    title: "×ž×” ×“×•×¨×© ×˜×™×¤×•×œ ×¢×›×©×™×•?",
                     items: attentionItems.length
-                      ? attentionItems.slice(0, 3).map((item) => `${item.issue} ${item.evidence ? `| ${item.evidence}` : ""} | פעולה: ${item.action}`)
-                      : ["לא זוהו כרגע חריגות משמעותיות שמחייבות פעולה מיידית."],
+                      ? attentionItems.slice(0, 3).map((item) => `${item.issue} ${item.evidence ? `| ${item.evidence}` : ""} | ×¤×¢×•×œ×”: ${item.action}`)
+                      : ["×œ× ×–×•×”×• ×›×¨×’×¢ ×—×¨×™×’×•×ª ×ž×©×ž×¢×•×ª×™×•×ª ×©×ž×—×™×™×‘×•×ª ×¤×¢×•×œ×” ×ž×™×™×“×™×ª."],
                   },
                   {
-                    title: "תמונת מצב מנהלית",
+                    title: "×ª×ž×•× ×ª ×ž×¦×‘ ×ž× ×”×œ×™×ª",
                     items: [
-                      `סך הגיוס כרגע הוא ${formatAmount(model.total)} מתוך ${formatNumber(model.deals)} עסקאות.`,
-                      model.topAmbassador ? `המוביל/ה כרגע: ${model.topAmbassador.ambassador} עם ${formatAmount(model.topAmbassador.total)}.` : "אין שגריר מוביל מזוהה.",
-                      `יש ${formatNumber(model.failedCount)} עסקאות שנכשלו ו-${formatNumber(model.ambassadorCount)} שגרירים פעילים בפילוח הנוכחי.`,
+                      `×¡×š ×”×’×™×•×¡ ×›×¨×’×¢ ×”×•× ${formatAmount(model.total)} ×ž×ª×•×š ${formatNumber(model.deals)} ×¢×¡×§××•×ª.`,
+                      model.topAmbassador ? `×”×ž×•×‘×™×œ/×” ×›×¨×’×¢: ${model.topAmbassador.ambassador} ×¢× ${formatAmount(model.topAmbassador.total)}.` : "××™×Ÿ ×©×’×¨×™×¨ ×ž×•×‘×™×œ ×ž×–×•×”×”.",
+                      `×™×© ${formatNumber(model.failedCount)} ×¢×¡×§××•×ª ×©× ×›×©×œ×• ×•-${formatNumber(model.ambassadorCount)} ×©×’×¨×™×¨×™× ×¤×¢×™×œ×™× ×‘×¤×™×œ×•×— ×”× ×•×›×—×™.`,
                     ],
                   },
                 ];
@@ -7618,7 +7790,7 @@ def build_fragment(
 
               function buildDataQualityModel(rows) {
                 const failedRows = rows.filter((row) => row.status === "failed");
-                const missingAmbassador = rows.filter((row) => row.ambassador === "ללא שיוך");
+                const missingAmbassador = rows.filter((row) => row.ambassador === "×œ×œ× ×©×™×•×š");
                 const zeroAmount = rows.filter((row) => row.amount <= 0);
                 const outOfWindow = rows.filter((row) => row.projectDay === null);
                 const duplicateMap = new Map();
@@ -7633,7 +7805,7 @@ def build_fragment(
                 const percentileIndex = amounts.length ? Math.max(0, Math.floor(amounts.length * 0.95) - 1) : 0;
                 const p95 = amounts[percentileIndex] || 0;
                 const highOutliers = rows.filter((row) => row.amount >= Math.max(2500, p95));
-                const failureReasons = [...groupBy(failedRows, (row) => row.chargeResult || "לא סופק קוד").entries()]
+                const failureReasons = [...groupBy(failedRows, (row) => row.chargeResult || "×œ× ×¡×•×¤×§ ×§×•×“").entries()]
                   .map(([reason, items]) => ({ reason, count: items.length }))
                   .sort((left, right) => right.count - left.count)
                   .slice(0, 4);
@@ -7653,34 +7825,34 @@ def build_fragment(
               function renderQualityBoard(rows) {
                 if (!rows.length) {
                   elements.qualitySummary.textContent = "";
-                  elements.qualityBoard.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור איכות הנתונים.</div>`;
+                  elements.qualityBoard.innerHTML = `<div class="empty-state">××™×Ÿ × ×ª×•× ×™× ×œ×”×¦×’×” ×¢×‘×•×¨ ××™×›×•×ª ×”× ×ª×•× ×™×.</div>`;
                   return;
                 }
 
                 const model = buildDataQualityModel(rows);
-                elements.qualitySummary.textContent = `כשלים: ${formatNumber(model.failedRows.length)} | שיוך חסר: ${formatNumber(model.missingAmbassador.length)} | כפילויות חשודות: ${formatNumber(model.duplicateCandidates)}`;
+                elements.qualitySummary.textContent = `×›×©×œ×™×: ${formatNumber(model.failedRows.length)} | ×©×™×•×š ×—×¡×¨: ${formatNumber(model.missingAmbassador.length)} | ×›×¤×™×œ×•×™×•×ª ×—×©×•×“×•×ª: ${formatNumber(model.duplicateCandidates)}`;
 
                 const cards = [
                   {
-                    title: "שיוך ושלמות",
+                    title: "×©×™×•×š ×•×©×œ×ž×•×ª",
                     items: [
-                      `ל-${formatNumber(model.missingAmbassador.length)} רשומות אין שיוך שגריר/ה.`,
-                      `${formatNumber(model.outOfWindow.length)} רשומות נמצאות מחוץ לחלון עשרת ימי הפרויקט.`,
-                      `${formatNumber(model.zeroAmount.length)} רשומות עם סכום אפס או חסר.`,
+                      `×œ-${formatNumber(model.missingAmbassador.length)} ×¨×©×•×ž×•×ª ××™×Ÿ ×©×™×•×š ×©×’×¨×™×¨/×”.`,
+                      `${formatNumber(model.outOfWindow.length)} ×¨×©×•×ž×•×ª × ×ž×¦××•×ª ×ž×—×•×¥ ×œ×—×œ×•×Ÿ ×¢×©×¨×ª ×™×ž×™ ×”×¤×¨×•×™×§×˜.`,
+                      `${formatNumber(model.zeroAmount.length)} ×¨×©×•×ž×•×ª ×¢× ×¡×›×•× ××¤×¡ ××• ×—×¡×¨.`,
                     ],
                   },
                   {
-                    title: "גבייה וכשלים",
+                    title: "×’×‘×™×™×” ×•×›×©×œ×™×",
                     items: model.failureReasons.length
-                      ? model.failureReasons.map((item) => `${item.reason}: ${formatNumber(item.count)} עסקאות כושלות.`)
-                      : [`אין כרגע קודי כשל בולטים בתוך המסנן.`],
+                      ? model.failureReasons.map((item) => `${item.reason}: ${formatNumber(item.count)} ×¢×¡×§××•×ª ×›×•×©×œ×•×ª.`)
+                      : [`××™×Ÿ ×›×¨×’×¢ ×§×•×“×™ ×›×©×œ ×‘×•×œ×˜×™× ×‘×ª×•×š ×”×ž×¡× ×Ÿ.`],
                   },
                   {
-                    title: "חריגים וכפילויות",
+                    title: "×—×¨×™×’×™× ×•×›×¤×™×œ×•×™×•×ª",
                     items: [
-                      `${formatNumber(model.duplicateCandidates)} רשומות נראות כמו כפילויות אפשריות לפי תאריך, מזהה תורם וסכום.`,
-                      `${formatNumber(model.highOutliers.length)} עסקאות נמצאות מעל סף חריגות של ${formatAmount(Math.max(2500, model.p95))}.`,
-                      model.highOutliers[0] ? `העסקה החריגה הגבוהה ביותר כרגע היא ${formatAmount(Math.max(...model.highOutliers.map((row) => row.amount)))}.` : `אין כרגע עסקאות חריגות.`,
+                      `${formatNumber(model.duplicateCandidates)} ×¨×©×•×ž×•×ª × ×¨××•×ª ×›×ž×• ×›×¤×™×œ×•×™×•×ª ××¤×©×¨×™×•×ª ×œ×¤×™ ×ª××¨×™×š, ×ž×–×”×” ×ª×•×¨× ×•×¡×›×•×.`,
+                      `${formatNumber(model.highOutliers.length)} ×¢×¡×§××•×ª × ×ž×¦××•×ª ×ž×¢×œ ×¡×£ ×—×¨×™×’×•×ª ×©×œ ${formatAmount(Math.max(2500, model.p95))}.`,
+                      model.highOutliers[0] ? `×”×¢×¡×§×” ×”×—×¨×™×’×” ×”×’×‘×•×”×” ×‘×™×•×ª×¨ ×›×¨×’×¢ ×”×™× ${formatAmount(Math.max(...model.highOutliers.map((row) => row.amount)))}.` : `××™×Ÿ ×›×¨×’×¢ ×¢×¡×§××•×ª ×—×¨×™×’×•×ª.`,
                     ],
                   },
                 ];
@@ -7705,11 +7877,11 @@ def build_fragment(
 
               function buildSegmentModel(rows) {
                 const bucketDefinitions = [
-                  { label: "עד ₪99", min: 0, max: 99.999 },
-                  { label: "₪100-249", min: 100, max: 249.999 },
-                  { label: "₪250-499", min: 250, max: 499.999 },
-                  { label: "₪500-999", min: 500, max: 999.999 },
-                  { label: "₪1000+", min: 1000, max: Infinity },
+                  { label: "×¢×“ â‚ª99", min: 0, max: 99.999 },
+                  { label: "â‚ª100-249", min: 100, max: 249.999 },
+                  { label: "â‚ª250-499", min: 250, max: 499.999 },
+                  { label: "â‚ª500-999", min: 500, max: 999.999 },
+                  { label: "â‚ª1000+", min: 1000, max: Infinity },
                 ];
                 const buckets = bucketDefinitions.map((bucket) => {
                   const items = rows.filter((row) => row.amount >= bucket.min && row.amount <= bucket.max);
@@ -7722,7 +7894,7 @@ def build_fragment(
                 const maxBucketCount = Math.max(...buckets.map((bucket) => bucket.count), 1);
                 const topDonors = [...groupBy(rows, (row) => row.donor).entries()]
                   .map(([donor, items]) => ({ donor, total: sumAmount(items), count: items.length }))
-                  .filter((item) => item.donor && item.donor !== "ללא שם")
+                  .filter((item) => item.donor && item.donor !== "×œ×œ× ×©×")
                   .sort((left, right) => right.total - left.total)
                   .slice(0, 5);
                 const statusCounts = [...groupBy(rows, (row) => row.status).entries()]
@@ -7739,7 +7911,7 @@ def build_fragment(
               function renderSegmentBoard(rows) {
                 if (!rows.length) {
                   elements.segmentSummary.textContent = "";
-                  elements.segmentBoard.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור פילוח העסקאות.</div>`;
+                  elements.segmentBoard.innerHTML = `<div class="empty-state">××™×Ÿ × ×ª×•× ×™× ×œ×”×¦×’×” ×¢×‘×•×¨ ×¤×™×œ×•×— ×”×¢×¡×§××•×ª.</div>`;
                   return;
                 }
 
@@ -7748,7 +7920,7 @@ def build_fragment(
                 const ambassadors = intelligenceEngine.buildAmbassadorModels(rows, context);
                 const priorities = intelligenceEngine.buildPriorityList(rows, context);
                 const largeBucket = model.buckets[model.buckets.length - 1];
-                elements.segmentSummary.textContent = `זוהו ${formatNumber(ambassadors.length)} שגרירים ו-${formatNumber(priorities.length)} הזדמנויות פעולה מיידיות.`;
+                elements.segmentSummary.textContent = `×–×•×”×• ${formatNumber(ambassadors.length)} ×©×’×¨×™×¨×™× ×•-${formatNumber(priorities.length)} ×”×–×“×ž× ×•×™×•×ª ×¤×¢×•×œ×” ×ž×™×™×“×™×•×ª.`;
 
                 elements.segmentBoard.innerHTML = `
                   <div class="segment-grid">
@@ -7758,9 +7930,9 @@ def build_fragment(
                         ${priorities.length
                           ? priorities
                               .slice(0, 6)
-                              .map((item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> · ${escapeHtml(item.reason)} · ${escapeHtml(item.action)}</li>`)
+                              .map((item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> Â· ${escapeHtml(item.reason)} Â· ${escapeHtml(item.action)}</li>`)
                               .join("")
-                          : `<li>לא זוהו כרגע הזדמנויות פעולה ממוקדות.</li>`}
+                          : `<li>×œ× ×–×•×”×• ×›×¨×’×¢ ×”×–×“×ž× ×•×™×•×ª ×¤×¢×•×œ×” ×ž×ž×•×§×“×•×ª.</li>`}
                       </ul>
                     </section>
                     <section class="analysis-card">
@@ -7772,14 +7944,14 @@ def build_fragment(
                               .sort((left, right) => right.total - left.total)
                               .slice(0, 6)
                               .map(
-                                (item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> · ${escapeHtml(item.status)} · ${escapeHtml(formatAmount(item.total))} · ${escapeHtml(item.target ? formatPercent(item.targetProgress) : "ללא יעד")} · ${escapeHtml(item.hoursSinceActivity ? `${Math.round(item.hoursSinceActivity)} שעות ללא פעילות` : "פעיל כעת")}</li>`
+                                (item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> Â· ${escapeHtml(item.status)} Â· ${escapeHtml(formatAmount(item.total))} Â· ${escapeHtml(item.target ? formatPercent(item.targetProgress) : "×œ×œ× ×™×¢×“")} Â· ${escapeHtml(item.hoursSinceActivity ? `${Math.round(item.hoursSinceActivity)} ×©×¢×•×ª ×œ×œ× ×¤×¢×™×œ×•×ª` : "×¤×¢×™×œ ×›×¢×ª")}</li>`
                               )
                               .join("")
-                          : `<li>אין שגרירים להצגה בטווח המסונן.</li>`}
+                          : `<li>××™×Ÿ ×©×’×¨×™×¨×™× ×œ×”×¦×’×” ×‘×˜×•×•×— ×”×ž×¡×•× ×Ÿ.</li>`}
                       </ul>
                     </section>
                     <section class="analysis-card">
-                      <h4>התפלגות סכומי תרומה</h4>
+                      <h4>×”×ª×¤×œ×’×•×ª ×¡×›×•×ž×™ ×ª×¨×•×ž×”</h4>
                       <div class="bucket-row">
                         ${model.buckets
                           .map(
@@ -7787,7 +7959,7 @@ def build_fragment(
                               <div class="bucket-item">
                                 <div class="bucket-head">
                                   <span>${escapeHtml(bucket.label)}</span>
-                                  <span class="text-small text-muted">${escapeHtml(formatNumber(bucket.count))} עסקאות · ${escapeHtml(formatAmount(bucket.total))}</span>
+                                  <span class="text-small text-muted">${escapeHtml(formatNumber(bucket.count))} ×¢×¡×§××•×ª Â· ${escapeHtml(formatAmount(bucket.total))}</span>
                                 </div>
                                 <div class="bucket-bar"><div class="bucket-fill" style="width:${(bucket.count / model.maxBucketCount) * 100}%"></div></div>
                               </div>
@@ -7795,7 +7967,7 @@ def build_fragment(
                           )
                           .join("")}
                       </div>
-                      <div class="text-small text-muted">עסקאות של ₪1000+ מהוות ${escapeHtml(formatNumber(largeBucket.count))} עסקאות ו-${escapeHtml(formatAmount(largeBucket.total))} מהמחזור המסונן.</div>
+                      <div class="text-small text-muted">×¢×¡×§××•×ª ×©×œ â‚ª1000+ ×ž×”×•×•×ª ${escapeHtml(formatNumber(largeBucket.count))} ×¢×¡×§××•×ª ×•-${escapeHtml(formatAmount(largeBucket.total))} ×ž×”×ž×—×–×•×¨ ×”×ž×¡×•× ×Ÿ.</div>
                     </section>
                   </div>
                 `;
@@ -7804,44 +7976,44 @@ def build_fragment(
               function renderComparisonBoard(baseRows, compareRows) {
                 if (!state.compare.rows.length) {
                   elements.comparisonSummary.textContent = "";
-                  elements.comparisonBoard.innerHTML = `<div class="empty-state">העלה קובץ השוואה שני כדי לקבל תקציר, עובדות, נקודות קריטיות ותובנות בין שני הקבצים.</div>`;
+                  elements.comparisonBoard.innerHTML = `<div class="empty-state">×”×¢×œ×” ×§×•×‘×¥ ×”×©×•×•××” ×©× ×™ ×›×“×™ ×œ×§×‘×œ ×ª×§×¦×™×¨, ×¢×•×‘×“×•×ª, × ×§×•×“×•×ª ×§×¨×™×˜×™×•×ª ×•×ª×•×‘× ×•×ª ×‘×™×Ÿ ×©× ×™ ×”×§×‘×¦×™×.</div>`;
                   return;
                 }
 
                 if (!baseRows.length && !compareRows.length) {
                   elements.comparisonSummary.textContent = "";
-                  elements.comparisonBoard.innerHTML = `<div class="empty-state">שני הקבצים ריקים בטווח שנבחר.</div>`;
+                  elements.comparisonBoard.innerHTML = `<div class="empty-state">×©× ×™ ×”×§×‘×¦×™× ×¨×™×§×™× ×‘×˜×•×•×— ×©× ×‘×—×¨.</div>`;
                   return;
                 }
 
                 const comparison = buildComparisonModel(baseRows, compareRows);
-                elements.comparisonSummary.textContent = `${comparison.base.label} מול ${comparison.compare.label} | חפיפת שגרירים: ${formatNumber(comparison.overlapCount)}`;
+                elements.comparisonSummary.textContent = `${comparison.base.label} ×ž×•×œ ${comparison.compare.label} | ×—×¤×™×¤×ª ×©×’×¨×™×¨×™×: ${formatNumber(comparison.overlapCount)}`;
 
                 const deltaClass = (value) => (value > 0 ? "is-up" : value < 0 ? "is-down" : "");
                 const metricCards = [
                   {
-                    label: "סך גיוס",
+                    label: "×¡×š ×’×™×•×¡",
                     base: formatAmount(comparison.base.total),
                     compare: formatAmount(comparison.compare.total),
                     delta: formatSignedCurrency(comparison.totalDelta),
                     className: deltaClass(comparison.totalDelta),
                   },
                   {
-                    label: "מספר עסקאות",
+                    label: "×ž×¡×¤×¨ ×¢×¡×§××•×ª",
                     base: formatNumber(comparison.base.deals),
                     compare: formatNumber(comparison.compare.deals),
                     delta: formatSignedNumber(comparison.dealsDelta),
                     className: deltaClass(comparison.dealsDelta),
                   },
                   {
-                    label: "ממוצע לעסקה",
+                    label: "×ž×ž×•×¦×¢ ×œ×¢×¡×§×”",
                     base: formatAmount(comparison.base.average),
                     compare: formatAmount(comparison.compare.average),
                     delta: formatSignedCurrency(comparison.averageDelta),
                     className: deltaClass(comparison.averageDelta),
                   },
                   {
-                    label: "שיעור הצלחה",
+                    label: "×©×™×¢×•×¨ ×”×¦×œ×—×”",
                     base: formatPercent(comparison.base.successRate),
                     compare: formatPercent(comparison.compare.successRate),
                     delta: formatSignedPercentPoints(comparison.successDelta),
@@ -7860,8 +8032,8 @@ def build_fragment(
                               <div class="comparison-value">${escapeHtml(card.compare)}</div>
                               <span class="comparison-delta ${card.className}">${escapeHtml(card.delta)}</span>
                             </div>
-                            <div class="text-small text-muted">${escapeHtml(comparison.compare.label)} מול ${escapeHtml(comparison.base.label)}</div>
-                            <div class="text-small text-muted">בסיס: ${escapeHtml(card.base)}</div>
+                            <div class="text-small text-muted">${escapeHtml(comparison.compare.label)} ×ž×•×œ ${escapeHtml(comparison.base.label)}</div>
+                            <div class="text-small text-muted">×‘×¡×™×¡: ${escapeHtml(card.base)}</div>
                           </article>
                         `
                       )
@@ -7869,19 +8041,19 @@ def build_fragment(
                   </div>
                   <div class="comparison-lists">
                     <section class="comparison-list">
-                      <h4>תקציר ועובדות</h4>
+                      <h4>×ª×§×¦×™×¨ ×•×¢×•×‘×“×•×ª</h4>
                       <ul>
                         ${comparison.facts.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
                       </ul>
                     </section>
                     <section class="comparison-list critical">
-                      <h4>נקודות קריטיות</h4>
+                      <h4>× ×§×•×“×•×ª ×§×¨×™×˜×™×•×ª</h4>
                       <ul>
                         ${comparison.critical.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
                       </ul>
                     </section>
                     <section class="comparison-list insights">
-                      <h4>תובנות בין הקבצים</h4>
+                      <h4>×ª×•×‘× ×•×ª ×‘×™×Ÿ ×”×§×‘×¦×™×</h4>
                       <ul>
                         ${comparison.insights.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
                       </ul>
@@ -7895,14 +8067,14 @@ def build_fragment(
                 const { placeWinners, tiers, prizeModel, selectedFocus } = standings;
 
                 elements.prizeSummary.textContent = selectedFocus
-                  ? `${selectedFocus.ambassador}: ${formatAmount(selectedFocus.total)} | פרס פעיל: ${selectedFocus.currentPrize}${selectedFocus.nextPrize ? ` | חסרים ${formatAmount(selectedFocus.gap)} ל-${selectedFocus.nextPrize}` : " | נמצא במדרגה העליונה"}` : `${formatNumber(standings.leaderboard.length)} שגרירים מדורגים בטווח הזמן הנבחר`;
+                  ? `${selectedFocus.ambassador}: ${formatAmount(selectedFocus.total)} | ×¤×¨×¡ ×¤×¢×™×œ: ${selectedFocus.currentPrize}${selectedFocus.nextPrize ? ` | ×—×¡×¨×™× ${formatAmount(selectedFocus.gap)} ×œ-${selectedFocus.nextPrize}` : " | × ×ž×¦× ×‘×ž×“×¨×’×” ×”×¢×œ×™×•× ×”"}` : `${formatNumber(standings.leaderboard.length)} ×©×’×¨×™×¨×™× ×ž×“×•×¨×’×™× ×‘×˜×•×•×— ×”×–×ž×Ÿ ×”× ×‘×—×¨`;
 
                 const podiumMarkup = placeWinners.length
                   ? `
                       <div class="dashboard-section">
                         <div class="section-head">
-                          <h3>פרסי מקומות</h3>
-                          <div class="text-small text-muted">מקומות 1-3 מחושבים לפי סכום הגיוס המצטבר בטווח המסונן.</div>
+                          <h3>×¤×¨×¡×™ ×ž×§×•×ž×•×ª</h3>
+                          <div class="text-small text-muted">×ž×§×•×ž×•×ª 1-3 ×ž×—×•×©×‘×™× ×œ×¤×™ ×¡×›×•× ×”×’×™×•×¡ ×”×ž×¦×˜×‘×¨ ×‘×˜×•×•×— ×”×ž×¡×•× ×Ÿ.</div>
                         </div>
                         <div class="podium-grid">
                           ${placeWinners
@@ -7934,13 +8106,13 @@ def build_fragment(
                                               <span class="winner-rank">${escapeHtml(String(item.place))}</span>
                                               <div>
                                                 <div class="winner-name">${escapeHtml(winner.ambassador)}</div>
-                                                <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} עסקאות</div>
+                                                <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} ×¢×¡×§××•×ª</div>
                                               </div>
                                               <div class="winner-amount">${escapeHtml(formatAmount(winner.total))}</div>
                                             </div>
                                           </div>
                                         `
-                                        : `<div class="empty-state">עדיין אין זוכה למקום הזה בטווח שנבחר.</div>`
+                                        : `<div class="empty-state">×¢×“×™×™×Ÿ ××™×Ÿ ×–×•×›×” ×œ×ž×§×•× ×”×–×” ×‘×˜×•×•×— ×©× ×‘×—×¨.</div>`
                                     }
                                   </div>
                                 </article>
@@ -7956,8 +8128,8 @@ def build_fragment(
                   ? `
                       <div class="dashboard-section">
                         <div class="section-head">
-                          <h3>מדרגות פרס</h3>
-                          <div class="text-small text-muted">${escapeHtml(prizeModel.tierRuleNote || "שדרוג מדרגה מחליף את הפרס הפעיל, ובמדרגה הראשונה נשמרת זכאות למרצ' העמותה.")}</div>
+                          <h3>×ž×“×¨×’×•×ª ×¤×¨×¡</h3>
+                          <div class="text-small text-muted">${escapeHtml(prizeModel.tierRuleNote || "×©×“×¨×•×’ ×ž×“×¨×’×” ×ž×—×œ×™×£ ××ª ×”×¤×¨×¡ ×”×¤×¢×™×œ, ×•×‘×ž×“×¨×’×” ×”×¨××©×•× ×” × ×©×ž×¨×ª ×–×›××•×ª ×œ×ž×¨×¦' ×”×¢×ž×•×ª×”.")}</div>
                         </div>
                         <div class="tier-grid">
                           ${tiers
@@ -7965,7 +8137,7 @@ def build_fragment(
                               const winners = tier.active.slice(0, 5);
                               const carryoverNote =
                                 index === 0 && tier.carryover.length
-                                  ? `<div class="status-note text-small">נשארים זכאים גם אחרי שדרוג: ${escapeHtml(formatNumber(tier.carryover.length))} שגרירים</div>`
+                                  ? `<div class="status-note text-small">× ×©××¨×™× ×–×›××™× ×’× ××—×¨×™ ×©×“×¨×•×’: ${escapeHtml(formatNumber(tier.carryover.length))} ×©×’×¨×™×¨×™×</div>`
                                   : "";
                               return `
                                 <article class="prize-card">
@@ -7984,7 +8156,7 @@ def build_fragment(
                                       <div class="prize-title">${escapeHtml(formatAmount(tier.threshold))}</div>
                                       <span class="prize-pill">${escapeHtml(tier.prize)}</span>
                                     </div>
-                                    <div class="text-small text-muted">זוכים פעילים כרגע: ${escapeHtml(formatNumber(tier.active.length))}</div>
+                                    <div class="text-small text-muted">×–×•×›×™× ×¤×¢×™×œ×™× ×›×¨×’×¢: ${escapeHtml(formatNumber(tier.active.length))}</div>
                                     ${carryoverNote}
                                     ${
                                       winners.length
@@ -7998,7 +8170,7 @@ def build_fragment(
                                                     <span class="winner-rank">${escapeHtml(String(winnerIndex + 1))}</span>
                                                     <div>
                                                       <div class="winner-name">${escapeHtml(winner.ambassador)}</div>
-                                                      <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} עסקאות</div>
+                                                      <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} ×¢×¡×§××•×ª</div>
                                                     </div>
                                                     <div class="winner-amount">${escapeHtml(formatAmount(winner.total))}</div>
                                                   </div>
@@ -8007,7 +8179,7 @@ def build_fragment(
                                               .join("")}
                                           </div>
                                         `
-                                        : `<div class="empty-state">עדיין אין זכאים פעילים במדרגה הזאת.</div>`
+                                        : `<div class="empty-state">×¢×“×™×™×Ÿ ××™×Ÿ ×–×›××™× ×¤×¢×™×œ×™× ×‘×ž×“×¨×’×” ×”×–××ª.</div>`
                                     }
                                   </div>
                                 </article>
@@ -8017,7 +8189,7 @@ def build_fragment(
                         </div>
                       </div>
                     `
-                  : `<div class="empty-state">לא נטענה טבלת פרסים תקפה. אפשר להעלות קובץ פרסים חדש ב-CSV או Excel.</div>`;
+                  : `<div class="empty-state">×œ× × ×˜×¢× ×” ×˜×‘×œ×ª ×¤×¨×¡×™× ×ª×§×¤×”. ××¤×©×¨ ×œ×”×¢×œ×•×ª ×§×•×‘×¥ ×¤×¨×¡×™× ×—×“×© ×‘-CSV ××• Excel.</div>`;
 
                 elements.prizeBoard.innerHTML = `${podiumMarkup}${tiersMarkup}`;
               }
@@ -8028,15 +8200,15 @@ def build_fragment(
                 const { placeWinners, tiers, prizeModel, selectedFocus } = standings;
 
                 elements.prizeSummary.textContent = selectedFocus
-                  ? `${selectedFocus.ambassador}: ${formatAmount(selectedFocus.total)} | פרס פעיל: ${selectedFocus.currentPrize}${selectedFocus.nextPrize ? ` | חסרים ${formatAmount(selectedFocus.gap)} ל-${selectedFocus.nextPrize}` : " | נמצא במדרגה העליונה"}`
-                  : `${formatNumber(standings.leaderboard.length)} שגרירים מדורגים בטווח הזמן הנבחר`;
+                  ? `${selectedFocus.ambassador}: ${formatAmount(selectedFocus.total)} | ×¤×¨×¡ ×¤×¢×™×œ: ${selectedFocus.currentPrize}${selectedFocus.nextPrize ? ` | ×—×¡×¨×™× ${formatAmount(selectedFocus.gap)} ×œ-${selectedFocus.nextPrize}` : " | × ×ž×¦× ×‘×ž×“×¨×’×” ×”×¢×œ×™×•× ×”"}`
+                  : `${formatNumber(standings.leaderboard.length)} ×©×’×¨×™×¨×™× ×ž×“×•×¨×’×™× ×‘×˜×•×•×— ×”×–×ž×Ÿ ×”× ×‘×—×¨`;
 
                 const podiumMarkup = placeWinners.length
                   ? `
                       <div class="dashboard-section">
                         <div class="section-head">
-                          <h3>פודיום מובילים</h3>
-                          <div class="text-small text-muted">שלושת המקומות הראשונים מחושבים לפי סכום הגיוס המצטבר בתצוגה הפעילה.</div>
+                          <h3>×¤×•×“×™×•× ×ž×•×‘×™×œ×™×</h3>
+                          <div class="text-small text-muted">×©×œ×•×©×ª ×”×ž×§×•×ž×•×ª ×”×¨××©×•× ×™× ×ž×—×•×©×‘×™× ×œ×¤×™ ×¡×›×•× ×”×’×™×•×¡ ×”×ž×¦×˜×‘×¨ ×‘×ª×¦×•×’×” ×”×¤×¢×™×œ×”.</div>
                         </div>
                         <div class="podium-grid">
                           ${placeWinners
@@ -8070,17 +8242,17 @@ def build_fragment(
                                               <span class="winner-rank">${escapeHtml(String(item.place))}</span>
                                               <div>
                                                 <div class="winner-name">${escapeHtml(winner.ambassador)}</div>
-                                                <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} עסקאות</div>
+                                                <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} ×¢×¡×§××•×ª</div>
                                               </div>
                                               <div class="winner-amount">${escapeHtml(formatAmount(winner.total))}</div>
                                             </div>
                                           </div>
                                           <div class="prize-meta">
-                                            <span>פרס: ${escapeHtml(item.prize)}</span>
-                                            <span>${escapeHtml(nextWinner ? `פער מהמקום הבא: ${formatAmount(leadGap)}` : "מוביל את הטבלה כרגע")}</span>
+                                            <span>×¤×¨×¡: ${escapeHtml(item.prize)}</span>
+                                            <span>${escapeHtml(nextWinner ? `×¤×¢×¨ ×ž×”×ž×§×•× ×”×‘×: ${formatAmount(leadGap)}` : "×ž×•×‘×™×œ ××ª ×”×˜×‘×œ×” ×›×¨×’×¢")}</span>
                                           </div>
                                         `
-                                        : `<div class="empty-state">עדיין אין זוכה למקום הזה בטווח שנבחר.</div>`
+                                        : `<div class="empty-state">×¢×“×™×™×Ÿ ××™×Ÿ ×–×•×›×” ×œ×ž×§×•× ×”×–×” ×‘×˜×•×•×— ×©× ×‘×—×¨.</div>`
                                     }
                                   </div>
                                 </article>
@@ -8096,8 +8268,8 @@ def build_fragment(
                   ? `
                       <div class="dashboard-section">
                         <div class="section-head">
-                          <h3>מנצחי הימים / עולים לדשא</h3>
-                          <div class="text-small text-muted">לכל יום קלנדרי נבחר/ת השגריר/ה שגייס/ה הכי הרבה בין 00:00 ל-23:59. אם אותו שגריר כבר זכה ביום אחר, מוצג/ת הבא/ה אחריו/ה.</div>
+                          <h3>×ž× ×¦×—×™ ×”×™×ž×™× / ×¢×•×œ×™× ×œ×“×©×</h3>
+                          <div class="text-small text-muted">×œ×›×œ ×™×•× ×§×œ× ×“×¨×™ × ×‘×—×¨/×ª ×”×©×’×¨×™×¨/×” ×©×’×™×™×¡/×” ×”×›×™ ×”×¨×‘×” ×‘×™×Ÿ 00:00 ×œ-23:59. ×× ××•×ª×• ×©×’×¨×™×¨ ×›×‘×¨ ×–×›×” ×‘×™×•× ××—×¨, ×ž×•×¦×’/×ª ×”×‘×/×” ××—×¨×™×•/×”.</div>
                         </div>
                         <div class="daily-winners-grid">
                           ${dailyWinners
@@ -8106,22 +8278,22 @@ def build_fragment(
                                 ? `
                                     <article class="daily-winner-card">
                                       <div class="daily-winner-head">
-                                        <span class="daily-winner-day">יום ${escapeHtml(String(item.dayNumber))}</span>
+                                        <span class="daily-winner-day">×™×•× ${escapeHtml(String(item.dayNumber))}</span>
                                         <span class="daily-winner-date">${escapeHtml(formatDate(item.date))}</span>
                                       </div>
                                       <div class="daily-winner-name">${escapeHtml(item.winner.ambassador)}</div>
                                       <div class="daily-winner-amount">${escapeHtml(formatAmount(item.winner.total))}</div>
-                                      <div class="text-small text-muted">${escapeHtml(formatNumber(item.winner.deals))} עסקאות באותו יום</div>
+                                      <div class="text-small text-muted">${escapeHtml(formatNumber(item.winner.deals))} ×¢×¡×§××•×ª ×‘××•×ª×• ×™×•×</div>
                                     </article>
                                   `
                                 : `
                                     <article class="daily-winner-card">
                                       <div class="daily-winner-head">
-                                        <span class="daily-winner-day">יום ${escapeHtml(String(item.dayNumber))}</span>
+                                        <span class="daily-winner-day">×™×•× ${escapeHtml(String(item.dayNumber))}</span>
                                         <span class="daily-winner-date">${escapeHtml(formatDate(item.date))}</span>
                                       </div>
-                                      <div class="daily-winner-name">עדיין אין מנצח/ת ליום הזה</div>
-                                      <div class="text-small text-muted">ברגע שייקלטו עסקאות ליום הזה, המוביל/ה יוצג/תוצג כאן.</div>
+                                      <div class="daily-winner-name">×¢×“×™×™×Ÿ ××™×Ÿ ×ž× ×¦×—/×ª ×œ×™×•× ×”×–×”</div>
+                                      <div class="text-small text-muted">×‘×¨×’×¢ ×©×™×™×§×œ×˜×• ×¢×¡×§××•×ª ×œ×™×•× ×”×–×”, ×”×ž×•×‘×™×œ/×” ×™×•×¦×’/×ª×•×¦×’ ×›××Ÿ.</div>
                                     </article>
                                   `;
                             })
@@ -8135,8 +8307,8 @@ def build_fragment(
                   ? `
                       <div class="dashboard-section">
                         <div class="section-head">
-                          <h3>מדרגות פרס</h3>
-                          <div class="text-small text-muted">${escapeHtml(prizeModel.tierRuleNote || "שדרוג מדרגה מחליף את הפרס הפעיל, ובמדרגה הראשונה נשמרת זכאות למרצ' העמותה.")}</div>
+                          <h3>×ž×“×¨×’×•×ª ×¤×¨×¡</h3>
+                          <div class="text-small text-muted">${escapeHtml(prizeModel.tierRuleNote || "×©×“×¨×•×’ ×ž×“×¨×’×” ×ž×—×œ×™×£ ××ª ×”×¤×¨×¡ ×”×¤×¢×™×œ, ×•×‘×ž×“×¨×’×” ×”×¨××©×•× ×” × ×©×ž×¨×ª ×–×›××•×ª ×œ×ž×¨×¦' ×”×¢×ž×•×ª×”.")}</div>
                         </div>
                         <div class="tier-grid">
                           ${tiers
@@ -8150,7 +8322,7 @@ def build_fragment(
                               const progressPct = tier.threshold ? Math.min(progressBasis / tier.threshold, 1) * 100 : 0;
                               const carryoverNote =
                                 index === 0 && tier.carryover.length
-                                  ? `<div class="status-note text-small">נשארים זכאים גם אחרי שדרוג: ${escapeHtml(formatNumber(tier.carryover.length))} שגרירים</div>`
+                                  ? `<div class="status-note text-small">× ×©××¨×™× ×–×›××™× ×’× ××—×¨×™ ×©×“×¨×•×’: ${escapeHtml(formatNumber(tier.carryover.length))} ×©×’×¨×™×¨×™×</div>`
                                   : "";
                               return `
                                 <article class="prize-card">
@@ -8169,11 +8341,11 @@ def build_fragment(
                                       <div class="prize-title">${escapeHtml(formatAmount(tier.threshold))}</div>
                                       <span class="prize-pill">${escapeHtml(tier.prize)}</span>
                                     </div>
-                                    <div class="text-small text-muted">זוכים פעילים כרגע: ${escapeHtml(formatNumber(tier.active.length))}</div>
+                                    <div class="text-small text-muted">×–×•×›×™× ×¤×¢×™×œ×™× ×›×¨×’×¢: ${escapeHtml(formatNumber(tier.active.length))}</div>
                                     <div class="progress-track" aria-hidden="true"><div class="progress-fill" style="width:${progressPct}%"></div></div>
                                     <div class="prize-meta">
-                                      <span>${escapeHtml(tier.active.length ? "המדרגה הושגה" : "עדיין לא הושגה")}</span>
-                                      <span>${escapeHtml(nearestCandidate ? `${nearestCandidate.ambassador} קרוב/ה עם פער של ${formatAmount(tier.threshold - nearestCandidate.total)}` : "אין כרגע מועמד/ת קרוב/ה")}</span>
+                                      <span>${escapeHtml(tier.active.length ? "×”×ž×“×¨×’×” ×”×•×©×’×”" : "×¢×“×™×™×Ÿ ×œ× ×”×•×©×’×”")}</span>
+                                      <span>${escapeHtml(nearestCandidate ? `${nearestCandidate.ambassador} ×§×¨×•×‘/×” ×¢× ×¤×¢×¨ ×©×œ ${formatAmount(tier.threshold - nearestCandidate.total)}` : "××™×Ÿ ×›×¨×’×¢ ×ž×•×¢×ž×“/×ª ×§×¨×•×‘/×”")}</span>
                                     </div>
                                     ${carryoverNote}
                                     ${
@@ -8188,7 +8360,7 @@ def build_fragment(
                                                     <span class="winner-rank">${escapeHtml(String(winnerIndex + 1))}</span>
                                                     <div>
                                                       <div class="winner-name">${escapeHtml(winner.ambassador)}</div>
-                                                      <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} עסקאות</div>
+                                                      <div class="text-small text-muted">${escapeHtml(formatNumber(winner.deals))} ×¢×¡×§××•×ª</div>
                                                     </div>
                                                     <div class="winner-amount">${escapeHtml(formatAmount(winner.total))}</div>
                                                   </div>
@@ -8197,7 +8369,7 @@ def build_fragment(
                                               .join("")}
                                           </div>
                                         `
-                                        : `<div class="empty-state">עדיין אין זכאים פעילים במדרגה הזאת.</div>`
+                                        : `<div class="empty-state">×¢×“×™×™×Ÿ ××™×Ÿ ×–×›××™× ×¤×¢×™×œ×™× ×‘×ž×“×¨×’×” ×”×–××ª.</div>`
                                     }
                                   </div>
                                 </article>
@@ -8207,7 +8379,7 @@ def build_fragment(
                         </div>
                       </div>
                     `
-                  : `<div class="empty-state">לא נטענה טבלת פרסים תקפה. אפשר להעלות קובץ פרסים חדש ב-CSV או Excel.</div>`;
+                  : `<div class="empty-state">×œ× × ×˜×¢× ×” ×˜×‘×œ×ª ×¤×¨×¡×™× ×ª×§×¤×”. ××¤×©×¨ ×œ×”×¢×œ×•×ª ×§×•×‘×¥ ×¤×¨×¡×™× ×—×“×© ×‘-CSV ××• Excel.</div>`;
 
                 elements.prizeBoard.innerHTML = `${podiumMarkup}${dailyWinnersMarkup}${tiersMarkup}`;
               }
@@ -8271,13 +8443,13 @@ def build_fragment(
 
               function renderDailyChart(rows) {
                 if (!rows.length) {
-                  elements.dailyChart.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור המסנן הנוכחי.</div>`;
+                  elements.dailyChart.innerHTML = `<div class="empty-state">××™×Ÿ × ×ª×•× ×™× ×œ×”×¦×’×” ×¢×‘×•×¨ ×”×ž×¡× ×Ÿ ×”× ×•×›×—×™.</div>`;
                   setInsightSummary(elements.dailySummary, []);
                   return;
                 }
 
                 const metricMode = state.view.dailyMetric;
-                const metricLabel = metricMode === "count" ? "מספר עסקאות" : metricMode === "average" ? "ממוצע לעסקה" : "סכום גיוס";
+                const metricLabel = metricMode === "count" ? "×ž×¡×¤×¨ ×¢×¡×§××•×ª" : metricMode === "average" ? "×ž×ž×•×¦×¢ ×œ×¢×¡×§×”" : "×¡×›×•× ×’×™×•×¡";
                 const formatMetricValue = (value) => (metricMode === "count" ? formatNumber(Math.round(value)) : formatAmount(value));
                 const aggregates = state.meta.uniqueDates
                   .filter((date) => !state.filters.dateFrom || date >= state.filters.dateFrom)
@@ -8320,7 +8492,7 @@ def build_fragment(
                 const linePath = areaPath;
 
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(createSvg(width, height, "תרשים מגמה יומי של גיוס"), "image/svg+xml");
+                const doc = parser.parseFromString(createSvg(width, height, "×ª×¨×©×™× ×ž×’×ž×” ×™×•×ž×™ ×©×œ ×’×™×•×¡"), "image/svg+xml");
                 const svgNode = doc.documentElement;
                 svgNode.insertAdjacentHTML(
                   "afterbegin",
@@ -8387,7 +8559,7 @@ def build_fragment(
                   bar.setAttribute("fill", isBest ? "url(#dailyBarHighlight)" : "url(#dailyBarGradient)");
                   bar.setAttribute("stroke", isBest ? "rgba(244, 201, 0, 0.8)" : "rgba(17, 29, 74, 0.12)");
                   bar.classList.add("clickable-cell");
-                  const tooltipHtml = `<strong>${escapeHtml(formatDate(point.entry.date))}</strong><br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(point.value))}<br>${escapeHtml(formatNumber(point.entry.count))} עסקאות`;
+                  const tooltipHtml = `<strong>${escapeHtml(formatDate(point.entry.date))}</strong><br>${escapeHtml(metricLabel)}: ${escapeHtml(formatMetricValue(point.value))}<br>${escapeHtml(formatNumber(point.entry.count))} ×¢×¡×§××•×ª`;
                   bar.addEventListener("mouseenter", (event) => showTooltip(elements.dailyChart, elements.dailyTooltip, tooltipHtml, event.clientX, event.clientY));
                   bar.addEventListener("mousemove", (event) => showTooltip(elements.dailyChart, elements.dailyTooltip, tooltipHtml, event.clientX, event.clientY));
                   bar.addEventListener("mouseleave", () => hideTooltip(elements.dailyTooltip));
@@ -8427,17 +8599,17 @@ def build_fragment(
                 svgNode.insertAdjacentHTML(
                   "beforeend",
                   `<text x="${margin.left}" y="18" fill="rgba(17, 29, 74, 0.74)" font-size="12" font-weight="700">${escapeHtml(metricLabel)}</text>
-                   <text x="${width - margin.right}" y="18" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">קו המגמה משקף את קצב השינוי בין הימים הפעילים</text>`
+                   <text x="${width - margin.right}" y="18" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">×§×• ×”×ž×’×ž×” ×ž×©×§×£ ××ª ×§×¦×‘ ×”×©×™× ×•×™ ×‘×™×Ÿ ×”×™×ž×™× ×”×¤×¢×™×œ×™×</text>`
                 );
 
                 elements.dailyChart.innerHTML = "";
                 elements.dailyChart.appendChild(svgNode);
                 setInsightSummary(elements.dailySummary, [
                   bestDay
-                    ? { label: "יום שיא", value: `${formatShortDate(bestDay.date)} · ${formatMetricValue(getValue(bestDay))}`, tone: "accent" }
+                    ? { label: "×™×•× ×©×™×", value: `${formatShortDate(bestDay.date)} Â· ${formatMetricValue(getValue(bestDay))}`, tone: "accent" }
                     : null,
-                  { label: "ממוצע יומי", value: formatMetricValue(averageValue) },
-                  latestDay ? { label: "יום אחרון בטווח", value: `${formatShortDate(latestDay.date)} · ${formatMetricValue(getValue(latestDay))}`, tone: "dark" } : null,
+                  { label: "×ž×ž×•×¦×¢ ×™×•×ž×™", value: formatMetricValue(averageValue) },
+                  latestDay ? { label: "×™×•× ××—×¨×•×Ÿ ×‘×˜×•×•×—", value: `${formatShortDate(latestDay.date)} Â· ${formatMetricValue(getValue(latestDay))}`, tone: "dark" } : null,
                 ]);
               }
 
@@ -8446,13 +8618,13 @@ def build_fragment(
                   .filter((date) => !state.filters.dateFrom || date >= state.filters.dateFrom)
                   .filter((date) => !state.filters.dateTo || date <= state.filters.dateTo);
                 if (!rows.length || !dates.length) {
-                  elements.heatmapChart.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור המסנן הנוכחי.</div>`;
+                  elements.heatmapChart.innerHTML = `<div class="empty-state">××™×Ÿ × ×ª×•× ×™× ×œ×”×¦×’×” ×¢×‘×•×¨ ×”×ž×¡× ×Ÿ ×”× ×•×›×—×™.</div>`;
                   setInsightSummary(elements.heatmapSummary, []);
                   return;
                 }
 
                 const metricMode = state.view.heatmapMetric;
-                const metricLabel = metricMode === "count" ? "מספר עסקאות" : "סכום גיוס";
+                const metricLabel = metricMode === "count" ? "×ž×¡×¤×¨ ×¢×¡×§××•×ª" : "×¡×›×•× ×’×™×•×¡";
                 const formatMetricValue = (value) => (metricMode === "count" ? formatNumber(Math.round(value)) : formatAmount(value));
                 const hours = Array.from({ length: 24 }, (_, hour) => hour);
                 const aggregates = new Map();
@@ -8478,7 +8650,7 @@ def build_fragment(
                 const margin = { top: 110, right: 18, bottom: 24, left: 96 };
 
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(createSvg(width, height, "מפת חום של גיוס לפי תאריך ושעה"), "image/svg+xml");
+                const doc = parser.parseFromString(createSvg(width, height, "×ž×¤×ª ×—×•× ×©×œ ×’×™×•×¡ ×œ×¤×™ ×ª××¨×™×š ×•×©×¢×”"), "image/svg+xml");
                 const svgNode = doc.documentElement;
                 svgNode.insertAdjacentHTML(
                   "beforeend",
@@ -8487,8 +8659,8 @@ def build_fragment(
 
                 svgNode.insertAdjacentHTML(
                   "beforeend",
-                  `<text x="${margin.left}" y="22" fill="rgba(17, 29, 74, 0.74)" font-size="12" font-weight="700">${escapeHtml(metricLabel)} לפי חלונות זמן</text>
-                   <text x="${width - margin.right}" y="22" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">עמודות עליונות מציגות את הסך היומי, וכל תא מייצג שעה מסוימת ביום</text>`
+                  `<text x="${margin.left}" y="22" fill="rgba(17, 29, 74, 0.74)" font-size="12" font-weight="700">${escapeHtml(metricLabel)} ×œ×¤×™ ×—×œ×•× ×•×ª ×–×ž×Ÿ</text>
+                   <text x="${width - margin.right}" y="22" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">×¢×ž×•×“×•×ª ×¢×œ×™×•× ×•×ª ×ž×¦×™×’×•×ª ××ª ×”×¡×š ×”×™×•×ž×™, ×•×›×œ ×ª× ×ž×™×™×¦×’ ×©×¢×” ×ž×¡×•×™×ž×ª ×‘×™×•×</text>`
                 );
 
                 dates.forEach((date, index) => {
@@ -8561,13 +8733,13 @@ def build_fragment(
                 setInsightSummary(elements.heatmapSummary, [
                   bestCell
                     ? {
-                        label: "חלון שיא",
-                        value: `${formatShortDate(peakParts[0])} ${formatHourLabel(Number(peakParts[1]))} · ${formatMetricValue(bestCell[1])}`,
+                        label: "×—×œ×•×Ÿ ×©×™×",
+                        value: `${formatShortDate(peakParts[0])} ${formatHourLabel(Number(peakParts[1]))} Â· ${formatMetricValue(bestCell[1])}`,
                         tone: "accent",
                       }
                     : null,
-                  bestDay ? { label: "יום מוביל", value: `${formatShortDate(bestDay[0])} · ${formatMetricValue(bestDay[1])}` } : null,
-                  bestHour ? { label: "שעה חזקה", value: `${formatHourLabel(Number(bestHour[0]))} · ${formatMetricValue(bestHour[1])}`, tone: "dark" } : null,
+                  bestDay ? { label: "×™×•× ×ž×•×‘×™×œ", value: `${formatShortDate(bestDay[0])} Â· ${formatMetricValue(bestDay[1])}` } : null,
+                  bestHour ? { label: "×©×¢×” ×—×–×§×”", value: `${formatHourLabel(Number(bestHour[0]))} Â· ${formatMetricValue(bestHour[1])}`, tone: "dark" } : null,
                 ]);
               }
 
@@ -8577,18 +8749,18 @@ def build_fragment(
                   (date) => (!state.filters.dateFrom || date >= state.filters.dateFrom) && (!state.filters.dateTo || date <= state.filters.dateTo)
                 );
                 const metricMode = state.view.movementMetric;
-                const metricLabel = metricMode === "count" ? "מספר עסקאות" : "סכום גיוס";
+                const metricLabel = metricMode === "count" ? "×ž×¡×¤×¨ ×¢×¡×§××•×ª" : "×¡×›×•× ×’×™×•×¡";
                 const formatMetricValue = (value) => (metricMode === "count" ? formatNumber(Math.round(value)) : formatAmount(value));
 
                 if (!focusRows.length || !projectDates.length) {
-                  elements.movementChart.innerHTML = `<div class="empty-state">אין נתונים להצגה עבור המסנן הנוכחי.</div>`;
+                  elements.movementChart.innerHTML = `<div class="empty-state">××™×Ÿ × ×ª×•× ×™× ×œ×”×¦×’×” ×¢×‘×•×¨ ×”×ž×¡× ×Ÿ ×”× ×•×›×—×™.</div>`;
                   setInsightSummary(elements.movementSummary, []);
                   return;
                 }
 
                 const totalsByAmbassador = new Map();
                 focusRows.forEach((row) => {
-                  if (!row.projectDay || row.ambassador === "ללא שיוך") {
+                  if (!row.projectDay || row.ambassador === "×œ×œ× ×©×™×•×š") {
                     return;
                   }
                   totalsByAmbassador.set(row.ambassador, (totalsByAmbassador.get(row.ambassador) || 0) + (metricMode === "count" ? 1 : row.amount));
@@ -8605,12 +8777,12 @@ def build_fragment(
                 const height = 122 + selectedAmbassadors.length * rowHeight;
                 const margin = { top: 66, right: 26, bottom: 24, left: 238 };
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(createSvg(width, height, "מטריצת פעילות שגרירים לאורך ימי הפרויקט"), "image/svg+xml");
+                const doc = parser.parseFromString(createSvg(width, height, "×ž×˜×¨×™×¦×ª ×¤×¢×™×œ×•×ª ×©×’×¨×™×¨×™× ×œ××•×¨×š ×™×ž×™ ×”×¤×¨×•×™×§×˜"), "image/svg+xml");
                 const svgNode = doc.documentElement;
                 const matrixValues = new Map();
 
                 focusRows.forEach((row) => {
-                  if (!row.projectDay || row.ambassador === "ללא שיוך") {
+                  if (!row.projectDay || row.ambassador === "×œ×œ× ×©×™×•×š") {
                     return;
                   }
                   const key = `${row.ambassador}|${row.date}`;
@@ -8624,8 +8796,8 @@ def build_fragment(
                 svgNode.insertAdjacentHTML(
                   "beforeend",
                   `<rect x="${margin.left}" y="${margin.top}" width="${projectDates.length * cellWidth}" height="${selectedAmbassadors.length * rowHeight}" rx="22" fill="rgba(17, 29, 74, 0.03)" stroke="rgba(17, 29, 74, 0.08)"></rect>
-                   <text x="${margin.left}" y="24" fill="rgba(17, 29, 74, 0.74)" font-size="12" font-weight="700">${escapeHtml(metricLabel)} לאורך ימי הפרויקט</text>
-                   <text x="${width - margin.right}" y="24" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">הצגת השגרירים המובילים בטווח שנבחר עם דירוג, היקף ומוקדי פעילות</text>`
+                   <text x="${margin.left}" y="24" fill="rgba(17, 29, 74, 0.74)" font-size="12" font-weight="700">${escapeHtml(metricLabel)} ×œ××•×¨×š ×™×ž×™ ×”×¤×¨×•×™×§×˜</text>
+                   <text x="${width - margin.right}" y="24" text-anchor="end" fill="rgba(17, 29, 74, 0.58)" font-size="11">×”×¦×’×ª ×”×©×’×¨×™×¨×™× ×”×ž×•×‘×™×œ×™× ×‘×˜×•×•×— ×©× ×‘×—×¨ ×¢× ×“×™×¨×•×’, ×”×™×§×£ ×•×ž×•×§×“×™ ×¤×¢×™×œ×•×ª</text>`
                 );
 
                 projectDates.forEach((date, index) => {
@@ -8705,17 +8877,17 @@ def build_fragment(
                 elements.movementChart.appendChild(svgNode);
                 const bestParts = bestCell ? bestCell[0].split("|") : [];
                 setInsightSummary(elements.movementSummary, [
-                  leader ? { label: "מוביל נוכחי", value: `${leader[0]} · ${formatMetricValue(leader[1])}`, tone: "accent" } : null,
-                  bestCell ? { label: "פיק פעילות", value: `${bestParts[0]} · ${formatShortDate(bestParts[1])} · ${formatMetricValue(bestCell[1])}` } : null,
+                  leader ? { label: "×ž×•×‘×™×œ × ×•×›×—×™", value: `${leader[0]} Â· ${formatMetricValue(leader[1])}`, tone: "accent" } : null,
+                  bestCell ? { label: "×¤×™×§ ×¤×¢×™×œ×•×ª", value: `${bestParts[0]} Â· ${formatShortDate(bestParts[1])} Â· ${formatMetricValue(bestCell[1])}` } : null,
                   state.filters.ambassador === "all"
-                    ? { label: "מוצגים כעת", value: `${formatNumber(selectedAmbassadors.length)} שגרירים`, tone: "dark" }
-                    : { label: "פילוח פעיל", value: state.filters.ambassador, tone: "dark" },
+                    ? { label: "×ž×•×¦×’×™× ×›×¢×ª", value: `${formatNumber(selectedAmbassadors.length)} ×©×’×¨×™×¨×™×`, tone: "dark" }
+                    : { label: "×¤×™×œ×•×— ×¤×¢×™×œ", value: state.filters.ambassador, tone: "dark" },
                 ]);
               }
 
               function renderTable(rows) {
                 if (!rows.length) {
-                  elements.tableRoot.innerHTML = `<div class="empty-state">אין רשומות להצגה.</div>`;
+                  elements.tableRoot.innerHTML = `<div class="empty-state">××™×Ÿ ×¨×©×•×ž×•×ª ×œ×”×¦×’×”.</div>`;
                   elements.tableSummary.textContent = "";
                   return;
                 }
@@ -8727,13 +8899,13 @@ def build_fragment(
                   <table>
                     <thead>
                       <tr>
-                        <th>תאריך ושעה</th>
-                        <th>יום</th>
-                        <th>שגריר/ה</th>
-                        <th>תורם/ת</th>
-                        <th>סכום</th>
-                        <th>עיר</th>
-                        <th>סטטוס</th>
+                        <th>×ª××¨×™×š ×•×©×¢×”</th>
+                        <th>×™×•×</th>
+                        <th>×©×’×¨×™×¨/×”</th>
+                        <th>×ª×•×¨×/×ª</th>
+                        <th>×¡×›×•×</th>
+                        <th>×¢×™×¨</th>
+                        <th>×¡×˜×˜×•×¡</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -8742,12 +8914,12 @@ def build_fragment(
                           (row) => `
                             <tr>
                               <td>${escapeHtml(formatDateTime(row.createdIso))}</td>
-                              <td>${escapeHtml(`${row.projectDayLabel} · ${getWeekdayLabel(row.date)}`)}</td>
+                              <td>${escapeHtml(`${row.projectDayLabel} Â· ${getWeekdayLabel(row.date)}`)}</td>
                               <td>${escapeHtml(row.ambassador)}</td>
                               <td>${escapeHtml(row.donor)}</td>
                               <td class="amount-cell">${escapeHtml(formatAmount(row.amount))}</td>
                               <td>${escapeHtml(row.city)}</td>
-                              <td><span class="status-badge ${row.status === "failed" ? "failed" : ""}">${escapeHtml(row.status === "success" ? "חויב" : "נכשל")}</span></td>
+                              <td><span class="status-badge ${row.status === "failed" ? "failed" : ""}">${escapeHtml(row.status === "success" ? "×—×•×™×‘" : "× ×›×©×œ")}</span></td>
                             </tr>
                           `
                         )
@@ -8758,8 +8930,8 @@ def build_fragment(
 
                 elements.tableSummary.textContent =
                   rows.length > visibleRows.length
-                    ? `מוצגות ${formatNumber(visibleRows.length)} מתוך ${formatNumber(rows.length)} רשומות`
-                    : `${formatNumber(rows.length)} רשומות`;
+                    ? `×ž×•×¦×’×•×ª ${formatNumber(visibleRows.length)} ×ž×ª×•×š ${formatNumber(rows.length)} ×¨×©×•×ž×•×ª`
+                    : `${formatNumber(rows.length)} ×¨×©×•×ž×•×ª`;
               }
 
               async function loadPrizeModelFromFile(file) {
@@ -8831,8 +9003,8 @@ def build_fragment(
                 if (Number.isFinite(customAmount) && customAmount > 0) {
                   return {
                     value: customAmount,
-                    label: "סכום מותאם אישית",
-                    description: "הסכום שתבחרו יועבר כפי שהוא לספק התשלום ויצורף לפרטי התרומה שתזינו כאן.",
+                    label: "×¡×›×•× ×ž×•×ª×× ××™×©×™×ª",
+                    description: "×”×¡×›×•× ×©×ª×‘×—×¨×• ×™×•×¢×‘×¨ ×›×¤×™ ×©×”×•× ×œ×¡×¤×§ ×”×ª×©×œ×•× ×•×™×¦×•×¨×£ ×œ×¤×¨×˜×™ ×”×ª×¨×•×ž×” ×©×ª×–×™× ×• ×›××Ÿ.",
                   };
                 }
                 return (state.campaignPage.amountCards || []).find((item) => Number(item.value || 0) === Number(state.donation.selectedAmount || 0)) || null;
@@ -8841,7 +9013,7 @@ def build_fragment(
               function buildProjectDonationUrl() {
                 const baseUrl = String(state.campaignPage.externalDonationUrl || "").trim();
                 if (!baseUrl) {
-                  throw new Error("יש להגדיר קישור יציאה לספק התשלום לפני שימוש בזרימת התרומה.");
+                  throw new Error("×™×© ×œ×”×’×“×™×¨ ×§×™×©×•×¨ ×™×¦×™××” ×œ×¡×¤×§ ×”×ª×©×œ×•× ×œ×¤× ×™ ×©×™×ž×•×© ×‘×–×¨×™×ž×ª ×”×ª×¨×•×ž×”.");
                 }
                 const selectedAmount = getProjectSelectedAmount();
                 const url = new URL(baseUrl, window.location.href);
@@ -8893,37 +9065,37 @@ def build_fragment(
                   .map((item) => {
                     const label = item.id === state.activeCampaignId ? snapshot.basics.campaignName || item.name : item.name;
                     const slug = item.id === state.activeCampaignId ? snapshot.basics.slug || item.slug : item.slug;
-                    return `<option value="${escapeAttribute(item.id)}"${item.id === state.activeCampaignId ? " selected" : ""}>${escapeHtml(label || "ללא שם")} · /${escapeHtml(slug || "campaign")}</option>`;
+                    return `<option value="${escapeAttribute(item.id)}"${item.id === state.activeCampaignId ? " selected" : ""}>${escapeHtml(label || "×œ×œ× ×©×")} Â· /${escapeHtml(slug || "campaign")}</option>`;
                   })
                   .join("");
                 const steps = [
-                  "פרטי קמפיין",
-                  "מיתוג וסיפור",
-                  "חוויית תרומה",
-                  "שגרירים",
-                  "צוותים",
-                  "יעדים ופרסים",
-                  "דאטה ואינטגרציה",
-                  "גישה והרשאות",
+                  "×¤×¨×˜×™ ×§×ž×¤×™×™×Ÿ",
+                  "×ž×™×ª×•×’ ×•×¡×™×¤×•×¨",
+                  "×—×•×•×™×™×ª ×ª×¨×•×ž×”",
+                  "×©×’×¨×™×¨×™×",
+                  "×¦×•×•×ª×™×",
+                  "×™×¢×“×™× ×•×¤×¨×¡×™×",
+                  "×“××˜×” ×•××™× ×˜×’×¨×¦×™×”",
+                  "×’×™×©×” ×•×”×¨×©××•×ª",
                   "Review & Publish",
                 ];
                 const mediaPreviewMarkup = settings.mediaUrl
                   ? settings.mediaType === "video"
                     ? `<video src="${escapeAttribute(settings.mediaUrl)}" controls playsinline></video>`
                     : `<img src="${escapeAttribute(settings.mediaUrl)}" alt="${escapeAttribute(settings.mediaAlt || settings.title)}" />`
-                  : `<div class="settings-media-preview-placeholder">עדיין לא נטענה מדיה. לאחר העלאה, תופיע כאן תצוגה מקדימה.</div>`;
+                  : `<div class="settings-media-preview-placeholder">×¢×“×™×™×Ÿ ×œ× × ×˜×¢× ×” ×ž×“×™×”. ×œ××—×¨ ×”×¢×œ××”, ×ª×•×¤×™×¢ ×›××Ÿ ×ª×¦×•×’×” ×ž×§×“×™×ž×”.</div>`;
                 const ambassadorRowsMarkup = directoryRows.length
                   ? `
                       <div class="table-wrap ambassador-links-table-wrap">
                         <table class="records-table ambassador-links-table">
                           <thead>
                             <tr>
-                              <th>שגריר/ה</th>
-                              <th>כינוי</th>
-                              <th>צוות</th>
-                              <th>יעד אישי</th>
-                              <th>מייל</th>
-                              <th>לינק אישי</th>
+                              <th>×©×’×¨×™×¨/×”</th>
+                              <th>×›×™× ×•×™</th>
+                              <th>×¦×•×•×ª</th>
+                              <th>×™×¢×“ ××™×©×™</th>
+                              <th>×ž×™×™×œ</th>
+                              <th>×œ×™× ×§ ××™×©×™</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -8945,7 +9117,7 @@ def build_fragment(
                         </table>
                       </div>
                     `
-                  : `<div class="empty-state">עדיין אין שגרירים מוגדרים. אפשר להעלות CSV או להוסיף ידנית.</div>`;
+                  : `<div class="empty-state">×¢×“×™×™×Ÿ ××™×Ÿ ×©×’×¨×™×¨×™× ×ž×•×’×“×¨×™×. ××¤×©×¨ ×œ×”×¢×œ×•×ª CSV ××• ×œ×”×•×¡×™×£ ×™×“× ×™×ª.</div>`;
                 const teamsMarkup = builder.teams.groups.length
                   ? builder.teams.groups
                       .map(
@@ -8953,28 +9125,28 @@ def build_fragment(
                           <article class="analysis-card">
                             <h4>${escapeHtml(group.name)}</h4>
                             <ul>
-                              <li>מנהל/ת: ${escapeHtml(group.manager || "טרם הוגדר")}</li>
-                              <li>יעד: ${escapeHtml(group.target ? formatAmount(group.target) : "ללא יעד")}</li>
+                              <li>×ž× ×”×œ/×ª: ${escapeHtml(group.manager || "×˜×¨× ×”×•×’×“×¨")}</li>
+                              <li>×™×¢×“: ${escapeHtml(group.target ? formatAmount(group.target) : "×œ×œ× ×™×¢×“")}</li>
                             </ul>
-                            <button class="button-ghost" type="button" data-builder-action="remove-team" data-team-index="${index}">הסרה</button>
+                            <button class="button-ghost" type="button" data-builder-action="remove-team" data-team-index="${index}">×”×¡×¨×”</button>
                           </article>
                         `
                       )
                       .join("")
-                  : `<div class="empty-state">עדיין לא נבנו צוותים. אפשר להשאיר ריק או להוסיף קבוצות גיוס.</div>`;
+                  : `<div class="empty-state">×¢×“×™×™×Ÿ ×œ× × ×‘× ×• ×¦×•×•×ª×™×. ××¤×©×¨ ×œ×”×©××™×¨ ×¨×™×§ ××• ×œ×”×•×¡×™×£ ×§×‘×•×¦×•×ª ×’×™×•×¡.</div>`;
                 const preflightMarkup = `
                   <div class="signal-grid">
                     <section class="analysis-card">
                       <h4>Ready</h4>
-                      <ul>${preflight.ready.length ? preflight.ready.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>אין פריטים מסומנים עדיין.</li>"}</ul>
+                      <ul>${preflight.ready.length ? preflight.ready.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>××™×Ÿ ×¤×¨×™×˜×™× ×ž×¡×•×ž× ×™× ×¢×“×™×™×Ÿ.</li>"}</ul>
                     </section>
                     <section class="analysis-card">
                       <h4>Warning</h4>
-                      <ul>${preflight.warnings.length ? preflight.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>אין אזהרות פעילות.</li>"}</ul>
+                      <ul>${preflight.warnings.length ? preflight.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>××™×Ÿ ××–×”×¨×•×ª ×¤×¢×™×œ×•×ª.</li>"}</ul>
                     </section>
                     <section class="analysis-card">
                       <h4>Blocking Issue</h4>
-                      <ul>${preflight.blocking.length ? preflight.blocking.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>אין חסימות פעילות.</li>"}</ul>
+                      <ul>${preflight.blocking.length ? preflight.blocking.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : "<li>××™×Ÿ ×—×¡×™×ž×•×ª ×¤×¢×™×œ×•×ª.</li>"}</ul>
                     </section>
                   </div>
                 `;
@@ -8984,29 +9156,29 @@ def build_fragment(
                   stepMarkup = `
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        שם הקמפיין
+                        ×©× ×”×§×ž×¤×™×™×Ÿ
                         <input class="form-control" type="text" value="${escapeAttribute(builder.basics.campaignName)}" data-builder-setting="basics.campaignName" />
                       </label>
                       <label class="form-label">
-                        ארגון מוביל
+                        ××¨×’×•×Ÿ ×ž×•×‘×™×œ
                         <input class="form-control" type="text" value="${escapeAttribute(builder.basics.organizationName)}" data-builder-setting="basics.organizationName" />
                       </label>
                       <label class="form-label">
-                        Slug ציבורי
+                        Slug ×¦×™×‘×•×¨×™
                         <input class="form-control" type="text" value="${escapeAttribute(builder.basics.slug)}" data-builder-setting="basics.slug" dir="ltr" />
                       </label>
                       <label class="form-label">
-                        יעד גיוס
+                        ×™×¢×“ ×’×™×•×¡
                         <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(builder.basics.target || "")}" data-builder-goal="total" />
                       </label>
                       <label class="form-label">
-                        מטבע
+                        ×ž×˜×‘×¢
                         <select class="form-select" data-builder-setting="basics.currency">
                           ${["ILS", "USD", "EUR"].map((currency) => `<option value="${currency}"${builder.basics.currency === currency ? " selected" : ""}>${currency}</option>`).join("")}
                         </select>
                       </label>
                       <label class="form-label">
-                        סטטוס קמפיין
+                        ×¡×˜×˜×•×¡ ×§×ž×¤×™×™×Ÿ
                         <select class="form-select" data-builder-setting="basics.status">
                           ${[
                             ["draft", "Draft"],
@@ -9019,19 +9191,19 @@ def build_fragment(
                         </select>
                       </label>
                       <label class="form-label">
-                        תאריך התחלה
+                        ×ª××¨×™×š ×”×ª×—×œ×”
                         <input class="form-control" type="date" value="${escapeAttribute(builder.basics.startDate)}" data-builder-setting="basics.startDate" />
                       </label>
                       <label class="form-label">
-                        שעת התחלה
+                        ×©×¢×ª ×”×ª×—×œ×”
                         <input class="form-control" type="time" value="${escapeAttribute(builder.basics.startTime)}" data-builder-setting="basics.startTime" />
                       </label>
                       <label class="form-label">
-                        תאריך סיום
+                        ×ª××¨×™×š ×¡×™×•×
                         <input class="form-control" type="date" value="${escapeAttribute(builder.basics.endDate)}" data-builder-setting="basics.endDate" />
                       </label>
                       <label class="form-label">
-                        שעת סיום
+                        ×©×¢×ª ×¡×™×•×
                         <input class="form-control" type="time" value="${escapeAttribute(builder.basics.endTime)}" data-builder-setting="basics.endTime" />
                       </label>
                       <label class="form-label">
@@ -9044,73 +9216,73 @@ def build_fragment(
                   stepMarkup = `
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        כותרת עליונה
+                        ×›×•×ª×¨×ª ×¢×œ×™×•× ×”
                         <input class="form-control" type="text" value="${escapeAttribute(settings.eyebrow)}" data-campaign-setting="eyebrow" />
                       </label>
                       <label class="form-label">
-                        טווח תאריכי פרויקט
+                        ×˜×•×•×— ×ª××¨×™×›×™ ×¤×¨×•×™×§×˜
                         <input class="form-control" type="text" value="${escapeAttribute(settings.projectDatesLabel)}" data-campaign-setting="projectDatesLabel" />
                       </label>
                       <label class="form-label">
-                        כותרת ראשית
+                        ×›×•×ª×¨×ª ×¨××©×™×ª
                         <input class="form-control" type="text" value="${escapeAttribute(settings.title)}" data-campaign-setting="title" />
                       </label>
                       <label class="form-label">
-                        תת-כותרת
+                        ×ª×ª-×›×•×ª×¨×ª
                         <input class="form-control" type="text" value="${escapeAttribute(settings.subtitle)}" data-campaign-setting="subtitle" />
                       </label>
                     </div>
                     <label class="form-label">
-                      סיפור הפרויקט ב-Markdown
+                      ×¡×™×¤×•×¨ ×”×¤×¨×•×™×§×˜ ×‘-Markdown
                       <textarea class="form-control settings-textarea" data-campaign-setting="storyMarkdown">${escapeHtml(settings.storyMarkdown)}</textarea>
                     </label>
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        סוג מדיה
+                        ×¡×•×’ ×ž×“×™×”
                         <select class="form-select" data-campaign-setting="mediaType">
-                          <option value="image"${settings.mediaType === "image" ? " selected" : ""}>תמונה</option>
-                          <option value="video"${settings.mediaType === "video" ? " selected" : ""}>וידאו</option>
+                          <option value="image"${settings.mediaType === "image" ? " selected" : ""}>×ª×ž×•× ×”</option>
+                          <option value="video"${settings.mediaType === "video" ? " selected" : ""}>×•×™×“××•</option>
                         </select>
                       </label>
                       <label class="form-label">
-                        פונט ראשי
+                        ×¤×•× ×˜ ×¨××©×™
                         <select class="form-select" data-campaign-setting="fontFamily">
                           ${["Assistant", "Heebo", "Rubik", "Arial"].map((font) => `<option value="${font}"${settings.fontFamily === font ? " selected" : ""}>${font}</option>`).join("")}
                         </select>
                       </label>
                       <label class="form-label">
-                        מצב preview
+                        ×ž×¦×‘ preview
                         <select class="form-select" data-builder-setting="ui.previewMode">
                           <option value="desktop"${builder.ui.previewMode === "desktop" ? " selected" : ""}>Desktop</option>
                           <option value="mobile"${builder.ui.previewMode === "mobile" ? " selected" : ""}>Mobile</option>
                         </select>
                       </label>
                       <label class="form-label form-label--full">
-                        כתובת או Data URI למדיה
+                        ×›×ª×•×‘×ª ××• Data URI ×œ×ž×“×™×”
                         <input class="form-control" type="text" value="${escapeAttribute(settings.mediaUrl)}" data-campaign-setting="mediaUrl" />
                       </label>
                       <label class="form-label">
-                        לוגו קמפיין
+                        ×œ×•×’×• ×§×ž×¤×™×™×Ÿ
                         <input class="form-control" type="text" value="${escapeAttribute(settings.campaignLogoUrl || "")}" data-campaign-setting="campaignLogoUrl" />
                       </label>
                       <label class="form-label">
-                        לוגו ארגון
+                        ×œ×•×’×• ××¨×’×•×Ÿ
                         <input class="form-control" type="text" value="${escapeAttribute(settings.organizationLogoUrl || "")}" data-campaign-setting="organizationLogoUrl" />
                       </label>
                       <label class="form-label form-label--full">
-                        טקסט חלופי
+                        ×˜×§×¡×˜ ×—×œ×•×¤×™
                         <input class="form-control" type="text" value="${escapeAttribute(settings.mediaAlt)}" data-campaign-setting="mediaAlt" />
                       </label>
                       <label class="form-label form-label--full">
-                        העלאת מדיה
+                        ×”×¢×œ××ª ×ž×“×™×”
                         <input id="campaign-media-upload" class="form-control" type="file" accept="image/*,video/*" />
                       </label>
                       <label class="form-label">
-                        העלאת לוגו קמפיין
+                        ×”×¢×œ××ª ×œ×•×’×• ×§×ž×¤×™×™×Ÿ
                         <input id="campaign-logo-upload" class="form-control" type="file" accept="image/*" />
                       </label>
                       <label class="form-label">
-                        העלאת לוגו ארגון
+                        ×”×¢×œ××ª ×œ×•×’×• ××¨×’×•×Ÿ
                         <input id="organization-logo-upload" class="form-control" type="file" accept="image/*" />
                       </label>
                     </div>
@@ -9138,8 +9310,8 @@ def build_fragment(
                     </div>
                     <div class="settings-media-preview">
                       <div class="settings-media-preview-head">
-                        <div class="settings-media-preview-label">תצוגה מקדימה</div>
-                        <div class="settings-media-preview-meta">${builder.ui.previewMode === "mobile" ? "Mobile" : "Desktop"} · ${escapeHtml(settings.mediaType === "video" ? "וידאו" : "תמונה")}</div>
+                        <div class="settings-media-preview-label">×ª×¦×•×’×” ×ž×§×“×™×ž×”</div>
+                        <div class="settings-media-preview-meta">${builder.ui.previewMode === "mobile" ? "Mobile" : "Desktop"} Â· ${escapeHtml(settings.mediaType === "video" ? "×•×™×“××•" : "×ª×ž×•× ×”")}</div>
                       </div>
                       <div class="settings-media-preview-frame">
                         ${mediaPreviewMarkup}
@@ -9150,46 +9322,46 @@ def build_fragment(
                   stepMarkup = `
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        CTA ראשי
+                        CTA ×¨××©×™
                         <input class="form-control" type="text" value="${escapeAttribute(settings.primaryCtaLabel)}" data-campaign-setting="primaryCtaLabel" />
                       </label>
                       <label class="form-label">
-                        CTA משני
+                        CTA ×ž×©× ×™
                         <input class="form-control" type="text" value="${escapeAttribute(settings.secondaryCtaLabel)}" data-campaign-setting="secondaryCtaLabel" />
                       </label>
                       <label class="form-label form-label--full">
-                        קישור לסליקה חיצונית
+                        ×§×™×©×•×¨ ×œ×¡×œ×™×§×” ×—×™×¦×•× ×™×ª
                         <input class="form-control" type="url" value="${escapeAttribute(settings.externalDonationUrl)}" data-campaign-setting="externalDonationUrl" />
                       </label>
                     </div>
                     <label class="form-label">
-                      סכומי תרומה מוגדרים מראש
+                      ×¡×›×•×ž×™ ×ª×¨×•×ž×” ×ž×•×’×“×¨×™× ×ž×¨××©
                       <textarea class="form-control settings-textarea" data-campaign-setting="amountCardsText">${escapeHtml(formatAmountCardText(settings.amountCards))}</textarea>
-                      <div class="text-small text-muted">שורה לכל preset: <code>180|מארז חג|תיאור קצר</code></div>
+                      <div class="text-small text-muted">×©×•×¨×” ×œ×›×œ preset: <code>180|×ž××¨×– ×—×’|×ª×™××•×¨ ×§×¦×¨</code></div>
                     </label>
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        מסלול חודשי
+                        ×ž×¡×œ×•×œ ×—×•×“×©×™
                         <select class="form-select" data-campaign-setting="showRecurring">
-                          <option value="true"${settings.showRecurring ? " selected" : ""}>פעיל</option>
-                          <option value="false"${!settings.showRecurring ? " selected" : ""}>כבוי</option>
+                          <option value="true"${settings.showRecurring ? " selected" : ""}>×¤×¢×™×œ</option>
+                          <option value="false"${!settings.showRecurring ? " selected" : ""}>×›×‘×•×™</option>
                         </select>
                       </label>
                       <label class="form-label">
-                        יעד יומי
+                        ×™×¢×“ ×™×•×ž×™
                         <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(state.goals.daily || "")}" data-builder-goal="daily" />
                       </label>
                       <label class="form-label">
-                        המלצה אוטומטית
+                        ×”×ž×œ×¦×” ××•×˜×•×ž×˜×™×ª
                         <input class="form-control" type="number" min="0" step="10" value="${escapeAttribute(snapshot.donation.recommendedAmount || "")}" readonly />
                       </label>
                     </div>
                     <label class="form-label">
-                      הודעת אמון
+                      ×”×•×“×¢×ª ××ž×•×Ÿ
                       <textarea class="form-control" data-campaign-setting="trustNote">${escapeHtml(settings.trustNote)}</textarea>
                     </label>
                     <label class="form-label">
-                      הודעת מעבר/תודה
+                      ×”×•×“×¢×ª ×ž×¢×‘×¨/×ª×•×“×”
                       <textarea class="form-control" data-campaign-setting="successHint">${escapeHtml(settings.successHint)}</textarea>
                     </label>
                   `;
@@ -9197,60 +9369,60 @@ def build_fragment(
                   stepMarkup = `
                     <section class="control-group">
                       <div class="control-group-header">
-                        <h4>ייבוא CSV</h4>
-                        <p>CSV עם <code>full_name</code>, <code>nickname</code>, <code>email</code>, <code>phone</code> ובמידת הצורך גם <code>team</code> ו-<code>personal_target</code>.</p>
+                        <h4>×™×™×‘×•× CSV</h4>
+                        <p>CSV ×¢× <code>full_name</code>, <code>nickname</code>, <code>email</code>, <code>phone</code> ×•×‘×ž×™×“×ª ×”×¦×•×¨×š ×’× <code>team</code> ×•-<code>personal_target</code>.</p>
                       </div>
                       <div class="filters-grid">
                         <label class="form-label">
-                          קובץ שגרירים
+                          ×§×•×‘×¥ ×©×’×¨×™×¨×™×
                           <input id="ambassador-directory-upload" class="form-control" type="file" accept=".csv,text/csv" />
                         </label>
                         <label class="form-label">
-                          תבנית לינק אישי
+                          ×ª×‘× ×™×ª ×œ×™× ×§ ××™×©×™
                           <input class="form-control" type="text" value="${escapeAttribute(`${getCampaignPlatformBaseUrl()}/${getCampaignProjectSlug()}/{nickname}`)}" readonly dir="ltr" />
                         </label>
                       </div>
                       <div class="settings-actions">
                         <div class="settings-status" data-ambassador-status${directoryStatus.tone !== "neutral" ? ` data-tone="${escapeAttribute(directoryStatus.tone)}"` : ""}>${escapeHtml(directoryStatus.message)}</div>
                         <div class="project-hero-actions">
-                          <button class="button-secondary" type="button" data-project-action="export-ambassador-links">ייצוא לינקים</button>
-                          <button class="button-ghost" type="button" data-project-action="clear-ambassador-directory">ניקוי רשימת שגרירים</button>
+                          <button class="button-secondary" type="button" data-project-action="export-ambassador-links">×™×™×¦×•× ×œ×™× ×§×™×</button>
+                          <button class="button-ghost" type="button" data-project-action="clear-ambassador-directory">× ×™×§×•×™ ×¨×©×™×ž×ª ×©×’×¨×™×¨×™×</button>
                         </div>
                       </div>
                     </section>
                     <section class="control-group">
                       <div class="control-group-header">
-                        <h4>הוספה ידנית</h4>
-                        <p>ליצירת שגריר בודד בלי להעלות קובץ.</p>
+                        <h4>×”×•×¡×¤×” ×™×“× ×™×ª</h4>
+                        <p>×œ×™×¦×™×¨×ª ×©×’×¨×™×¨ ×‘×•×“×“ ×‘×œ×™ ×œ×”×¢×œ×•×ª ×§×•×‘×¥.</p>
                       </div>
                       <div class="campaign-settings-grid">
                         <label class="form-label">
-                          שם מלא
+                          ×©× ×ž×œ×
                           <input class="form-control" type="text" value="${escapeAttribute(builder.ambassadors.manualDraft.fullName)}" data-builder-setting="ambassadors.manualDraft.fullName" />
                         </label>
                         <label class="form-label">
-                          כינוי
+                          ×›×™× ×•×™
                           <input class="form-control" type="text" value="${escapeAttribute(builder.ambassadors.manualDraft.nickname)}" data-builder-setting="ambassadors.manualDraft.nickname" dir="ltr" />
                         </label>
                         <label class="form-label">
-                          מייל
+                          ×ž×™×™×œ
                           <input class="form-control" type="email" value="${escapeAttribute(builder.ambassadors.manualDraft.email)}" data-builder-setting="ambassadors.manualDraft.email" dir="ltr" />
                         </label>
                         <label class="form-label">
-                          טלפון
+                          ×˜×œ×¤×•×Ÿ
                           <input class="form-control" type="text" value="${escapeAttribute(builder.ambassadors.manualDraft.phone)}" data-builder-setting="ambassadors.manualDraft.phone" dir="ltr" />
                         </label>
                         <label class="form-label">
-                          צוות
+                          ×¦×•×•×ª
                           <input class="form-control" type="text" value="${escapeAttribute(builder.ambassadors.manualDraft.team)}" data-builder-setting="ambassadors.manualDraft.team" />
                         </label>
                         <label class="form-label">
-                          יעד אישי
+                          ×™×¢×“ ××™×©×™
                           <input class="form-control" type="number" min="0" step="50" value="${escapeAttribute(builder.ambassadors.manualDraft.personalTarget)}" data-builder-setting="ambassadors.manualDraft.personalTarget" />
                         </label>
                       </div>
                       <div class="control-actions control-actions--inline">
-                        <button class="button-primary" type="button" data-builder-action="add-manual-ambassador">הוספת שגריר/ה</button>
+                        <button class="button-primary" type="button" data-builder-action="add-manual-ambassador">×”×•×¡×¤×ª ×©×’×¨×™×¨/×”</button>
                       </div>
                     </section>
                     ${ambassadorRowsMarkup}
@@ -9259,27 +9431,27 @@ def build_fragment(
                   stepMarkup = `
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        הפעלת צוותים
+                        ×”×¤×¢×œ×ª ×¦×•×•×ª×™×
                         <select class="form-select" data-builder-setting="teams.enabled">
-                          <option value="true"${builder.teams.enabled ? " selected" : ""}>כן</option>
-                          <option value="false"${!builder.teams.enabled ? " selected" : ""}>לא</option>
+                          <option value="true"${builder.teams.enabled ? " selected" : ""}>×›×Ÿ</option>
+                          <option value="false"${!builder.teams.enabled ? " selected" : ""}>×œ×</option>
                         </select>
                       </label>
                       <label class="form-label">
-                        שם צוות חדש
-                        <input id="builder-team-name" class="form-control" type="text" placeholder="לדוגמה: דרום / בוגרים / סניף מרכז" />
+                        ×©× ×¦×•×•×ª ×—×“×©
+                        <input id="builder-team-name" class="form-control" type="text" placeholder="×œ×“×•×’×ž×”: ×“×¨×•× / ×‘×•×’×¨×™× / ×¡× ×™×£ ×ž×¨×›×–" />
                       </label>
                       <label class="form-label">
-                        מנהל/ת
-                        <input id="builder-team-manager" class="form-control" type="text" placeholder="שם מוביל/ת" />
+                        ×ž× ×”×œ/×ª
+                        <input id="builder-team-manager" class="form-control" type="text" placeholder="×©× ×ž×•×‘×™×œ/×ª" />
                       </label>
                       <label class="form-label">
-                        יעד צוות
-                        <input id="builder-team-target" class="form-control" type="number" min="0" step="100" placeholder="למשל 50000" />
+                        ×™×¢×“ ×¦×•×•×ª
+                        <input id="builder-team-target" class="form-control" type="number" min="0" step="100" placeholder="×œ×ž×©×œ 50000" />
                       </label>
                     </div>
                     <div class="control-actions control-actions--inline">
-                      <button class="button-secondary" type="button" data-builder-action="add-team">הוספת צוות</button>
+                      <button class="button-secondary" type="button" data-builder-action="add-team">×”×•×¡×¤×ª ×¦×•×•×ª</button>
                     </div>
                     <div class="signal-grid">${teamsMarkup}</div>
                   `;
@@ -9287,34 +9459,34 @@ def build_fragment(
                   stepMarkup = `
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        יעד קמפיין
+                        ×™×¢×“ ×§×ž×¤×™×™×Ÿ
                         <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(state.goals.total || "")}" data-builder-goal="total" />
                       </label>
                       <label class="form-label">
-                        יעד יומי
+                        ×™×¢×“ ×™×•×ž×™
                         <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(state.goals.daily || "")}" data-builder-goal="daily" />
                       </label>
                       <label class="form-label">
-                        יעד לשגריר
+                        ×™×¢×“ ×œ×©×’×¨×™×¨
                         <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(builder.goals.ambassadorGoal || "")}" data-builder-setting="goals.ambassadorGoal" />
                       </label>
                       <label class="form-label">
-                        יעד לצוות
+                        ×™×¢×“ ×œ×¦×•×•×ª
                         <input class="form-control" type="number" min="0" step="100" value="${escapeAttribute(builder.goals.teamGoal || "")}" data-builder-setting="goals.teamGoal" />
                       </label>
                     </div>
                     <label class="form-label">
-                      הערת tie-break / eligibility
+                      ×”×¢×¨×ª tie-break / eligibility
                       <textarea class="form-control settings-textarea" data-builder-setting="goals.tierRuleNote">${escapeHtml(builder.goals.tierRuleNote)}</textarea>
                     </label>
                     <div class="signal-grid">
                       <article class="analysis-card">
-                        <h4>פרסי מיקומים</h4>
-                        <ul>${(state.prizeModel.placePrizes || []).length ? state.prizeModel.placePrizes.map((item) => `<li>${escapeHtml(item.label || `מקום ${item.place}`)} · ${escapeHtml(item.prize || "ללא פרס")}</li>`).join("") : "<li>אין פרסי מיקומים מוגדרים.</li>"}</ul>
+                        <h4>×¤×¨×¡×™ ×ž×™×§×•×ž×™×</h4>
+                        <ul>${(state.prizeModel.placePrizes || []).length ? state.prizeModel.placePrizes.map((item) => `<li>${escapeHtml(item.label || `×ž×§×•× ${item.place}`)} Â· ${escapeHtml(item.prize || "×œ×œ× ×¤×¨×¡")}</li>`).join("") : "<li>××™×Ÿ ×¤×¨×¡×™ ×ž×™×§×•×ž×™× ×ž×•×’×“×¨×™×.</li>"}</ul>
                       </article>
                       <article class="analysis-card">
-                        <h4>מדרגות פרס</h4>
-                        <ul>${(state.prizeModel.tierPrizes || []).length ? state.prizeModel.tierPrizes.map((item) => `<li>${escapeHtml(item.prize || "מדרגה")} · ${escapeHtml(formatAmount(item.threshold || 0))}</li>`).join("") : "<li>אין מדרגות פרס מוגדרות.</li>"}</ul>
+                        <h4>×ž×“×¨×’×•×ª ×¤×¨×¡</h4>
+                        <ul>${(state.prizeModel.tierPrizes || []).length ? state.prizeModel.tierPrizes.map((item) => `<li>${escapeHtml(item.prize || "×ž×“×¨×’×”")} Â· ${escapeHtml(formatAmount(item.threshold || 0))}</li>`).join("") : "<li>××™×Ÿ ×ž×“×¨×’×•×ª ×¤×¨×¡ ×ž×•×’×“×¨×•×ª.</li>"}</ul>
                       </article>
                     </div>
                   `;
@@ -9322,19 +9494,19 @@ def build_fragment(
                   stepMarkup = `
                     <div class="signal-grid">
                       <article class="analysis-card">
-                        <h4>מצב מקור נתונים</h4>
+                        <h4>×ž×¦×‘ ×ž×§×•×¨ × ×ª×•× ×™×</h4>
                         <ul>
-                          <li>Mode: ${escapeHtml(state.sourceConfig.mode === "api" ? "API" : "File Upload")}</li>
-                          <li>Endpoint: <span dir="ltr">${escapeHtml(state.sourceConfig.api.endpoint || "לא הוגדר")}</span></li>
+                          <li>Mode: ${escapeHtml(state.sourceConfig.mode === "api" ? "API" : state.sourceConfig.mode === "google_sheets" ? "Google Sheets" : "File Upload")}</li>
+                          <li>Endpoint: <span dir="ltr">${escapeHtml(state.sourceConfig.api.endpoint || "×œ× ×”×•×’×“×¨")}</span></li>
                           <li>Response: ${escapeHtml(state.sourceConfig.api.responseFormat || "csv")}</li>
-                          <li>Auto refresh: ${escapeHtml(formatNumber(Number(state.sourceConfig.api.autoRefreshMinutes || 0)))} דקות</li>
+                          <li>Auto refresh: ${escapeHtml(formatNumber(Number(state.sourceConfig.api.autoRefreshMinutes || 0)))} ×“×§×•×ª</li>
                         </ul>
                       </article>
                       <article class="analysis-card">
-                        <h4>מיפוי וחיווי</h4>
+                        <h4>×ž×™×¤×•×™ ×•×—×™×•×•×™</h4>
                         <ul>
-                          <li>${escapeHtml(state.sourceConfig.api.recordsPath ? `נתיב רשומות: ${state.sourceConfig.api.recordsPath}` : "אין נתיב רשומות מיוחד.")}</li>
-                          <li>${escapeHtml(state.sourceConfig.api.hasBearerToken ? "קיים bearer token שמור בשרת." : "לא נשמר bearer token.")}</li>
+                          <li>${escapeHtml(state.sourceConfig.api.recordsPath ? `× ×ª×™×‘ ×¨×©×•×ž×•×ª: ${state.sourceConfig.api.recordsPath}` : "××™×Ÿ × ×ª×™×‘ ×¨×©×•×ž×•×ª ×ž×™×•×—×“.")}</li>
+                          <li>${escapeHtml(state.sourceConfig.api.hasBearerToken ? "×§×™×™× bearer token ×©×ž×•×¨ ×‘×©×¨×ª." : "×œ× × ×©×ž×¨ bearer token.")}</li>
                           <li>${escapeHtml(getSourceConfigStatus().message)}</li>
                         </ul>
                       </article>
@@ -9342,7 +9514,7 @@ def build_fragment(
                     <div class="settings-actions">
                       <div class="settings-status" data-source-summary>${escapeHtml(getSourceConfigStatus().message)}</div>
                       <div class="project-hero-actions">
-                        <button class="button-secondary" type="button" data-builder-action="go-to-source-center">מעבר לחיבור מקור הנתונים</button>
+                        <button class="button-secondary" type="button" data-builder-action="go-to-source-center">×ž×¢×‘×¨ ×œ×—×™×‘×•×¨ ×ž×§×•×¨ ×”× ×ª×•× ×™×</button>
                       </div>
                     </div>
                   `;
@@ -9362,14 +9534,14 @@ def build_fragment(
                         <textarea class="form-control settings-textarea" data-builder-email-list="permissions.viewers" dir="ltr" placeholder="viewer@example.org">${escapeHtml(serializeEmailLines(builder.permissions.viewers))}</textarea>
                       </label>
                     </div>
-                    <div class="status-note text-small">השלב הזה שומר את מבנה ההרשאות בתוך תצורת הקמפיין. מנגנון ה־auth הקיים נשאר שרת-צד ולא נשבר.</div>
+                    <div class="status-note text-small">×”×©×œ×‘ ×”×–×” ×©×•×ž×¨ ××ª ×ž×‘× ×” ×”×”×¨×©××•×ª ×‘×ª×•×š ×ª×¦×•×¨×ª ×”×§×ž×¤×™×™×Ÿ. ×ž× ×’× ×•×Ÿ ×”Ö¾auth ×”×§×™×™× × ×©××¨ ×©×¨×ª-×¦×“ ×•×œ× × ×©×‘×¨.</div>
                   `;
                 } else {
                   stepMarkup = `
                     ${preflightMarkup}
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        תבנית קמפיין
+                        ×ª×‘× ×™×ª ×§×ž×¤×™×™×Ÿ
                         <select class="form-select" data-builder-template>
                           ${[
                             ["annual-recurring", "Annual recurring"],
@@ -9382,7 +9554,7 @@ def build_fragment(
                         </select>
                       </label>
                       <label class="form-label">
-                        סטטוס נוכחי
+                        ×¡×˜×˜×•×¡ × ×•×›×—×™
                         <input class="form-control" type="text" value="${escapeAttribute(builder.basics.status)}" readonly />
                       </label>
                     </div>
@@ -9394,51 +9566,51 @@ def build_fragment(
 
                 elements.campaignDesignerPanel.innerHTML = `
                   <div class="campaign-settings-panel">
-                    <div class="settings-panel-note">Campaign Builder שומר את כל שכבת ההקמה של הקמפיין: פרטים עסקיים, מיתוג, תרומות, שגרירים, פרסים והרשאות. הזרימה מיועדת לעבודה חוזרת של ארגונים ולא להגדרה חד-פעמית בלבד.</div>
+                    <div class="settings-panel-note">Campaign Builder ×©×•×ž×¨ ××ª ×›×œ ×©×›×‘×ª ×”×”×§×ž×” ×©×œ ×”×§×ž×¤×™×™×Ÿ: ×¤×¨×˜×™× ×¢×¡×§×™×™×, ×ž×™×ª×•×’, ×ª×¨×•×ž×•×ª, ×©×’×¨×™×¨×™×, ×¤×¨×¡×™× ×•×”×¨×©××•×ª. ×”×–×¨×™×ž×” ×ž×™×•×¢×“×ª ×œ×¢×‘×•×“×” ×—×•×–×¨×ª ×©×œ ××¨×’×•× ×™× ×•×œ× ×œ×”×’×“×¨×” ×—×“-×¤×¢×ž×™×ª ×‘×œ×‘×“.</div>
                     <div class="campaign-settings-grid">
                       <label class="form-label">
-                        קמפיין פעיל
+                        ×§×ž×¤×™×™×Ÿ ×¤×¢×™×œ
                         <select class="form-select" data-campaign-registry="active-id">
                           ${campaignRegistryOptions}
                         </select>
                       </label>
                       <section class="analysis-card">
-                        <h4>מאגר קמפיינים</h4>
+                        <h4>×ž××’×¨ ×§×ž×¤×™×™× ×™×</h4>
                         <ul>
-                          <li>${escapeHtml(formatNumber(campaignRegistry.campaigns.length))} קמפיינים שמורים</li>
+                          <li>${escapeHtml(formatNumber(campaignRegistry.campaigns.length))} ×§×ž×¤×™×™× ×™× ×©×ž×•×¨×™×</li>
                           <li>${escapeHtml(activeCampaignEntry?.slug || snapshot.basics.slug || "-")} /slug</li>
-                          <li>${escapeHtml(activeCampaignEntry?.updatedAt ? `עודכן ${formatCampaignSavedAt(activeCampaignEntry.updatedAt)}` : "טרם נשמר בשרת")}</li>
+                          <li>${escapeHtml(activeCampaignEntry?.updatedAt ? `×¢×•×“×›×Ÿ ${formatCampaignSavedAt(activeCampaignEntry.updatedAt)}` : "×˜×¨× × ×©×ž×¨ ×‘×©×¨×ª")}</li>
                         </ul>
                       </section>
                     </div>
                     <div class="settings-actions">
                       <div class="settings-status" data-builder-status${builderStatus.tone !== "neutral" ? ` data-tone="${escapeAttribute(builderStatus.tone)}"` : ""}>${escapeHtml(builderStatus.message)}</div>
                       <div class="project-hero-actions">
-                        <button class="button-ghost" type="button" data-builder-action="create-campaign">קמפיין חדש</button>
-                        <button class="button-secondary" type="button" data-builder-action="save-now">שמירת טיוטה</button>
-                        <button class="button-ghost" type="button" data-builder-action="duplicate-campaign">שכפול קמפיין</button>
-                        <button class="button-ghost" type="button" data-project-action="open-project-preview">תצוגה מקדימה</button>
+                        <button class="button-ghost" type="button" data-builder-action="create-campaign">×§×ž×¤×™×™×Ÿ ×—×“×©</button>
+                        <button class="button-secondary" type="button" data-builder-action="save-now">×©×ž×™×¨×ª ×˜×™×•×˜×”</button>
+                        <button class="button-ghost" type="button" data-builder-action="duplicate-campaign">×©×›×¤×•×œ ×§×ž×¤×™×™×Ÿ</button>
+                        <button class="button-ghost" type="button" data-project-action="open-project-preview">×ª×¦×•×’×” ×ž×§×“×™×ž×”</button>
                       </div>
                     </div>
-                    <div class="data-toolbar metric-toolbar" aria-label="שלבי ה־Campaign Builder">
+                    <div class="data-toolbar metric-toolbar" aria-label="×©×œ×‘×™ ×”Ö¾Campaign Builder">
                       ${steps.map((label, index) => `<button class="metric-toggle${currentStep === index + 1 ? " is-active" : ""}" type="button" data-builder-step="${index + 1}">${index + 1}. ${escapeHtml(label)}</button>`).join("")}
                     </div>
                     <div class="signal-grid">
                       <section class="analysis-card">
-                        <h4>תמונת מצב</h4>
+                        <h4>×ª×ž×•× ×ª ×ž×¦×‘</h4>
                         <ul>
-                          <li>${escapeHtml(snapshot.basics.campaignName || "ללא שם קמפיין")}</li>
-                          <li>${escapeHtml(snapshot.basics.organizationName || "ללא ארגון")}</li>
-                          <li>${escapeHtml(formatAmount(Number(snapshot.basics.target || 0)))} יעד</li>
-                          <li>${escapeHtml(formatNumber(directoryRows.length))} שגרירים</li>
+                          <li>${escapeHtml(snapshot.basics.campaignName || "×œ×œ× ×©× ×§×ž×¤×™×™×Ÿ")}</li>
+                          <li>${escapeHtml(snapshot.basics.organizationName || "×œ×œ× ××¨×’×•×Ÿ")}</li>
+                          <li>${escapeHtml(formatAmount(Number(snapshot.basics.target || 0)))} ×™×¢×“</li>
+                          <li>${escapeHtml(formatNumber(directoryRows.length))} ×©×’×¨×™×¨×™×</li>
                         </ul>
                       </section>
                       <section class="analysis-card">
-                        <h4>מצב שמירה</h4>
+                        <h4>×ž×¦×‘ ×©×ž×™×¨×”</h4>
                         <ul>
                           <li>Last saved: ${escapeHtml(formatCampaignSavedAt(builder.meta.lastSavedAt))}</li>
                           <li dir="ltr">Saved by: ${escapeHtml(builder.meta.lastSavedBy || "-")}</li>
-                          <li>${escapeHtml(preflight.blocking.length ? `${formatNumber(preflight.blocking.length)} חסימות` : "אין חסימות פתוחות")}</li>
+                          <li>${escapeHtml(preflight.blocking.length ? `${formatNumber(preflight.blocking.length)} ×—×¡×™×ž×•×ª` : "××™×Ÿ ×—×¡×™×ž×•×ª ×¤×ª×•×—×•×ª")}</li>
                         </ul>
                       </section>
                       <section class="analysis-card">
@@ -9452,17 +9624,17 @@ def build_fragment(
                     </div>
                     <section class="control-group">
                       <div class="control-group-header">
-                        <h4>שלב ${currentStep}: ${escapeHtml(steps[currentStep - 1])}</h4>
-                        <p>מסלול מונחה להגדרת קמפיין מלא, עם טיוטה, שכפול ו־review לפני עלייה לאוויר.</p>
+                        <h4>×©×œ×‘ ${currentStep}: ${escapeHtml(steps[currentStep - 1])}</h4>
+                        <p>×ž×¡×œ×•×œ ×ž×•× ×—×” ×œ×”×’×“×¨×ª ×§×ž×¤×™×™×Ÿ ×ž×œ×, ×¢× ×˜×™×•×˜×”, ×©×›×¤×•×œ ×•Ö¾review ×œ×¤× ×™ ×¢×œ×™×™×” ×œ××•×•×™×¨.</p>
                       </div>
                       ${stepMarkup}
                     </section>
                     <div class="settings-actions">
                       <div class="settings-status" data-settings-status${statusState.tone !== "neutral" ? ` data-tone="${escapeAttribute(statusState.tone)}"` : ""}>${escapeHtml(statusState.message)}</div>
                       <div class="project-hero-actions">
-                        <button class="button-ghost" type="button" data-builder-action="prev-step"${currentStep === 1 ? " disabled" : ""}>הקודם</button>
-                        <button class="button-secondary" type="button" data-builder-action="next-step"${currentStep === steps.length ? " disabled" : ""}>הבא</button>
-                        <button class="button-ghost" type="button" data-project-action="reset-campaign-settings">איפוס</button>
+                        <button class="button-ghost" type="button" data-builder-action="prev-step"${currentStep === 1 ? " disabled" : ""}>×”×§×•×“×</button>
+                        <button class="button-secondary" type="button" data-builder-action="next-step"${currentStep === steps.length ? " disabled" : ""}>×”×‘×</button>
+                        <button class="button-ghost" type="button" data-project-action="reset-campaign-settings">××™×¤×•×¡</button>
                       </div>
                     </div>
                   </div>
@@ -9484,9 +9656,9 @@ def build_fragment(
                 const progressPercent = totalGoal > 0 ? Math.max(0, Math.min(100, (totalRaised / totalGoal) * 100)) : 0;
                 const selectedAmount = getProjectSelectedAmount();
                 const selectedAmountCard = getSelectedAmountCard();
-                const donationSummary = selectedAmount ? formatAmount(selectedAmount) : "יש לבחור סכום";
-                const selectedAmountLabel = selectedAmountCard?.label || "תרומה פעילה";
-                const selectedAmountDescription = selectedAmountCard?.description || "הסכום שתבחרו יועבר לספק התשלום החיצוני ויצורף לפרטי התרומה שתזינו כאן.";
+                const donationSummary = selectedAmount ? formatAmount(selectedAmount) : "×™×© ×œ×‘×—×•×¨ ×¡×›×•×";
+                const selectedAmountLabel = selectedAmountCard?.label || "×ª×¨×•×ž×” ×¤×¢×™×œ×”";
+                const selectedAmountDescription = selectedAmountCard?.description || "×”×¡×›×•× ×©×ª×‘×—×¨×• ×™×•×¢×‘×¨ ×œ×¡×¤×§ ×”×ª×©×œ×•× ×”×—×™×¦×•× ×™ ×•×™×¦×•×¨×£ ×œ×¤×¨×˜×™ ×”×ª×¨×•×ž×” ×©×ª×–×™× ×• ×›××Ÿ.";
                 const storyMarkup = renderSimpleMarkdown(settings.storyMarkdown);
                 const ambassadors = [
                   ...new Set([
@@ -9495,7 +9667,7 @@ def build_fragment(
                   ]),
                 ];
                 const ambassadorOptions = [
-                  `<option value="general"${state.donation.ambassador === "general" ? " selected" : ""}>תרומה כללית לפרויקט</option>`,
+                  `<option value="general"${state.donation.ambassador === "general" ? " selected" : ""}>×ª×¨×•×ž×” ×›×œ×œ×™×ª ×œ×¤×¨×•×™×§×˜</option>`,
                   ...ambassadors.map((ambassador) => `<option value="${escapeAttribute(ambassador)}"${state.donation.ambassador === ambassador ? " selected" : ""}>${escapeHtml(ambassador)}</option>`),
                 ].join("");
 
@@ -9517,8 +9689,8 @@ def build_fragment(
                           <h1 class="project-title">${escapeHtml(settings.title)}</h1>
                           <p class="project-subtitle">${escapeHtml(settings.subtitle)}</p>
                           <div class="project-hero-actions">
-                            <button class="button-primary action-button" type="button" data-project-action="scroll-donation">${escapeHtml(settings.primaryCtaLabel || "לתרומה")}</button>
-                            <button class="button-secondary action-button secondary" type="button" data-project-action="go-prizes">${escapeHtml(settings.secondaryCtaLabel || "צפייה במובילים ובזוכים")}</button>
+                            <button class="button-primary action-button" type="button" data-project-action="scroll-donation">${escapeHtml(settings.primaryCtaLabel || "×œ×ª×¨×•×ž×”")}</button>
+                            <button class="button-secondary action-button secondary" type="button" data-project-action="go-prizes">${escapeHtml(settings.secondaryCtaLabel || "×¦×¤×™×™×” ×‘×ž×•×‘×™×œ×™× ×•×‘×–×•×›×™×")}</button>
                           </div>
                           <div class="project-stat-grid">
                             ${(settings.stats || []).map((item) => `
@@ -9531,20 +9703,20 @@ def build_fragment(
                           <div class="project-progress">
                             <div class="project-progress-meta">
                               <strong>${escapeHtml(settings.projectDatesLabel)}</strong>
-                              <span>גיוס נוכחי: ${escapeHtml(formatAmount(totalRaised))}</span>
-                              <span>${latestCreated ? `עדכון אחרון: ${escapeHtml(formatDateTime(latestCreated))}` : "ממתין לעדכון נתונים"}</span>
+                              <span>×’×™×•×¡ × ×•×›×—×™: ${escapeHtml(formatAmount(totalRaised))}</span>
+                              <span>${latestCreated ? `×¢×“×›×•×Ÿ ××—×¨×•×Ÿ: ${escapeHtml(formatDateTime(latestCreated))}` : "×ž×ž×ª×™×Ÿ ×œ×¢×“×›×•×Ÿ × ×ª×•× ×™×"}</span>
                             </div>
                             <div class="project-progress-track" aria-hidden="true">
                               <div class="project-progress-bar" style="width:${progressPercent.toFixed(2)}%"></div>
                             </div>
                             <div class="project-progress-meta">
-                              <span>${totalGoal > 0 ? `התקדמות מול יעד: ${escapeHtml(formatNumber(progressPercent.toFixed(1)))}%` : "יעד כולל יוצג כאן לאחר הזנה במסך הניהול"}</span>
-                              <span>${leaderboard.length ? `שגרירים פעילים: ${escapeHtml(formatNumber(leaderboard.length))}` : "עדיין אין שגרירים פעילים בתצוגה"}</span>
+                              <span>${totalGoal > 0 ? `×”×ª×§×“×ž×•×ª ×ž×•×œ ×™×¢×“: ${escapeHtml(formatNumber(progressPercent.toFixed(1)))}%` : "×™×¢×“ ×›×•×œ×œ ×™×•×¦×’ ×›××Ÿ ×œ××—×¨ ×”×–× ×” ×‘×ž×¡×š ×”× ×™×”×•×œ"}</span>
+                              <span>${leaderboard.length ? `×©×’×¨×™×¨×™× ×¤×¢×™×œ×™×: ${escapeHtml(formatNumber(leaderboard.length))}` : "×¢×“×™×™×Ÿ ××™×Ÿ ×©×’×¨×™×¨×™× ×¤×¢×™×œ×™× ×‘×ª×¦×•×’×”"}</span>
                             </div>
                           </div>
                         </div>
                         <div class="project-media-frame">
-                          <div class="project-media-badge">עמוד פרויקט פעיל</div>
+                          <div class="project-media-badge">×¢×ž×•×“ ×¤×¨×•×™×§×˜ ×¤×¢×™×œ</div>
                           ${mediaMarkup}
                         </div>
                       </div>
@@ -9554,8 +9726,8 @@ def build_fragment(
                       <article class="project-story-panel app-card app-card--elevated">
                         <div class="section-header">
                           <div>
-                            <h3>הסיפור של הפרויקט</h3>
-                            <div class="text-small text-muted">טקסט גמיש שניתן לעדכן במסך הניהול ולהתאים לכל מבצע, חג או קמפיין.</div>
+                            <h3>×”×¡×™×¤×•×¨ ×©×œ ×”×¤×¨×•×™×§×˜</h3>
+                            <div class="text-small text-muted">×˜×§×¡×˜ ×’×ž×™×© ×©× ×™×ª×Ÿ ×œ×¢×“×›×Ÿ ×‘×ž×¡×š ×”× ×™×”×•×œ ×•×œ×”×ª××™× ×œ×›×œ ×ž×‘×¦×¢, ×—×’ ××• ×§×ž×¤×™×™×Ÿ.</div>
                           </div>
                         </div>
                         <div class="project-story-content">${storyMarkup}</div>
@@ -9564,37 +9736,37 @@ def build_fragment(
                       <aside id="project-donation-panel" class="donation-panel app-card app-card--elevated">
                         <div class="section-header">
                           <div>
-                            <h3>בחירת תרומה והמשך לתשלום</h3>
-                            <div class="text-small text-muted">המסך הזה מצמצם חיכוך: סכום, פרטים בסיסיים, ואז מעבר אל ספק הסליקה החיצוני.</div>
+                            <h3>×‘×—×™×¨×ª ×ª×¨×•×ž×” ×•×”×ž×©×š ×œ×ª×©×œ×•×</h3>
+                            <div class="text-small text-muted">×”×ž×¡×š ×”×–×” ×ž×¦×ž×¦× ×—×™×›×•×š: ×¡×›×•×, ×¤×¨×˜×™× ×‘×¡×™×¡×™×™×, ×•××– ×ž×¢×‘×¨ ××œ ×¡×¤×§ ×”×¡×œ×™×§×” ×”×—×™×¦×•× ×™.</div>
                           </div>
                         </div>
                         <div class="donation-stepper" aria-hidden="true">
                           <article class="donation-step">
-                            <div class="donation-step-index">שלב 1</div>
-                            <div class="donation-step-title">בוחרים סכום</div>
-                            <div class="donation-step-meta">חד פעמית או חודשית, לפי הגדרות הקמפיין.</div>
+                            <div class="donation-step-index">×©×œ×‘ 1</div>
+                            <div class="donation-step-title">×‘×•×—×¨×™× ×¡×›×•×</div>
+                            <div class="donation-step-meta">×—×“ ×¤×¢×ž×™×ª ××• ×—×•×“×©×™×ª, ×œ×¤×™ ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ.</div>
                           </article>
                           <article class="donation-step">
-                            <div class="donation-step-index">שלב 2</div>
-                            <div class="donation-step-title">ממלאים פרטים</div>
-                            <div class="donation-step-meta">שם, דוא"ל ושיוך אופציונלי לשגריר/ה.</div>
+                            <div class="donation-step-index">×©×œ×‘ 2</div>
+                            <div class="donation-step-title">×ž×ž×œ××™× ×¤×¨×˜×™×</div>
+                            <div class="donation-step-meta">×©×, ×“×•×"×œ ×•×©×™×•×š ××•×¤×¦×™×•× ×œ×™ ×œ×©×’×¨×™×¨/×”.</div>
                           </article>
                           <article class="donation-step">
-                            <div class="donation-step-index">שלב 3</div>
-                            <div class="donation-step-title">עוברים לתשלום</div>
-                            <div class="donation-step-meta">המשך לחלון מאובטח של ספק התשלום החיצוני.</div>
+                            <div class="donation-step-index">×©×œ×‘ 3</div>
+                            <div class="donation-step-title">×¢×•×‘×¨×™× ×œ×ª×©×œ×•×</div>
+                            <div class="donation-step-meta">×”×ž×©×š ×œ×—×œ×•×Ÿ ×ž××•×‘×˜×— ×©×œ ×¡×¤×§ ×”×ª×©×œ×•× ×”×—×™×¦×•× ×™.</div>
                           </article>
                         </div>
                         ${settings.showRecurring ? `
-                          <div class="donation-frequency" role="tablist" aria-label="סוג תרומה">
-                            <button class="donation-frequency-button${state.donation.frequency === "one_time" ? " is-active" : ""}" type="button" data-project-action="set-frequency" data-value="one_time">חד פעמית</button>
-                            <button class="donation-frequency-button${state.donation.frequency === "monthly" ? " is-active" : ""}" type="button" data-project-action="set-frequency" data-value="monthly">חודשית</button>
+                          <div class="donation-frequency" role="tablist" aria-label="×¡×•×’ ×ª×¨×•×ž×”">
+                            <button class="donation-frequency-button${state.donation.frequency === "one_time" ? " is-active" : ""}" type="button" data-project-action="set-frequency" data-value="one_time">×—×“ ×¤×¢×ž×™×ª</button>
+                            <button class="donation-frequency-button${state.donation.frequency === "monthly" ? " is-active" : ""}" type="button" data-project-action="set-frequency" data-value="monthly">×—×•×“×©×™×ª</button>
                           </div>
                         ` : ""}
                         <div class="donation-impact">
                           <div class="donation-impact-head">
                             <div>
-                              <div class="donation-impact-kicker">התרומה שבחרתם</div>
+                              <div class="donation-impact-kicker">×”×ª×¨×•×ž×” ×©×‘×—×¨×ª×</div>
                               <div class="donation-impact-title">${escapeHtml(selectedAmountLabel)}</div>
                             </div>
                             <div class="donation-impact-value">${escapeHtml(donationSummary)}</div>
@@ -9611,45 +9783,45 @@ def build_fragment(
                           `).join("")}
                         </div>
                         <label class="form-label form-label--full">
-                          סכום מותאם אישית
-                          <input class="form-control" type="number" min="0" step="10" value="${escapeAttribute(state.donation.customAmount)}" data-donation-field="customAmount" placeholder="למשל 720" />
+                          ×¡×›×•× ×ž×•×ª×× ××™×©×™×ª
+                          <input class="form-control" type="number" min="0" step="10" value="${escapeAttribute(state.donation.customAmount)}" data-donation-field="customAmount" placeholder="×œ×ž×©×œ 720" />
                         </label>
                         <div class="donation-grid">
                           <label class="form-label">
-                            שם מלא
-                            <input class="form-control" type="text" value="${escapeAttribute(state.donation.donorName)}" data-donation-field="donorName" placeholder="שם התורם/ת" />
+                            ×©× ×ž×œ×
+                            <input class="form-control" type="text" value="${escapeAttribute(state.donation.donorName)}" data-donation-field="donorName" placeholder="×©× ×”×ª×•×¨×/×ª" />
                           </label>
                           <label class="form-label">
-                            דוא"ל
+                            ×“×•×"×œ
                             <input class="form-control" type="email" value="${escapeAttribute(state.donation.donorEmail)}" data-donation-field="donorEmail" placeholder="name@example.org" dir="ltr" />
                           </label>
                           <label class="form-label">
-                            טלפון
+                            ×˜×œ×¤×•×Ÿ
                             <input class="form-control" type="tel" value="${escapeAttribute(state.donation.donorPhone)}" data-donation-field="donorPhone" placeholder="050-0000000" dir="ltr" />
                           </label>
                           <label class="form-label">
-                            שיוך לשגריר/ה
+                            ×©×™×•×š ×œ×©×’×¨×™×¨/×”
                             <select class="form-select" data-donation-field="ambassador">
                               ${ambassadorOptions}
                             </select>
                           </label>
                           <label class="form-label form-label--full">
-                            הקדשה או הערה
-                            <textarea class="form-control" data-donation-field="dedication" placeholder="רשות בלבד">${escapeHtml(state.donation.dedication)}</textarea>
+                            ×”×§×“×©×” ××• ×”×¢×¨×”
+                            <textarea class="form-control" data-donation-field="dedication" placeholder="×¨×©×•×ª ×‘×œ×‘×“">${escapeHtml(state.donation.dedication)}</textarea>
                           </label>
                         </div>
                         <div class="donation-summary">
-                          <div><strong>סכום שנבחר:</strong> ${escapeHtml(donationSummary)}</div>
-                          <div><strong>מסלול:</strong> ${state.donation.frequency === "monthly" ? "תרומה חודשית" : "תרומה חד פעמית"}</div>
-                          <div><strong>יעד שיוך:</strong> ${escapeHtml(state.donation.ambassador === "general" ? "תרומה כללית לפרויקט" : state.donation.ambassador || "תרומה כללית לפרויקט")}</div>
+                          <div><strong>×¡×›×•× ×©× ×‘×—×¨:</strong> ${escapeHtml(donationSummary)}</div>
+                          <div><strong>×ž×¡×œ×•×œ:</strong> ${state.donation.frequency === "monthly" ? "×ª×¨×•×ž×” ×—×•×“×©×™×ª" : "×ª×¨×•×ž×” ×—×“ ×¤×¢×ž×™×ª"}</div>
+                          <div><strong>×™×¢×“ ×©×™×•×š:</strong> ${escapeHtml(state.donation.ambassador === "general" ? "×ª×¨×•×ž×” ×›×œ×œ×™×ª ×œ×¤×¨×•×™×§×˜" : state.donation.ambassador || "×ª×¨×•×ž×” ×›×œ×œ×™×ª ×œ×¤×¨×•×™×§×˜")}</div>
                         </div>
                         <div class="project-trust-list">
-                          <span class="project-trust-chip">SSL אצל ספק חיצוני</span>
-                          <span class="project-trust-chip">שמירת פרטיות</span>
-                          <span class="project-trust-chip">מעבר לחלון מאובטח</span>
+                          <span class="project-trust-chip">SSL ××¦×œ ×¡×¤×§ ×—×™×¦×•× ×™</span>
+                          <span class="project-trust-chip">×©×ž×™×¨×ª ×¤×¨×˜×™×•×ª</span>
+                          <span class="project-trust-chip">×ž×¢×‘×¨ ×œ×—×œ×•×Ÿ ×ž××•×‘×˜×—</span>
                         </div>
                         <div class="donation-flow-note">${escapeHtml(settings.trustNote)}</div>
-                        <button class="button-primary action-button" type="button" data-project-action="continue-donation">${escapeHtml(settings.primaryCtaLabel || "המשך לתרומה מאובטחת")}</button>
+                        <button class="button-primary action-button" type="button" data-project-action="continue-donation">${escapeHtml(settings.primaryCtaLabel || "×”×ž×©×š ×œ×ª×¨×•×ž×” ×ž××•×‘×˜×—×ª")}</button>
                         <div class="text-small text-muted">${escapeHtml(settings.successHint)}</div>
                         <div class="donation-feedback${state.donation.tone ? ` is-${escapeAttribute(state.donation.tone)}` : ""}" aria-live="polite">${escapeHtml(state.donation.message || "")}</div>
                       </aside>
@@ -9666,7 +9838,7 @@ def build_fragment(
                   const message = error?.message || "Unknown render error";
                   console.error(`[render:${label}]`, error);
                   if (elements.controlNote) {
-                    elements.controlNote.textContent = `שגיאת תצוגה באזור ${label}: ${message}`;
+                    elements.controlNote.textContent = `×©×’×™××ª ×ª×¦×•×’×” ×‘××–×•×¨ ${label}: ${message}`;
                     elements.controlNote.className = "status-note text-small is-error";
                   }
                   return false;
@@ -9681,30 +9853,42 @@ def build_fragment(
                 const filteredRows = getFilteredRows();
                 const compareRows = getComparisonRows();
                 const prizeRows = getPrizeScopeRows();
-                runRenderStep("project-page", () => renderProjectPage());
+                const isAdminPage = state.ui.page === "admin";
+                const canRenderAdmin = isAdminPage && isManagerAuthenticated();
+                const isPrizePage = state.ui.page === "prizes";
+                const shouldRenderProjectPage = state.ui.page === "project";
+                if (shouldRenderProjectPage) {
+                  runRenderStep("project-page", () => renderProjectPage());
+                }
                 runRenderStep("brand-assets", () => renderBrandAssets());
-                if (state.ui.page === "admin" && state.ui.adminTab === "design") {
+                if (isAdminPage && state.ui.adminTab === "design") {
                   runRenderStep("campaign-designer", () => renderCampaignDesigner());
                 }
                 runRenderStep("access-ui", () => refreshAccessUi());
-                runRenderStep("table-visibility", () => updateTableVisibility());
-                runRenderStep("filter-summary", () => renderActiveFilterSummary());
-                runRenderStep("metric-toolbar", () => updateMetricToolbarState());
-                runRenderStep("control-note", () => setControlNote(filteredRows, prizeRows));
-                runRenderStep("public-hero", () => renderPublicHeroBadges(prizeRows));
-                runRenderStep("admin-hero", () => renderHeroBadges(filteredRows, prizeRows, compareRows));
-                runRenderStep("metrics", () => renderMetrics(filteredRows));
-                runRenderStep("goals", () => renderGoalsBoard(filteredRows));
-                runRenderStep("validation", () => renderValidationBoard());
-                runRenderStep("executive", () => renderExecutiveBoard(filteredRows));
-                runRenderStep("quality", () => renderQualityBoard(filteredRows));
-                runRenderStep("segments", () => renderSegmentBoard(filteredRows));
-                runRenderStep("comparison", () => renderComparisonBoard(filteredRows, compareRows));
-                runRenderStep("prizes", () => renderPrizeBoard(prizeRows));
-                runRenderStep("daily-chart", () => renderDailyChart(filteredRows));
-                runRenderStep("heatmap", () => renderHeatmap(filteredRows));
-                runRenderStep("movement", () => renderMovement(filteredRows));
-                runRenderStep("table", () => renderTable(filteredRows));
+                if (shouldRenderProjectPage) {
+                  runRenderStep("public-hero", () => renderPublicHeroBadges(prizeRows));
+                }
+                if (canRenderAdmin) {
+                  runRenderStep("table-visibility", () => updateTableVisibility());
+                  runRenderStep("filter-summary", () => renderActiveFilterSummary());
+                  runRenderStep("metric-toolbar", () => updateMetricToolbarState());
+                  runRenderStep("control-note", () => setControlNote(filteredRows, prizeRows));
+                  runRenderStep("admin-hero", () => renderHeroBadges(filteredRows, prizeRows, compareRows));
+                  runRenderStep("metrics", () => renderMetrics(filteredRows));
+                  runRenderStep("goals", () => renderGoalsBoard(filteredRows));
+                  runRenderStep("validation", () => renderValidationBoard());
+                  runRenderStep("executive", () => renderExecutiveBoard(filteredRows));
+                  runRenderStep("quality", () => renderQualityBoard(filteredRows));
+                  runRenderStep("segments", () => renderSegmentBoard(filteredRows));
+                  runRenderStep("comparison", () => renderComparisonBoard(filteredRows, compareRows));
+                  runRenderStep("daily-chart", () => renderDailyChart(filteredRows));
+                  runRenderStep("heatmap", () => renderHeatmap(filteredRows));
+                  runRenderStep("movement", () => renderMovement(filteredRows));
+                  runRenderStep("table", () => renderTable(filteredRows));
+                }
+                if (isPrizePage || canRenderAdmin) {
+                  runRenderStep("prizes", () => renderPrizeBoard(prizeRows));
+                }
               }
 
               function bindEvents() {
@@ -9767,24 +9951,24 @@ def build_fragment(
                     if (action === "continue-donation") {
                       const selectedAmount = getProjectSelectedAmount();
                       if (!selectedAmount) {
-                        state.donation.message = "יש לבחור סכום תרומה לפני המעבר לתשלום.";
+                        state.donation.message = "×™×© ×œ×‘×—×•×¨ ×¡×›×•× ×ª×¨×•×ž×” ×œ×¤× ×™ ×”×ž×¢×‘×¨ ×œ×ª×©×œ×•×.";
                         state.donation.tone = "error";
                         renderProjectPage();
                         return;
                       }
                       if (!String(state.donation.donorName || "").trim() || !String(state.donation.donorEmail || "").trim()) {
-                        state.donation.message = 'יש למלא לפחות שם מלא ודוא"ל לפני המעבר לתשלום.';
+                        state.donation.message = '×™×© ×œ×ž×œ× ×œ×¤×—×•×ª ×©× ×ž×œ× ×•×“×•×"×œ ×œ×¤× ×™ ×”×ž×¢×‘×¨ ×œ×ª×©×œ×•×.';
                         state.donation.tone = "error";
                         renderProjectPage();
                         return;
                       }
                       try {
                         const outgoingUrl = buildProjectDonationUrl();
-                        state.donation.message = "המעבר בוצע לחלון חדש של ספק התשלום.";
+                        state.donation.message = "×”×ž×¢×‘×¨ ×‘×•×¦×¢ ×œ×—×œ×•×Ÿ ×—×“×© ×©×œ ×¡×¤×§ ×”×ª×©×œ×•×.";
                         state.donation.tone = "success";
                         window.open(outgoingUrl, "_blank", "noopener,noreferrer");
                       } catch (error) {
-                        state.donation.message = error?.message || "לא הוגדר עדיין קישור יציאה תקין לספק התשלום.";
+                        state.donation.message = error?.message || "×œ× ×”×•×’×“×¨ ×¢×“×™×™×Ÿ ×§×™×©×•×¨ ×™×¦×™××” ×ª×§×™×Ÿ ×œ×¡×¤×§ ×”×ª×©×œ×•×.";
                         state.donation.tone = "error";
                       }
                       renderProjectPage();
@@ -9906,7 +10090,7 @@ def build_fragment(
                     if (event.target?.dataset?.campaignRegistry === "active-id") {
                       const nextCampaignId = String(event.target.value || "").trim();
                       if (nextCampaignId && nextCampaignId !== state.activeCampaignId) {
-                        await switchActiveCampaign(nextCampaignId, { message: "הקמפיין הפעיל הוחלף." });
+                        await switchActiveCampaign(nextCampaignId, { message: "×”×§×ž×¤×™×™×Ÿ ×”×¤×¢×™×œ ×”×•×—×œ×£." });
                         renderCampaignDesigner(true);
                         renderProjectPage();
                       }
@@ -9960,16 +10144,16 @@ def build_fragment(
                         state.campaignPage = normalizeCampaignPageSettings(state.campaignPage);
                         persistCampaignPageSettings(
                           state.campaignPage,
-                          "המדיה נטענה ונשמרה לפאנל הניהול בדפדפן זה.",
-                          "המדיה נטענה לתצוגה הנוכחית, אבל לא נשמרה בדפדפן. נסה תמונה קטנה יותר או כתובת URL קלה יותר."
+                          "×”×ž×“×™×” × ×˜×¢× ×” ×•× ×©×ž×¨×” ×œ×¤×× ×œ ×”× ×™×”×•×œ ×‘×“×¤×“×¤×Ÿ ×–×”.",
+                          "×”×ž×“×™×” × ×˜×¢× ×” ×œ×ª×¦×•×’×” ×”× ×•×›×—×™×ª, ××‘×œ ×œ× × ×©×ž×¨×” ×‘×“×¤×“×¤×Ÿ. × ×¡×” ×ª×ž×•× ×” ×§×˜× ×” ×™×•×ª×¨ ××• ×›×ª×•×‘×ª URL ×§×œ×” ×™×•×ª×¨."
                         );
                         state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
                         renderCampaignDesigner(true);
                         renderProjectPage();
-                        queueCampaignBuilderAutosave("המדיה נטענה ונשמרת בטיוטת הקמפיין.");
+                        queueCampaignBuilderAutosave("×”×ž×“×™×” × ×˜×¢× ×” ×•× ×©×ž×¨×ª ×‘×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ.");
                       };
                       reader.onerror = () => {
-                        setCampaignSettingsStatus("טעינת הקובץ נכשלה. נסה שוב עם תמונה אחרת או קובץ קטן יותר.", "error");
+                        setCampaignSettingsStatus("×˜×¢×™× ×ª ×”×§×•×‘×¥ × ×›×©×œ×”. × ×¡×” ×©×•×‘ ×¢× ×ª×ž×•× ×” ××—×¨×ª ××• ×§×•×‘×¥ ×§×˜×Ÿ ×™×•×ª×¨.", "error");
                         renderCampaignDesigner(true);
                       };
                       reader.readAsDataURL(file);
@@ -9988,16 +10172,16 @@ def build_fragment(
                         state.campaignPage = normalizeCampaignPageSettings(state.campaignPage);
                         persistCampaignPageSettings(
                           state.campaignPage,
-                          `הלוגו נטען ונשמר עבור ${targetField === "campaignLogoUrl" ? "הקמפיין" : "הארגון"}.`,
-                          "טעינת הלוגו הושלמה אך השמירה המקומית נכשלה. אפשר להדביק Data URI ידנית."
+                          `×”×œ×•×’×• × ×˜×¢×Ÿ ×•× ×©×ž×¨ ×¢×‘×•×¨ ${targetField === "campaignLogoUrl" ? "×”×§×ž×¤×™×™×Ÿ" : "×”××¨×’×•×Ÿ"}.`,
+                          "×˜×¢×™× ×ª ×”×œ×•×’×• ×”×•×©×œ×ž×” ××š ×”×©×ž×™×¨×” ×”×ž×§×•×ž×™×ª × ×›×©×œ×”. ××¤×©×¨ ×œ×”×“×‘×™×§ Data URI ×™×“× ×™×ª."
                         );
                         renderBrandAssets();
                         renderCampaignDesigner(true);
                         renderProjectPage();
-                        queueCampaignBuilderAutosave("לוגו הקמפיין עודכן ונשמר בטיוטת הקמפיין.");
+                        queueCampaignBuilderAutosave("×œ×•×’×• ×”×§×ž×¤×™×™×Ÿ ×¢×•×“×›×Ÿ ×•× ×©×ž×¨ ×‘×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ.");
                       };
                       reader.onerror = () => {
-                        setCampaignSettingsStatus("טעינת קובץ הלוגו נכשלה. נסה/י תמונה אחרת או הדבקת Data URI.", "error");
+                        setCampaignSettingsStatus("×˜×¢×™× ×ª ×§×•×‘×¥ ×”×œ×•×’×• × ×›×©×œ×”. × ×¡×”/×™ ×ª×ž×•× ×” ××—×¨×ª ××• ×”×“×‘×§×ª Data URI.", "error");
                         renderCampaignDesigner(true);
                       };
                       reader.readAsDataURL(file);
@@ -10012,28 +10196,31 @@ def build_fragment(
                       try {
                         const parsed = parseAmbassadorDirectoryCsv(await file.text());
                         if (!parsed.records.length) {
-                          setAmbassadorDirectoryStatus("לא זוהו שגרירים תקינים בקובץ. נדרשים לפחות full_name ו-nickname לכל שורה.", "error");
+                          setAmbassadorDirectoryStatus("×œ× ×–×•×”×• ×©×’×¨×™×¨×™× ×ª×§×™× ×™× ×‘×§×•×‘×¥. × ×“×¨×©×™× ×œ×¤×—×•×ª full_name ×•-nickname ×œ×›×œ ×©×•×¨×”.", "error");
                           renderCampaignDesigner(true);
                           return;
                         }
                         state.ambassadorDirectory = parsed.records;
                         storeAmbassadorDirectory(state.ambassadorDirectory);
                         const notes = [];
-                        notes.push(`${formatNumber(parsed.records.length)} שגרירים נשמרו עם לינקים אישיים.`);
+                        notes.push(`${formatNumber(parsed.records.length)} ×©×’×¨×™×¨×™× × ×©×ž×¨×• ×¢× ×œ×™× ×§×™× ××™×©×™×™×.`);
+                        if (parsed.generatedNicknames.length) {
+                          notes.push(`${formatNumber(parsed.generatedNicknames.length)} \u05db\u05d9\u05e0\u05d5\u05d9\u05d9\u05dd \u05e0\u05d5\u05e6\u05e8\u05d5 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea \u05de\u05db\u05ea\u05d5\u05d1\u05ea \u05d4\u05de\u05d9\u05d9\u05dc.`);
+                        }
                         if (parsed.missingRows.length) {
-                          notes.push(`${formatNumber(parsed.missingRows.length)} שורות נדלגו בגלל שם או כינוי חסרים.`);
+                          notes.push(`${formatNumber(parsed.missingRows.length)} ×©×•×¨×•×ª × ×“×œ×’×• ×‘×’×œ×œ ×©× ××• ×›×™× ×•×™ ×—×¡×¨×™×.`);
                         }
                         if (parsed.duplicateNicknames.length) {
-                          notes.push(`${formatNumber(parsed.duplicateNicknames.length)} כפילויות כינוי נוטרלו.`);
+                          notes.push(`${formatNumber(parsed.duplicateNicknames.length)} ×›×¤×™×œ×•×™×•×ª ×›×™× ×•×™ × ×•×˜×¨×œ×•.`);
                         }
                         setAmbassadorDirectoryStatus(notes.join(" "), parsed.missingRows.length || parsed.duplicateNicknames.length ? "warning" : "success");
                         applyAmbassadorContextFromUrl();
                         state.donation = syncDonationStateWithCampaignPage(state.donation, state.campaignPage);
                         renderCampaignDesigner(true);
                         renderProjectPage();
-                        queueCampaignBuilderAutosave("רשימת השגרירים עודכנה ונשמרת בטיוטת הקמפיין.");
+                        queueCampaignBuilderAutosave("×¨×©×™×ž×ª ×”×©×’×¨×™×¨×™× ×¢×•×“×›× ×” ×•× ×©×ž×¨×ª ×‘×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ.");
                       } catch (_error) {
-                        setAmbassadorDirectoryStatus("טעינת קובץ השגרירים נכשלה. ודא/י שמדובר ב-CSV תקין עם full_name ו-nickname.", "error");
+                        setAmbassadorDirectoryStatus("×˜×¢×™× ×ª ×§×•×‘×¥ ×”×©×’×¨×™×¨×™× × ×›×©×œ×”. ×•×“×/×™ ×©×ž×“×•×‘×¨ ×‘-CSV ×ª×§×™×Ÿ ×¢× full_name ×•-nickname.", "error");
                         renderCampaignDesigner(true);
                       }
                     }
@@ -10059,7 +10246,7 @@ def build_fragment(
                       state.sourceConfig = getDefaultSourceConfig();
                       persistActiveCampaignLegacyState();
                       syncCampaignRegistryFromState();
-                      setCampaignSettingsStatus("הגדרות דף הפרויקט אופסו לברירת המחדל.", "success");
+                      setCampaignSettingsStatus("×”×’×“×¨×•×ª ×“×£ ×”×¤×¨×•×™×§×˜ ××•×¤×¡×• ×œ×‘×¨×™×¨×ª ×”×ž×—×“×œ.", "success");
                       state.donation = getDefaultDonationState(state.campaignPage);
                       renderCampaignDesigner(true);
                       renderProjectPage();
@@ -10067,25 +10254,25 @@ def build_fragment(
                     }
                     if (action === "export-ambassador-links") {
                       if (!state.ambassadorDirectory.length) {
-                        setAmbassadorDirectoryStatus("אין עדיין שגרירים לייצוא. יש להעלות קודם קובץ CSV.", "warning");
+                        setAmbassadorDirectoryStatus("××™×Ÿ ×¢×“×™×™×Ÿ ×©×’×¨×™×¨×™× ×œ×™×™×¦×•×. ×™×© ×œ×”×¢×œ×•×ª ×§×•×“× ×§×•×‘×¥ CSV.", "warning");
                         renderCampaignDesigner(true);
                         return;
                       }
                       exportAmbassadorLinks(state.ambassadorDirectory);
-                      setAmbassadorDirectoryStatus("קובץ הלינקים האישיים יוצא בהצלחה.", "success");
+                      setAmbassadorDirectoryStatus("×§×•×‘×¥ ×”×œ×™× ×§×™× ×”××™×©×™×™× ×™×•×¦× ×‘×”×¦×œ×—×”.", "success");
                       renderCampaignDesigner(true);
                       return;
                     }
                     if (action === "clear-ambassador-directory") {
                       state.ambassadorDirectory = [];
                       storeAmbassadorDirectory([]);
-                      setAmbassadorDirectoryStatus("רשימת השגרירים המקומית נוקתה.", "warning");
+                      setAmbassadorDirectoryStatus("×¨×©×™×ž×ª ×”×©×’×¨×™×¨×™× ×”×ž×§×•×ž×™×ª × ×•×§×ª×”.", "warning");
                       if (state.donation.ambassador !== "general") {
                         state.donation.ambassador = "general";
                       }
                       renderCampaignDesigner(true);
                       renderProjectPage();
-                      queueCampaignBuilderAutosave("רשימת השגרירים נוקתה ונשמרת בטיוטה.");
+                      queueCampaignBuilderAutosave("×¨×©×™×ž×ª ×”×©×’×¨×™×¨×™× × ×•×§×ª×” ×•× ×©×ž×¨×ª ×‘×˜×™×•×˜×”.");
                     }
                   });
 
@@ -10121,7 +10308,7 @@ def build_fragment(
                       try {
                         await saveCampaignBuilderConfig();
                       } catch (error) {
-                        setCampaignBuilderStatus(error?.message || "שמירת טיוטת הקמפיין נכשלה.", "error");
+                        setCampaignBuilderStatus(error?.message || "×©×ž×™×¨×ª ×˜×™×•×˜×ª ×”×§×ž×¤×™×™×Ÿ × ×›×©×œ×”.", "error");
                       }
                       renderCampaignDesigner(true);
                       return;
@@ -10138,7 +10325,7 @@ def build_fragment(
                     if (action === "add-manual-ambassador") {
                       const draft = normalizeCampaignBuilderConfig(state.campaignBuilder).ambassadors.manualDraft;
                       if (!draft.fullName || !draft.nickname) {
-                        setAmbassadorDirectoryStatus("כדי להוסיף שגריר ידנית יש למלא לפחות שם מלא וכינוי.", "error");
+                        setAmbassadorDirectoryStatus("×›×“×™ ×œ×”×•×¡×™×£ ×©×’×¨×™×¨ ×™×“× ×™×ª ×™×© ×œ×ž×œ× ×œ×¤×—×•×ª ×©× ×ž×œ× ×•×›×™× ×•×™.", "error");
                         renderCampaignDesigner(true);
                         return;
                       }
@@ -10163,7 +10350,7 @@ def build_fragment(
                         personalTarget: "",
                       };
                       storeAmbassadorDirectory(state.ambassadorDirectory);
-                      setAmbassadorDirectoryStatus("השגריר/ה נוספו לרשימה ונשמרים בטיוטה.", "success");
+                      setAmbassadorDirectoryStatus("×”×©×’×¨×™×¨/×” × ×•×¡×¤×• ×œ×¨×©×™×ž×” ×•× ×©×ž×¨×™× ×‘×˜×™×•×˜×”.", "success");
                       renderCampaignDesigner(true);
                       renderProjectPage();
                       queueCampaignBuilderAutosave();
@@ -10174,7 +10361,7 @@ def build_fragment(
                       const teamManager = elements.campaignDesignerPanel.querySelector("#builder-team-manager")?.value || "";
                       const teamTarget = Number(elements.campaignDesignerPanel.querySelector("#builder-team-target")?.value || 0);
                       if (!String(teamName).trim()) {
-                        setCampaignBuilderStatus("יש להזין שם צוות לפני הוספה.", "error");
+                        setCampaignBuilderStatus("×™×© ×œ×”×–×™×Ÿ ×©× ×¦×•×•×ª ×œ×¤× ×™ ×”×•×¡×¤×”.", "error");
                         renderCampaignDesigner(true);
                         return;
                       }
@@ -10188,20 +10375,20 @@ def build_fragment(
                         },
                       ];
                       renderCampaignDesigner(true);
-                      queueCampaignBuilderAutosave("הצוות נוסף ונשמר בטיוטה.");
+                      queueCampaignBuilderAutosave("×”×¦×•×•×ª × ×•×¡×£ ×•× ×©×ž×¨ ×‘×˜×™×•×˜×”.");
                       return;
                     }
                     if (action === "remove-team") {
                       const index = Number(builderActionElement.dataset.teamIndex || -1);
                       state.campaignBuilder.teams.groups = state.campaignBuilder.teams.groups.filter((_item, itemIndex) => itemIndex !== index);
                       renderCampaignDesigner(true);
-                      queueCampaignBuilderAutosave("הצוות הוסר מהטיוטה.");
+                      queueCampaignBuilderAutosave("×”×¦×•×•×ª ×”×•×¡×¨ ×ž×”×˜×™×•×˜×”.");
                       return;
                     }
                     if (action === "launch-campaign") {
                       const preflight = buildCampaignPreflight(getCampaignBuilderSnapshot());
                       if (preflight.blocking.length) {
-                        setCampaignBuilderStatus("לא ניתן להעלות קמפיין עם חסימות פתוחות. השלם/י קודם את ה־preflight.", "error");
+                        setCampaignBuilderStatus("×œ× × ×™×ª×Ÿ ×œ×”×¢×œ×•×ª ×§×ž×¤×™×™×Ÿ ×¢× ×—×¡×™×ž×•×ª ×¤×ª×•×—×•×ª. ×”×©×œ×/×™ ×§×•×“× ××ª ×”Ö¾preflight.", "error");
                         renderCampaignDesigner(true);
                         return;
                       }
@@ -10210,7 +10397,7 @@ def build_fragment(
                       try {
                         await saveCampaignBuilderConfig();
                       } catch (error) {
-                        setCampaignBuilderStatus(error?.message || "שמירת סטטוס ההשקה נכשלה.", "error");
+                        setCampaignBuilderStatus(error?.message || "×©×ž×™×¨×ª ×¡×˜×˜×•×¡ ×”×”×©×§×” × ×›×©×œ×”.", "error");
                       }
                       renderCampaignDesigner(true);
                       return;
@@ -10258,19 +10445,19 @@ def build_fragment(
                   const confirmPassword = elements.loginPasswordConfirm?.value || "";
                   storeAdminEmail(email);
                   if (!email || !password) {
-                    setLoginMessage("יש למלא גם מייל וגם סיסמה.", "error");
+                    setLoginMessage("×™×© ×œ×ž×œ× ×’× ×ž×™×™×œ ×•×’× ×¡×™×¡×ž×”.", "error");
                     return;
                   }
                   if (state.auth.setupMode && !confirmPassword) {
-                    setLoginMessage("יש לאשר את הסיסמה כדי להשלים את ההגדרה הראשונית.", "error");
+                    setLoginMessage("×™×© ×œ××©×¨ ××ª ×”×¡×™×¡×ž×” ×›×“×™ ×œ×”×©×œ×™× ××ª ×”×”×’×“×¨×” ×”×¨××©×•× ×™×ª.", "error");
                     return;
                   }
                   if (state.auth.setupMode && password.length < 8) {
-                    setLoginMessage("בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.", "error");
+                    setLoginMessage("×‘×›× ×™×¡×” ×¨××©×•× ×” ×™×© ×œ×‘×—×•×¨ ×¡×™×¡×ž×” ×‘××•×¨×š 8 ×ª×•×•×™× ×œ×¤×—×•×ª.", "error");
                     return;
                   }
                   if (state.auth.setupMode && password !== confirmPassword) {
-                    setLoginMessage("אימות הסיסמה לא תואם.", "error");
+                    setLoginMessage("××™×ž×•×ª ×”×¡×™×¡×ž×” ×œ× ×ª×•××.", "error");
                     return;
                   }
                   try {
@@ -10324,14 +10511,14 @@ def build_fragment(
                         await loadProtectedManagerData(scope, { includeCampaignBuilder: false });
                         syncSourceAutoRefresh();
                       } catch (datasetError) {
-                        setImportMessage(datasetError?.message || "הכניסה הצליחה, אך טעינת הנתונים המוגנים נכשלה. אפשר להעלות קובץ עסקאות ידנית.", "warning");
+                        setImportMessage(datasetError?.message || "×”×›× ×™×¡×” ×”×¦×œ×™×—×”, ××š ×˜×¢×™× ×ª ×”× ×ª×•× ×™× ×”×ž×•×’× ×™× × ×›×©×œ×”. ××¤×©×¨ ×œ×”×¢×œ×•×ª ×§×•×‘×¥ ×¢×¡×§××•×ª ×™×“× ×™×ª.", "warning");
                       }
                       setSetupMode(false);
                       elements.loginPassword.value = "";
                       if (elements.loginPasswordConfirm) {
                         elements.loginPasswordConfirm.value = "";
                       }
-                      setLoginMessage(payload.message || "הכניסה הצליחה. הדשבורד הניהולי נפתח.", "success");
+                      setLoginMessage(payload.message || "×”×›× ×™×¡×” ×”×¦×œ×™×—×”. ×”×“×©×‘×•×¨×“ ×”× ×™×”×•×œ×™ × ×¤×ª×—.", "success");
                       renderSourceConfigControls();
                       setPage("admin");
                       setAdminTab("insights");
@@ -10341,17 +10528,17 @@ def build_fragment(
 
                     if (payload?.code === "setup_required" || payload?.setupRequired) {
                       setSetupMode(true);
-                      setLoginMessage(payload.message || "זו כניסה ראשונה. יש להגדיר סיסמה אישית.", "warning");
+                      setLoginMessage(payload.message || "×–×• ×›× ×™×¡×” ×¨××©×•× ×”. ×™×© ×œ×”×’×“×™×¨ ×¡×™×¡×ž×” ××™×©×™×ª.", "warning");
                       if (elements.loginPasswordConfirm) {
                         elements.loginPasswordConfirm.focus();
                       }
                       return;
                     }
 
-                    setLoginMessage(payload?.message || "התחברות נכשלה.", "error");
+                    setLoginMessage(payload?.message || "×”×ª×—×‘×¨×•×ª × ×›×©×œ×”.", "error");
                   } catch (_error) {
                     state.auth.backendAvailable = false;
-                    setLoginMessage("שרת הניהול המקומי אינו זמין כרגע. יש להפעיל אותו כדי להיכנס.", "error");
+                    setLoginMessage("×©×¨×ª ×”× ×™×”×•×œ ×”×ž×§×•×ž×™ ××™× ×• ×–×ž×™×Ÿ ×›×¨×’×¢. ×™×© ×œ×”×¤×¢×™×œ ××•×ª×• ×›×“×™ ×œ×”×™×›× ×¡.", "error");
                   }
                 });
 
@@ -10361,22 +10548,22 @@ def build_fragment(
                   if (elements.loginPasswordConfirm) {
                     elements.loginPasswordConfirm.type = isPassword ? "text" : "password";
                   }
-                  elements.loginPasswordToggle.textContent = isPassword ? "הסתר" : "הצג";
+                  elements.loginPasswordToggle.textContent = isPassword ? "×”×¡×ª×¨" : "×”×¦×’";
                 });
 
                 if (elements.loginResetButton) {
                   elements.loginResetButton.addEventListener("click", async () => {
                     if (!canUseLocalPasswordReset()) {
-                      setLoginMessage("איפוס סיסמה זמין כרגע רק דרך השרת המקומי.", "warning");
+                      setLoginMessage("××™×¤×•×¡ ×¡×™×¡×ž×” ×–×ž×™×Ÿ ×›×¨×’×¢ ×¨×§ ×“×¨×š ×”×©×¨×ª ×”×ž×§×•×ž×™.", "warning");
                       return;
                     }
                     const email = normalizeSearchToken(elements.loginEmail.value);
                     if (!email) {
-                      setLoginMessage("יש להזין קודם את מייל המנהל/ת שאותו רוצים לאפס.", "error");
+                      setLoginMessage("×™×© ×œ×”×–×™×Ÿ ×§×•×“× ××ª ×ž×™×™×œ ×”×ž× ×”×œ/×ª ×©××•×ª×• ×¨×•×¦×™× ×œ××¤×¡.", "error");
                       elements.loginEmail.focus();
                       return;
                     }
-                    const confirmed = window.confirm(`לאפס את הסיסמה עבור ${email}? בכניסה הבאה תתבקש/י להגדיר סיסמה חדשה.`);
+                    const confirmed = window.confirm(`×œ××¤×¡ ××ª ×”×¡×™×¡×ž×” ×¢×‘×•×¨ ${email}? ×‘×›× ×™×¡×” ×”×‘××” ×ª×ª×‘×§×©/×™ ×œ×”×’×“×™×¨ ×¡×™×¡×ž×” ×—×“×©×”.`);
                     if (!confirmed) {
                       return;
                     }
@@ -10387,7 +10574,7 @@ def build_fragment(
                       });
                       state.auth.backendAvailable = true;
                       if (!response.ok) {
-                        setLoginMessage(payload?.message || "איפוס הסיסמה נכשל.", "error");
+                        setLoginMessage(payload?.message || "××™×¤×•×¡ ×”×¡×™×¡×ž×” × ×›×©×œ.", "error");
                         return;
                       }
                       clearSessionState();
@@ -10398,13 +10585,13 @@ def build_fragment(
                         elements.loginPasswordConfirm.value = "";
                       }
                       setSetupMode(true);
-                      setLoginMessage(payload?.message || "הסיסמה אופסה. יש להגדיר סיסמה חדשה כדי להיכנס.", "success");
+                      setLoginMessage(payload?.message || "×”×¡×™×¡×ž×” ××•×¤×¡×”. ×™×© ×œ×”×’×“×™×¨ ×¡×™×¡×ž×” ×—×“×©×” ×›×“×™ ×œ×”×™×›× ×¡.", "success");
                       if (elements.loginPassword) {
                         elements.loginPassword.focus();
                       }
                     } catch (_error) {
                       state.auth.backendAvailable = false;
-                      setLoginMessage("שרת הניהול המקומי אינו זמין כרגע. לא ניתן לאפס סיסמה.", "error");
+                      setLoginMessage("×©×¨×ª ×”× ×™×”×•×œ ×”×ž×§×•×ž×™ ××™× ×• ×–×ž×™×Ÿ ×›×¨×’×¢. ×œ× × ×™×ª×Ÿ ×œ××¤×¡ ×¡×™×¡×ž×”.", "error");
                     }
                   });
                 }
@@ -10429,6 +10616,14 @@ def build_fragment(
                   elements.sourceApiHeaders,
                   elements.sourceApiBody,
                   elements.sourceApiFieldMap,
+                  elements.sourceGoogleUrl,
+                  elements.sourceGoogleId,
+                  elements.sourceGoogleGid,
+                  elements.sourceGoogleSheetName,
+                  elements.sourceGoogleRange,
+                  elements.sourceGoogleAccessMode,
+                  elements.sourceGoogleSyncInterval,
+                  elements.sourceGoogleFieldMap,
                 ]
                   .filter(Boolean)
                   .forEach((element) => {
@@ -10442,8 +10637,11 @@ def build_fragment(
                       if (elements.sourceApiFields) {
                         elements.sourceApiFields.hidden = state.sourceConfig.mode !== "api";
                       }
+                      if (elements.sourceGoogleFields) {
+                        elements.sourceGoogleFields.hidden = state.sourceConfig.mode !== "google_sheets";
+                      }
                       if (elements.refreshSourceApi) {
-                        elements.refreshSourceApi.disabled = state.sourceConfig.mode !== "api";
+                        elements.refreshSourceApi.disabled = state.sourceConfig.mode === "file";
                       }
                     });
                   });
@@ -10453,7 +10651,7 @@ def build_fragment(
                     try {
                       await saveSourceConfigFromControls();
                     } catch (error) {
-                      setSourceConfigStatus(error?.message || "שמירת חיבור ה-API נכשלה.", "error");
+                      setSourceConfigStatus(error?.message || "×©×ž×™×¨×ª ×—×™×‘×•×¨ ×”-API × ×›×©×œ×”.", "error");
                     }
                   });
                 }
@@ -10464,7 +10662,7 @@ def build_fragment(
                       await saveSourceConfigFromControls({ silent: true });
                       await refreshSourceDataFromApi();
                     } catch (error) {
-                      setSourceConfigStatus(error?.message || "משיכת הנתונים מהמערכת החיצונית נכשלה.", "error");
+                      setSourceConfigStatus(error?.message || "×ž×©×™×›×ª ×”× ×ª×•× ×™× ×ž×”×ž×¢×¨×›×ª ×”×—×™×¦×•× ×™×ª × ×›×©×œ×”.", "error");
                     }
                   });
                 }
@@ -10557,7 +10755,7 @@ def build_fragment(
                     const ingested = ingestCsvText(text, file.name);
                     state.validation.base = ingested.validation;
                     if (hasBlockingValidation(ingested.validation)) {
-                      setImportMessage(`קובץ העסקאות ${file.name} לא נטען. נשארים עם הנתונים הפעילים עד לתיקון הקלט.`, "error");
+                      setImportMessage(`×§×•×‘×¥ ×”×¢×¡×§××•×ª ${file.name} ×œ× × ×˜×¢×Ÿ. × ×©××¨×™× ×¢× ×”× ×ª×•× ×™× ×”×¤×¢×™×œ×™× ×¢×“ ×œ×ª×™×§×•×Ÿ ×”×§×œ×˜.`, "error");
                       renderAll();
                       return;
                     }
@@ -10568,13 +10766,13 @@ def build_fragment(
                     resetFilterOptions();
                     setImportMessage(
                       ingested.validation.warnings.length
-                        ? `קובץ העסקאות ${file.name} נטען עם אזהרות. מומלץ לבדוק את לוח הולידציה לפני קבלת החלטות.`
-                        : `קובץ העסקאות ${file.name} נטען בהצלחה.`,
+                        ? `×§×•×‘×¥ ×”×¢×¡×§××•×ª ${file.name} × ×˜×¢×Ÿ ×¢× ××–×”×¨×•×ª. ×ž×•×ž×œ×¥ ×œ×‘×“×•×§ ××ª ×œ×•×— ×”×•×œ×™×“×¦×™×” ×œ×¤× ×™ ×§×‘×œ×ª ×”×—×œ×˜×•×ª.`
+                        : `×§×•×‘×¥ ×”×¢×¡×§××•×ª ${file.name} × ×˜×¢×Ÿ ×‘×”×¦×œ×—×”.`,
                       ingested.validation.warnings.length ? "warning" : "success"
                     );
                     renderAll();
                   } catch (_error) {
-                    setImportMessage(`טעינת קובץ העסקאות ${file.name} נכשלה. הנתונים הפעילים נשמרו כפי שהם.`, "error");
+                    setImportMessage(`×˜×¢×™× ×ª ×§×•×‘×¥ ×”×¢×¡×§××•×ª ${file.name} × ×›×©×œ×”. ×”× ×ª×•× ×™× ×”×¤×¢×™×œ×™× × ×©×ž×¨×• ×›×¤×™ ×©×”×.`, "error");
                   }
                 });
 
@@ -10588,7 +10786,7 @@ def build_fragment(
                     const ingested = ingestCsvText(text, file.name);
                     state.validation.compare = ingested.validation;
                     if (hasBlockingValidation(ingested.validation)) {
-                      setImportMessage(`קובץ ההשוואה ${file.name} לא נטען. ההשוואה הקודמת נשמרה ללא שינוי.`, "error");
+                      setImportMessage(`×§×•×‘×¥ ×”×”×©×•×•××” ${file.name} ×œ× × ×˜×¢×Ÿ. ×”×”×©×•×•××” ×”×§×•×“×ž×ª × ×©×ž×¨×” ×œ×œ× ×©×™× ×•×™.`, "error");
                       renderAll();
                       return;
                     }
@@ -10600,13 +10798,13 @@ def build_fragment(
                     resetFilterOptions();
                     setImportMessage(
                       ingested.validation.warnings.length
-                        ? `קובץ ההשוואה ${file.name} נטען עם אזהרות.`
-                        : `קובץ ההשוואה ${file.name} נטען בהצלחה.`,
+                        ? `×§×•×‘×¥ ×”×”×©×•×•××” ${file.name} × ×˜×¢×Ÿ ×¢× ××–×”×¨×•×ª.`
+                        : `×§×•×‘×¥ ×”×”×©×•×•××” ${file.name} × ×˜×¢×Ÿ ×‘×”×¦×œ×—×”.`,
                       ingested.validation.warnings.length ? "warning" : "success"
                     );
                     renderAll();
                   } catch (_error) {
-                    setImportMessage(`טעינת קובץ ההשוואה ${file.name} נכשלה. ההשוואה הפעילה לא השתנתה.`, "error");
+                    setImportMessage(`×˜×¢×™× ×ª ×§×•×‘×¥ ×”×”×©×•×•××” ${file.name} × ×›×©×œ×”. ×”×”×©×•×•××” ×”×¤×¢×™×œ×” ×œ× ×”×©×ª× ×ª×”.`, "error");
                   }
                 });
 
@@ -10619,7 +10817,7 @@ def build_fragment(
                     const model = await loadPrizeModelFromFile(file);
                     const validation = validatePrizeModelUpload(model, file.name);
                     if (validation.errors.length) {
-                      setImportMessage(`קובץ הפרסים ${file.name} לא נטען. טבלת הפרסים הפעילה נשארה כפי שהיא.`, "error");
+                      setImportMessage(`×§×•×‘×¥ ×”×¤×¨×¡×™× ${file.name} ×œ× × ×˜×¢×Ÿ. ×˜×‘×œ×ª ×”×¤×¨×¡×™× ×”×¤×¢×™×œ×” × ×©××¨×” ×›×¤×™ ×©×”×™×.`, "error");
                       renderAll();
                       return;
                     }
@@ -10627,13 +10825,13 @@ def build_fragment(
                     storePrizeModel(validation.normalized);
                     setImportMessage(
                       validation.warnings.length
-                        ? `טבלת הפרסים הוחלפה מתוך ${file.name} ונשמרה בדפדפן הזה, אך נטענה עם אזהרות. מומלץ לבדוק שלא חסרים פרסים או מדרגות.`
-                        : `טבלת הפרסים הוחלפה מתוך ${file.name} ונשמרה בדפדפן הזה. אין צורך להעלות אותה שוב בכל התחברות.`,
+                        ? `×˜×‘×œ×ª ×”×¤×¨×¡×™× ×”×•×—×œ×¤×” ×ž×ª×•×š ${file.name} ×•× ×©×ž×¨×” ×‘×“×¤×“×¤×Ÿ ×”×–×”, ××š × ×˜×¢× ×” ×¢× ××–×”×¨×•×ª. ×ž×•×ž×œ×¥ ×œ×‘×“×•×§ ×©×œ× ×—×¡×¨×™× ×¤×¨×¡×™× ××• ×ž×“×¨×’×•×ª.`
+                        : `×˜×‘×œ×ª ×”×¤×¨×¡×™× ×”×•×—×œ×¤×” ×ž×ª×•×š ${file.name} ×•× ×©×ž×¨×” ×‘×“×¤×“×¤×Ÿ ×”×–×”. ××™×Ÿ ×¦×•×¨×š ×œ×”×¢×œ×•×ª ××•×ª×” ×©×•×‘ ×‘×›×œ ×”×ª×—×‘×¨×•×ª.`,
                       validation.warnings.length ? "warning" : "success"
                     );
                     renderAll();
                   } catch (_error) {
-                    setImportMessage(`טעינת קובץ הפרסים ${file.name} נכשלה.`, "error");
+                    setImportMessage(`×˜×¢×™× ×ª ×§×•×‘×¥ ×”×¤×¨×¡×™× ${file.name} × ×›×©×œ×”.`, "error");
                   }
                 });
               }
@@ -10668,7 +10866,7 @@ def build_fragment(
                 const bootstrapMessage = error?.message || "Unknown bootstrap error";
                 root.insertAdjacentHTML(
                   "beforeend",
-                  `<div style="position:relative;z-index:30;margin:24px auto;max-width:960px;padding:16px 20px;border-radius:18px;background:rgba(255,214,41,0.16);border-inline-start:4px solid #090B10;color:#111D4A;font-weight:700;">שגיאת אתחול: ${escapeHtml(bootstrapMessage)}</div>`
+                  `<div style="position:relative;z-index:30;margin:24px auto;max-width:960px;padding:16px 20px;border-radius:18px;background:rgba(255,214,41,0.16);border-inline-start:4px solid #090B10;color:#111D4A;font-weight:700;">×©×’×™××ª ××ª×—×•×œ: ${escapeHtml(bootstrapMessage)}</div>`
                 );
               }
             })();
@@ -10737,11 +10935,11 @@ def build_browser_document(fragment: str) -> str:
 
 def render_public_dashboard_html(snapshot: dict, org_logo_data_uri: str, campaign_logo_data_uri: str) -> str:
     def format_amount(value: float) -> str:
-        return f"{value:,.0f} ₪"
+        return f"{value:,.0f} â‚ª"
 
     def format_datetime(value: str) -> str:
         if not value:
-            return "אין עדכון"
+            return "××™×Ÿ ×¢×“×›×•×Ÿ"
         try:
             return datetime.fromisoformat(value).strftime("%d.%m.%Y %H:%M")
         except ValueError:
@@ -10750,11 +10948,11 @@ def render_public_dashboard_html(snapshot: dict, org_logo_data_uri: str, campaig
     podium_html = "".join(
         f"""
         <article class="podium-card podium-card--{item['place']}">
-          <div class="podium-place">מקום {item['place']}</div>
+          <div class="podium-place">×ž×§×•× {item['place']}</div>
           <h3>{item['winner']}</h3>
           <div class="podium-amount">{format_amount(item['amount'])}</div>
           <div class="podium-meta">{item['prize']}</div>
-          <div class="podium-meta">{item['deals']} עסקאות</div>
+          <div class="podium-meta">{item['deals']} ×¢×¡×§××•×ª</div>
         </article>
         """
         for item in snapshot["podium"]
@@ -10765,9 +10963,9 @@ def render_public_dashboard_html(snapshot: dict, org_logo_data_uri: str, campaig
         <article class="tier-card">
           <div class="tier-threshold">{format_amount(item['threshold'])}</div>
           <h3>{item['prize']}</h3>
-          <div class="tier-meta">זוכים כרגע: {item['winnerCount']}</div>
-          <div class="tier-meta">מובילים במדרגה: {", ".join(item['winnerNames']) if item['winnerNames'] else "עדיין אין"}</div>
-          <div class="tier-meta">{f"קרוב/ה להשגה: {item['nextUpName']} (פער {format_amount(item['nextUpGap'])})" if item['nextUpName'] else "אין מועמד קרוב נוסף כרגע"}</div>
+          <div class="tier-meta">×–×•×›×™× ×›×¨×’×¢: {item['winnerCount']}</div>
+          <div class="tier-meta">×ž×•×‘×™×œ×™× ×‘×ž×“×¨×’×”: {", ".join(item['winnerNames']) if item['winnerNames'] else "×¢×“×™×™×Ÿ ××™×Ÿ"}</div>
+          <div class="tier-meta">{f"×§×¨×•×‘/×” ×œ×”×©×’×”: {item['nextUpName']} (×¤×¢×¨ {format_amount(item['nextUpGap'])})" if item['nextUpName'] else "××™×Ÿ ×ž×•×¢×ž×“ ×§×¨×•×‘ × ×•×¡×£ ×›×¨×’×¢"}</div>
         </article>
         """
         for item in snapshot["tiers"]
@@ -10781,7 +10979,7 @@ def render_public_dashboard_html(snapshot: dict, org_logo_data_uri: str, campaig
             <meta charset="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <meta name="robots" content="noindex,nofollow" />
-            <title>GoodRaise | דשבורד ציבורי</title>
+            <title>GoodRaise | ×“×©×‘×•×¨×“ ×¦×™×‘×•×¨×™</title>
             <style>
               :root {{
                 --navy-1000: #070D24;
@@ -10937,81 +11135,81 @@ def render_public_dashboard_html(snapshot: dict, org_logo_data_uri: str, campaig
             <div class="shell">
               <header class="topbar">
                 <div class="brand">
-                  <img src="{campaign_logo_data_uri}" alt="לוגו עושים טוב בצהוב" />
-                  <img src="{org_logo_data_uri}" alt="לוגו אחים לסמל" />
-                  <small>דשבורד ציבורי למשתתפים וצופים | גישת מנהלים דרך כניסה נפרדת</small>
+                  <img src="{campaign_logo_data_uri}" alt="×œ×•×’×• ×¢×•×©×™× ×˜×•×‘ ×‘×¦×”×•×‘" />
+                  <img src="{org_logo_data_uri}" alt="×œ×•×’×• ××—×™× ×œ×¡×ž×œ" />
+                  <small>×“×©×‘×•×¨×“ ×¦×™×‘×•×¨×™ ×œ×ž×©×ª×ª×¤×™× ×•×¦×•×¤×™× | ×’×™×©×ª ×ž× ×”×œ×™× ×“×¨×š ×›× ×™×¡×” × ×¤×¨×“×ª</small>
                 </div>
                 <nav class="nav">
-                  <a href="#podium">מובילים וזוכים</a>
-                  <a href="#tiers">מדרגות פרס</a>
-                  <a href="#rules">תקנון</a>
-                  <a href="#privacy">פרטיות</a>
-                  <a href="/admin">כניסת מנהלים</a>
+                  <a href="#podium">×ž×•×‘×™×œ×™× ×•×–×•×›×™×</a>
+                  <a href="#tiers">×ž×“×¨×’×•×ª ×¤×¨×¡</a>
+                  <a href="#rules">×ª×§× ×•×Ÿ</a>
+                  <a href="#privacy">×¤×¨×˜×™×•×ª</a>
+                  <a href="/admin">×›× ×™×¡×ª ×ž× ×”×œ×™×</a>
                 </nav>
               </header>
 
               <section class="hero">
-                <h1>הזוכים והמובילים של עושים טוב בצהוב</h1>
-                <p>תצוגה ציבורית נקייה ומעודכנת של מצב הקמפיין. הדשבורד הניהולי המלא זמין למנהלים מורשים בלבד, בעוד שכאן מוצגים נתוני סיכום ותחרות ללא חשיפת רשומות תורמים.</p>
+                <h1>×”×–×•×›×™× ×•×”×ž×•×‘×™×œ×™× ×©×œ ×¢×•×©×™× ×˜×•×‘ ×‘×¦×”×•×‘</h1>
+                <p>×ª×¦×•×’×” ×¦×™×‘×•×¨×™×ª × ×§×™×™×” ×•×ž×¢×•×“×›× ×ª ×©×œ ×ž×¦×‘ ×”×§×ž×¤×™×™×Ÿ. ×”×“×©×‘×•×¨×“ ×”× ×™×”×•×œ×™ ×”×ž×œ× ×–×ž×™×Ÿ ×œ×ž× ×”×œ×™× ×ž×•×¨×©×™× ×‘×œ×‘×“, ×‘×¢×•×“ ×©×›××Ÿ ×ž×•×¦×’×™× × ×ª×•× ×™ ×¡×™×›×•× ×•×ª×—×¨×•×ª ×œ×œ× ×—×©×™×¤×ª ×¨×©×•×ž×•×ª ×ª×•×¨×ž×™×.</p>
                 <div class="badge-grid">
-                  <div class="badge">חלון פרויקט<strong>{snapshot['projectWindowLabel'] or "לא זוהה"}</strong></div>
-                  <div class="badge">סך גיוס<strong>{format_amount(snapshot['totalRaised'])}</strong></div>
-                  <div class="badge">שגרירים פעילים<strong>{snapshot['activeAmbassadors']}</strong></div>
-                  <div class="badge">עדכון אחרון<strong>{format_datetime(snapshot['latestCreated'])}</strong></div>
+                  <div class="badge">×—×œ×•×Ÿ ×¤×¨×•×™×§×˜<strong>{snapshot['projectWindowLabel'] or "×œ× ×–×•×”×”"}</strong></div>
+                  <div class="badge">×¡×š ×’×™×•×¡<strong>{format_amount(snapshot['totalRaised'])}</strong></div>
+                  <div class="badge">×©×’×¨×™×¨×™× ×¤×¢×™×œ×™×<strong>{snapshot['activeAmbassadors']}</strong></div>
+                  <div class="badge">×¢×“×›×•×Ÿ ××—×¨×•×Ÿ<strong>{format_datetime(snapshot['latestCreated'])}</strong></div>
                 </div>
               </section>
 
               <section id="podium" class="section">
-                <h2>פודיום מובילים</h2>
-                <p>שלושת המקומות הראשונים נכון לקובץ הפעיל.</p>
+                <h2>×¤×•×“×™×•× ×ž×•×‘×™×œ×™×</h2>
+                <p>×©×œ×•×©×ª ×”×ž×§×•×ž×•×ª ×”×¨××©×•× ×™× × ×›×•×Ÿ ×œ×§×•×‘×¥ ×”×¤×¢×™×œ.</p>
                 <div class="podium-grid">{podium_html}</div>
               </section>
 
               <section id="tiers" class="section">
-                <h2>מדרגות פרס</h2>
-                <p>תמונת מצב חגיגית ונקייה של מדרגות הפרסים, עם ספירת זכאים וקרובים להשגה.</p>
+                <h2>×ž×“×¨×’×•×ª ×¤×¨×¡</h2>
+                <p>×ª×ž×•× ×ª ×ž×¦×‘ ×—×’×™×’×™×ª ×•× ×§×™×™×” ×©×œ ×ž×“×¨×’×•×ª ×”×¤×¨×¡×™×, ×¢× ×¡×¤×™×¨×ª ×–×›××™× ×•×§×¨×•×‘×™× ×œ×”×©×’×”.</p>
                 <div class="tier-grid">{tier_html}</div>
               </section>
 
               <section id="rules" class="section">
-                <h2>תקנון השתתפות</h2>
+                <h2>×ª×§× ×•×Ÿ ×”×©×ª×ª×¤×•×ª</h2>
                 <div class="legal">
                   <article>
-                    <h3>עקרונות בסיס</h3>
+                    <h3>×¢×§×¨×•× ×•×ª ×‘×¡×™×¡</h3>
                     <ul>
-                      <li>ההשתתפות כפופה לרישום כשגריר או שגרירה לפי כללי הקמפיין.</li>
-                      <li>רק עסקאות שנקלטו ושויכו כדין נחשבות לתחרות ולפרסים.</li>
-                      <li>הנהלת הקמפיין רשאית לבצע בקרה, תיקון והחרגת רשומות חריגות.</li>
+                      <li>×”×”×©×ª×ª×¤×•×ª ×›×¤×•×¤×” ×œ×¨×™×©×•× ×›×©×’×¨×™×¨ ××• ×©×’×¨×™×¨×” ×œ×¤×™ ×›×œ×œ×™ ×”×§×ž×¤×™×™×Ÿ.</li>
+                      <li>×¨×§ ×¢×¡×§××•×ª ×©× ×§×œ×˜×• ×•×©×•×™×›×• ×›×“×™×Ÿ × ×—×©×‘×•×ª ×œ×ª×—×¨×•×ª ×•×œ×¤×¨×¡×™×.</li>
+                      <li>×”× ×”×œ×ª ×”×§×ž×¤×™×™×Ÿ ×¨×©××™×ª ×œ×‘×¦×¢ ×‘×§×¨×”, ×ª×™×§×•×Ÿ ×•×”×—×¨×’×ª ×¨×©×•×ž×•×ª ×—×¨×™×’×•×ª.</li>
                     </ul>
                   </article>
                   <article>
-                    <h3>חישוב זכאות</h3>
+                    <h3>×—×™×©×•×‘ ×–×›××•×ª</h3>
                     <ul>
-                      <li>הזכאות לפרסים נקבעת לפי נתוני המערכת הפעילה והקובץ האחרון שאושר.</li>
-                      <li>מדרגות פרס משודרגות בהתאם לספי הגיוס שהוגדרו.</li>
-                      <li>במקרה של שוויון או חריגה, הנהלת הקמפיין תכריע לפי כללי הבקרה.</li>
+                      <li>×”×–×›××•×ª ×œ×¤×¨×¡×™× × ×§×‘×¢×ª ×œ×¤×™ × ×ª×•× ×™ ×”×ž×¢×¨×›×ª ×”×¤×¢×™×œ×” ×•×”×§×•×‘×¥ ×”××—×¨×•×Ÿ ×©××•×©×¨.</li>
+                      <li>×ž×“×¨×’×•×ª ×¤×¨×¡ ×ž×©×•×“×¨×’×•×ª ×‘×”×ª×× ×œ×¡×¤×™ ×”×’×™×•×¡ ×©×”×•×’×“×¨×•.</li>
+                      <li>×‘×ž×§×¨×” ×©×œ ×©×•×•×™×•×Ÿ ××• ×—×¨×™×’×”, ×”× ×”×œ×ª ×”×§×ž×¤×™×™×Ÿ ×ª×›×¨×™×¢ ×œ×¤×™ ×›×œ×œ×™ ×”×‘×§×¨×”.</li>
                     </ul>
                   </article>
                 </div>
               </section>
 
               <section id="privacy" class="section">
-                <h2>מדיניות פרטיות</h2>
+                <h2>×ž×“×™× ×™×•×ª ×¤×¨×˜×™×•×ª</h2>
                 <div class="legal">
                   <article>
-                    <h3>מידע ותכלית שימוש</h3>
+                    <h3>×ž×™×“×¢ ×•×ª×›×œ×™×ª ×©×™×ž×•×©</h3>
                     <ul>
-                      <li>התצוגה הציבורית אינה כוללת נתוני תורמים ברמת רשומה.</li>
-                      <li>המערכת הניהולית מיועדת למנהלים מורשים בלבד.</li>
-                      <li>המידע משמש לצורכי ניהול קמפיין, פרסים, בקרה ותובנות.</li>
+                      <li>×”×ª×¦×•×’×” ×”×¦×™×‘×•×¨×™×ª ××™× ×” ×›×•×œ×œ×ª × ×ª×•× ×™ ×ª×•×¨×ž×™× ×‘×¨×ž×ª ×¨×©×•×ž×”.</li>
+                      <li>×”×ž×¢×¨×›×ª ×”× ×™×”×•×œ×™×ª ×ž×™×•×¢×“×ª ×œ×ž× ×”×œ×™× ×ž×•×¨×©×™× ×‘×œ×‘×“.</li>
+                      <li>×”×ž×™×“×¢ ×ž×©×ž×© ×œ×¦×•×¨×›×™ × ×™×”×•×œ ×§×ž×¤×™×™×Ÿ, ×¤×¨×¡×™×, ×‘×§×¨×” ×•×ª×•×‘× ×•×ª.</li>
                     </ul>
                   </article>
                   <article>
-                    <h3>שמירה ואבטחה</h3>
+                    <h3>×©×ž×™×¨×” ×•××‘×˜×—×”</h3>
                     <ul>
-                      <li>לפני עליה חיצונית יש להשלים אישור משפטי ואבטחת מידע.</li>
-                      <li>יש להגדיר מדיניות שמירה, מחיקה, גיבוי והרשאות לפי תפקיד.</li>
-                      <li>חיבור לשרת חי ולמקור נתונים קבוע יבוצע בשלב הבא של המוצר.</li>
+                      <li>×œ×¤× ×™ ×¢×œ×™×” ×—×™×¦×•× ×™×ª ×™×© ×œ×”×©×œ×™× ××™×©×•×¨ ×ž×©×¤×˜×™ ×•××‘×˜×—×ª ×ž×™×“×¢.</li>
+                      <li>×™×© ×œ×”×’×“×™×¨ ×ž×“×™× ×™×•×ª ×©×ž×™×¨×”, ×ž×—×™×§×”, ×’×™×‘×•×™ ×•×”×¨×©××•×ª ×œ×¤×™ ×ª×¤×§×™×“.</li>
+                      <li>×—×™×‘×•×¨ ×œ×©×¨×ª ×—×™ ×•×œ×ž×§×•×¨ × ×ª×•× ×™× ×§×‘×•×¢ ×™×‘×•×¦×¢ ×‘×©×œ×‘ ×”×‘× ×©×œ ×”×ž×•×¦×¨.</li>
                     </ul>
                   </article>
                 </div>
@@ -11040,15 +11238,18 @@ def render_shell_output() -> bool:
 
 
 def main() -> None:
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    VIS_DIR.mkdir(parents=True, exist_ok=True)
+    project_hero_url = emit_output_asset(PROJECT_HERO_IMAGE_PATH, PROJECT_HERO_IMAGE_PATH.name)
+    backdrop_url = emit_output_asset(BACKDROP_PATH, BACKDROP_PATH.name)
     rows = load_rows()
     meta = build_meta(rows)
     source_label = get_source_label()
     public_rows = build_public_rows(rows)
     org_logo_data_uri = load_logo_data_uri(ORG_LOGO_PATH if ORG_LOGO_PATH.exists() else LEGACY_LOGO_PATH)
     campaign_logo_data_uri = load_logo_data_uri(CAMPAIGN_LOGO_PATH)
-    backdrop_data_uri = load_logo_data_uri(BACKDROP_PATH)
     prize_model = load_prize_model()
-    campaign_page_settings = build_default_campaign_page_settings()
+    campaign_page_settings = build_default_campaign_page_settings(project_hero_url)
     write_admin_dataset(rows, meta, source_label)
     fragment = build_fragment(
         public_rows,
@@ -11056,12 +11257,10 @@ def main() -> None:
         source_label,
         org_logo_data_uri,
         campaign_logo_data_uri,
-        backdrop_data_uri,
+        backdrop_url,
         prize_model,
         campaign_page_settings,
     )
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-    VIS_DIR.mkdir(parents=True, exist_ok=True)
     FRAGMENT_PATH.write_text(fragment, encoding="utf-8")
 
     browser_document = build_browser_document(fragment)

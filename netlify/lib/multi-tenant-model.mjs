@@ -165,6 +165,20 @@ function normalizePositiveInteger(value, fallback) {
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : fallback;
 }
 
+function normalizeBoolean(value, fallback = false) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+}
+
 function normalizeMultilineText(value) {
   return String(value || "").replace(/\r\n/g, "\n").trim();
 }
@@ -201,6 +215,24 @@ export function defaultSourceConfig() {
       bodyText: "",
       fieldMapText: JSON.stringify(getDefaultSourceFieldMap(), null, 2),
     },
+    googleSheets: {
+      spreadsheetUrl: "",
+      spreadsheetId: "",
+      gid: "",
+      sheetName: "",
+      range: "",
+      accessMode: "public_csv",
+      syncEnabled: true,
+      syncIntervalMinutes: 5,
+      fieldMapText: JSON.stringify(getDefaultSourceFieldMap(), null, 2),
+      lastSyncedAt: "",
+      lastSuccessfulSyncAt: "",
+      lastChecksum: "",
+      lastRowCount: 0,
+      lastStatus: "idle",
+      lastMessage: "",
+      lastSourceLabel: "",
+    },
   };
 }
 
@@ -209,11 +241,20 @@ export function normalizeSourceConfig(rawConfig, existingConfig = null) {
   const candidate = rawConfig && typeof rawConfig === "object" ? rawConfig : {};
   const existingApi = existingConfig?.api && typeof existingConfig.api === "object" ? existingConfig.api : defaults.api;
   const apiCandidate = candidate.api && typeof candidate.api === "object" ? candidate.api : {};
+  const existingGoogleSheets =
+    existingConfig?.googleSheets && typeof existingConfig.googleSheets === "object"
+      ? existingConfig.googleSheets
+      : defaults.googleSheets;
+  const googleSheetsCandidate =
+    candidate.googleSheets && typeof candidate.googleSheets === "object" ? candidate.googleSheets : {};
   const incomingToken = String(apiCandidate.bearerToken || "").trim();
   const clearBearerToken = Boolean(apiCandidate.clearBearerToken);
   const preservedToken = clearBearerToken ? "" : incomingToken || String(existingApi.bearerToken || "").trim();
+  const mode = ["api", "google_sheets"].includes(String(candidate.mode || "").trim().toLowerCase())
+    ? String(candidate.mode || "").trim().toLowerCase()
+    : "file";
   return {
-    mode: candidate.mode === "api" ? "api" : "file",
+    mode,
     api: {
       endpoint: String(apiCandidate.endpoint || "").trim(),
       method: String(apiCandidate.method || defaults.api.method).trim().toUpperCase() === "POST" ? "POST" : "GET",
@@ -226,6 +267,42 @@ export function normalizeSourceConfig(rawConfig, existingConfig = null) {
       headersText: normalizeMultilineText(apiCandidate.headersText),
       bodyText: normalizeMultilineText(apiCandidate.bodyText),
       fieldMapText: normalizeFieldMapText(apiCandidate.fieldMapText),
+    },
+    googleSheets: {
+      spreadsheetUrl: String(googleSheetsCandidate.spreadsheetUrl || "").trim(),
+      spreadsheetId: String(googleSheetsCandidate.spreadsheetId || "").trim(),
+      gid: String(googleSheetsCandidate.gid || "").trim(),
+      sheetName: String(googleSheetsCandidate.sheetName || "").trim(),
+      range: String(googleSheetsCandidate.range || "").trim(),
+      accessMode:
+        String(googleSheetsCandidate.accessMode || existingGoogleSheets.accessMode || defaults.googleSheets.accessMode)
+          .trim()
+          .toLowerCase() === "service_account"
+          ? "service_account"
+          : "public_csv",
+      syncEnabled: normalizeBoolean(
+        googleSheetsCandidate.syncEnabled,
+        normalizeBoolean(existingGoogleSheets.syncEnabled, defaults.googleSheets.syncEnabled),
+      ),
+      syncIntervalMinutes: normalizePositiveInteger(
+        googleSheetsCandidate.syncIntervalMinutes,
+        normalizePositiveInteger(existingGoogleSheets.syncIntervalMinutes, defaults.googleSheets.syncIntervalMinutes),
+      ),
+      fieldMapText: normalizeFieldMapText(
+        googleSheetsCandidate.fieldMapText || existingGoogleSheets.fieldMapText || defaults.googleSheets.fieldMapText,
+      ),
+      lastSyncedAt: String(googleSheetsCandidate.lastSyncedAt || existingGoogleSheets.lastSyncedAt || "").trim(),
+      lastSuccessfulSyncAt: String(
+        googleSheetsCandidate.lastSuccessfulSyncAt || existingGoogleSheets.lastSuccessfulSyncAt || "",
+      ).trim(),
+      lastChecksum: String(googleSheetsCandidate.lastChecksum || existingGoogleSheets.lastChecksum || "").trim(),
+      lastRowCount: normalizePositiveInteger(
+        googleSheetsCandidate.lastRowCount,
+        normalizePositiveInteger(existingGoogleSheets.lastRowCount, defaults.googleSheets.lastRowCount),
+      ),
+      lastStatus: String(googleSheetsCandidate.lastStatus || existingGoogleSheets.lastStatus || "idle").trim().toLowerCase() || "idle",
+      lastMessage: String(googleSheetsCandidate.lastMessage || existingGoogleSheets.lastMessage || "").trim(),
+      lastSourceLabel: String(googleSheetsCandidate.lastSourceLabel || existingGoogleSheets.lastSourceLabel || "").trim(),
     },
   };
 }

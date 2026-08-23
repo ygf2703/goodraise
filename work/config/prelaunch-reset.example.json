@@ -1,0 +1,8 @@
+{
+  "enabled": true,
+  "scheduledAt": "2026-08-23T08:00:00+03:00",
+  "ownerEmail": "noamfrostig@gmail.com",
+  "target": "",
+  "targetStartDate": "2026-08-23",
+  "onlyLiveCampaigns": true
+}

@@ -110,6 +110,10 @@ function auditKey() {
   return `audit:${Date.now()}:${Math.random().toString(16).slice(2, 10)}`;
 }
 
+function runtimeFlagKey(namespace, identifier) {
+  return `runtime-flag:${namespace}:${identifier}`;
+}
+
 function getStore() {
   return createPlatformStore({
     storeName: STORE_NAME,
@@ -694,6 +698,23 @@ export async function appendAuditEvent(event) {
   const store = getStore();
   const record = createAuditRecord(event);
   await store.setJSON(auditKey(), record);
+  return record;
+}
+
+export async function getRuntimeFlag(namespace, identifier) {
+  const store = getStore();
+  return (await store.getJSON(runtimeFlagKey(namespace, identifier))) || null;
+}
+
+export async function saveRuntimeFlag(namespace, identifier, payload = {}) {
+  const store = getStore();
+  const record = {
+    namespace: String(namespace || "").trim(),
+    identifier: String(identifier || "").trim(),
+    ...cloneJson(payload || {}),
+    updatedAt: isoNow(),
+  };
+  await store.setJSON(runtimeFlagKey(namespace, identifier), record);
   return record;
 }
 

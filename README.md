@@ -37,7 +37,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Manager-side campaign designer for local styling control over colors, typography, hero media, CTAs, and preset donation cards
 - Guided multi-step `Campaign Builder` with campaign basics, branding, donation setup, ambassadors, teams, goals, permissions, review, draft autosave, multi-campaign registry, active-campaign switching, and duplicate-campaign flow
 - `Campaign Builder` can persist its setup layer in PostgreSQL when `GOODRAISE_DATABASE_URL` is configured, with JSON fallback for local/dev environments without a database
-- Ambassador directory upload (`full_name`, `email`, `phone`, `nickname`) with personal GoodRaise-style links in the format `https://goodraise.netlify.app/{projectSlug}/{nickname}`
+- Ambassador directory upload (`full_name`, `email`, `phone`, `nickname`) with personal GoodRaise-style links in the format `https://goodraise.netlify.app/{projectSlug}/{nickname}`. `nickname` is optional when an email exists; GoodRaise derives it from the portion before `@` and prevents duplicate personal-link slugs.
 - Public prize page with podium, prize tiers, and live competition summary
 - Public campaign snapshot hero with immediate KPI-style status cards
 - Daily winners / "Olim LaDeshe" section across the configured campaign schedule
@@ -45,8 +45,10 @@ The app receives campaign export files and turns them into an active dashboard t
 - SaaS-style manager login screen with first-password setup and real session-based auth
 - Safe-import behavior: invalid uploads do not replace the active dataset
 - File upload for base campaign CSV
-- Source-mode switch between manual file upload and a backend-managed external API connection
+- Source-mode switch between manual file upload, a backend-managed external API connection, and Google Sheets synchronization
 - Secure admin-side API connector with saved endpoint, method, response format, optional bearer token, custom headers, and JSON field mapping
+- Campaign-scoped Google Sheets connector with public CSV mode or service-account mode, checksum-based change detection, and scheduled 5-minute sync into PostgreSQL
+- One-time prelaunch reset scheduler that can clear campaign donation data before go-live while preserving campaign setup
 - Manual pull plus optional timed auto-refresh from the fundraising platform API while managers monitor the campaign
 - File upload for comparison CSV
 - File upload for prize model from Excel or CSV
@@ -103,7 +105,9 @@ The app receives campaign export files and turns them into an active dashboard t
 - `netlify/lib/campaign-store.mjs`
   Shared campaign-builder persistence and organization-scoped campaign creation/update logic for Netlify Functions.
 - `netlify/lib/source-store.mjs`
-  Shared source-API config persistence and protected refresh logic for Netlify Functions.
+  Shared source-config persistence plus API / Google Sheets fetch adapters for Netlify Functions.
+- `netlify/lib/source-sync.mjs`
+  Campaign-scoped source synchronization orchestration, including manual refresh and scheduled Google Sheets sync.
 - `netlify/lib/campaign-repositories.mjs`
   Record-oriented hosted persistence boundary for organizations, campaigns, configs, sources, datasets, and migration.
 - `netlify/lib/source-security.mjs`
@@ -118,6 +122,12 @@ The app receives campaign export files and turns them into an active dashboard t
   PowerShell helper that runs the backend with the bundled local Python runtime.
 - `scripts/verify_netlify_auth.mjs`
   Local verification for the Netlify auth flow.
+- `scripts/run_google_sheets_sync_once.mjs`
+  Runs one full scheduled-source pass locally against campaigns configured with `google_sheets`.
+- `scripts/run_google_sheets_sync_loop.mjs`
+  Local loop runner for repeated Google Sheets sync checks every configured interval.
+- `scripts/run_prelaunch_reset_once.mjs`
+  Runs the prelaunch reset flow once locally, using the local reset config or environment variables.
 - `scripts/benchmark_intelligence.mjs`
   Synthetic scale benchmark for the GoodRaise intelligence layer across 1k, 10k, and 100k donation scenarios.
 - `scripts/setup_relational_campaign_db.py`
@@ -187,6 +197,8 @@ Important:
 - If PostgreSQL is available in Netlify, the same campaign setup records use PostgreSQL as the source of truth instead of the local JSON/blob development store.
 - Netlify deploys include CSP, frame protection, content-type hardening, referrer policy, and basic auth rate limiting.
 - External real-time ingestion into PostgreSQL is available through a campaign-scoped `POST /api/organizations/:orgId/campaigns/:campaignId/ingest` endpoint protected by an API key.
+- Google Sheets private access can be supplied through `GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON` or `GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON_PATH`. Public published sheets can work without credentials through CSV export mode.
+- Prelaunch reset scheduling can be configured through `work/config/prelaunch-reset.local.json` locally or the matching `GOODRAISE_PRELAUNCH_RESET_*` environment variables in deployment.
 - Recommended local override file: `work/config/dashboard-access.local.json` (ignored from git).
 - Recommended local ingest key file: `work/config/goodraise-ingest.local.json` (ignored from git). If no ingest key is configured in env, the local backend creates this file automatically on startup and loads the key from it.
 - Real manager emails are intentionally excluded from tracked source. Supply them through `work/config/dashboard-access.local.json` locally or `YELLOW_DASHBOARD_MANAGER_EMAILS` in deployment.
@@ -240,8 +252,16 @@ Notes:
 - The preview on `8766` can authenticate against the local backend on `8767` through the configured local cross-origin auth flow.
 - If you place the local backend behind HTTPS, set `YELLOW_DASHBOARD_SECURE_COOKIES=1` to force `Secure` cookies.
 - The admin Control Center now supports switching the active source from file mode to API mode, saving the connector, and pulling data directly from the fundraising platform.
+- The same Control Center now supports a `Google Sheets` source mode, with sheet link / spreadsheet ID / gid / sheet / range settings saved per campaign.
 - The admin runtime now returns role metadata and session-expiry metadata through `/api/auth/status`.
 - The local backend supports manager password change and emits audit events for protected actions.
+- For local source-sync tests, you can run:
+
+```powershell
+& "$env:USERPROFILE\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe" scripts/run_google_sheets_sync_once.mjs
+& "$env:USERPROFILE\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe" scripts/run_google_sheets_sync_loop.mjs
+& "$env:USERPROFILE\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin\\node.exe" scripts/run_prelaunch_reset_once.mjs
+```
 
 ## Netlify Deployment
 
@@ -259,6 +279,8 @@ This repository now includes the minimum files Netlify needs in order to actuall
   - `/api/auth/login`
   - `/api/auth/setup`
   - `/api/auth/logout`
+- `netlify/functions/google-sheets-sync.mjs` runs every 5 minutes and syncs all campaigns whose source mode is `google_sheets` and `syncEnabled=true`
+- `netlify/functions/prelaunch-reset.mjs` runs every 5 minutes and executes a one-time reset when the configured launch-reset window arrives
 - the build writes the protected admin dataset to `netlify/data/admin-dataset.json` for authenticated manager fetches
 - manager passwords and sessions are persisted with Netlify Blobs
 - login attempts are rate-limited and written to a lightweight audit trail in the auth store
@@ -274,6 +296,50 @@ Before the first real deploy, verify in Netlify:
 5. Keep the default security headers from `netlify.toml`, and deploy only on HTTPS domains.
 
 Useful local verification commands:
+
+## Google Sheets Sync
+
+Google Sheets sync is now modeled as a campaign-scoped source provider.
+
+Recommended flow for the next project:
+
+1. Set the campaign source mode to `Google Sheets`.
+2. Save either:
+   - a published/public Google Sheets link
+   - or a spreadsheet ID plus `service_account` mode for a private sheet
+3. Keep the Google sheet columns aligned with the known CSV field names already used by GoodRaise.
+4. Let the scheduled sync pull every 5 minutes into PostgreSQL.
+5. The dashboard then reflects the data from the stored campaign dataset snapshot, which is rebuilt from the database-backed sync process.
+
+Important behavior:
+
+- the sync is campaign-scoped, not global
+- unchanged sheet content is skipped by checksum
+- duplicate donations are still blocked by the existing campaign-scoped dedupe logic in PostgreSQL
+- for the upcoming project, this flow replaces the current external live-ingest pull as the primary refresh source
+
+## Prelaunch Reset
+
+GoodRaise can now clear campaign donation data automatically before a campaign goes live, without deleting the campaign setup itself.
+
+Configuration options:
+
+- local file: `work/config/prelaunch-reset.local.json`
+- or deployment env vars:
+  - `GOODRAISE_PRELAUNCH_RESET_ENABLED`
+  - `GOODRAISE_PRELAUNCH_RESET_AT`
+  - `GOODRAISE_PRELAUNCH_RESET_OWNER_EMAIL`
+  - `GOODRAISE_PRELAUNCH_RESET_TARGET`
+  - `GOODRAISE_PRELAUNCH_RESET_START_DATE`
+  - `GOODRAISE_PRELAUNCH_RESET_ONLY_LIVE`
+
+Behavior:
+
+- clears relational donation data, import batches, raw imported rows, and the protected dataset snapshot
+- preserves campaign branding, permissions, goals, ambassadors configured in Campaign Builder, and other setup metadata
+- clears the stored Google Sheets sync checksum/status so the first live sync starts clean
+- runs once only and stores a runtime marker so it does not wipe the campaign again on later scheduler ticks
+- if no explicit target is defined and the scheduler finds more than one matching campaign, it skips rather than resetting the wrong campaign
 
 ## Relational PostgreSQL Import
 

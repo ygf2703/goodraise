@@ -23,9 +23,9 @@ import {
 } from "../lib/campaign-repositories.mjs";
 import {
   getAdminSourceConfig,
-  refreshAdminSource,
   saveAdminSourceConfig,
 } from "../lib/source-store.mjs";
+import { refreshAdminSource } from "../lib/source-sync.mjs";
 import {
   IngestHttpError,
   ingestCampaignRecord,

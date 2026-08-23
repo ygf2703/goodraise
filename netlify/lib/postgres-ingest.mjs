@@ -431,6 +431,141 @@ function buildDatasetRow(record) {
   };
 }
 
+function buildDatasetRowFromDatabaseRow(row) {
+  const occurredAt =
+    row.occurred_at instanceof Date && !Number.isNaN(row.occurred_at.getTime())
+      ? row.occurred_at
+      : parseTimestamp(row.occurred_at_raw || "");
+  const createdIso =
+    occurredAt instanceof Date && !Number.isNaN(occurredAt.getTime()) ? occurredAt.toISOString().slice(0, 16) : "";
+  return {
+    id:
+      normalizeText(row.source_id) ||
+      sha256(
+        `dataset-row:${normalizeText(row.occurred_at_raw)}|${normalizeEmail(row.donor_email)}|${normalizeText(
+          row.total_amount,
+        )}`,
+      ),
+    createdIso,
+    date: createdIso.slice(0, 10),
+    hour: occurredAt instanceof Date && !Number.isNaN(occurredAt.getTime()) ? occurredAt.getUTCHours() : 0,
+    email: normalizeEmail(row.donor_email),
+    donor: normalizeText(row.donor_name) || "ללא שם",
+    ambassador: normalizeText(row.ambassador_name) || "ללא שיוך",
+    amount: Number(row.total_amount || 0) || 0,
+    city: normalizeText(row.city) || "ללא עיר",
+    status: row.charged_success === true ? "success" : "failed",
+    chargeResult: normalizeText(row.charge_result_code),
+  };
+}
+
+export function hasConfiguredRelationalIngest() {
+  return Boolean(String(process.env.GOODRAISE_DATABASE_URL || process.env.DATABASE_URL || "").trim());
+}
+
+export async function clearCampaignOperationalData({
+  organizationIdentifier,
+  campaignIdentifier,
+  resetSourceLabel = "prelaunch-reset",
+  clearedBy = "scheduled-prelaunch-reset",
+}) {
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
+  let scope = null;
+  try {
+    await client.query("BEGIN");
+    await ensureSchema(client);
+    scope = await resolveScope(client, organizationIdentifier, campaignIdentifier);
+    if (!scope) {
+      throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
+    }
+
+    const countsBeforeResult = await client.query(
+      `
+        SELECT
+          (SELECT COUNT(*)::int FROM goodraise.transactions WHERE campaign_id = $1::uuid) AS transactions_count,
+          (SELECT COUNT(*)::int FROM goodraise.import_batches WHERE campaign_id = $1::uuid) AS import_batches_count,
+          (SELECT COUNT(*)::int FROM goodraise.transactions_csv_raw WHERE campaign_id = $1::uuid) AS raw_rows_count,
+          (SELECT COUNT(*)::int FROM goodraise.ambassadors WHERE campaign_id = $1::uuid) AS ambassadors_count,
+          (SELECT COUNT(*)::int FROM goodraise.rewards WHERE campaign_id = $1::uuid) AS rewards_count
+      `,
+      [scope.campaign_id],
+    );
+    const countsBefore = countsBeforeResult.rows[0] || {};
+
+    await client.query("DELETE FROM goodraise.transactions_csv_raw WHERE campaign_id = $1::uuid", [scope.campaign_id]);
+    await client.query("DELETE FROM goodraise.transactions WHERE campaign_id = $1::uuid", [scope.campaign_id]);
+    await client.query("DELETE FROM goodraise.import_batches WHERE campaign_id = $1::uuid", [scope.campaign_id]);
+    await client.query("DELETE FROM goodraise.ambassadors WHERE campaign_id = $1::uuid", [scope.campaign_id]);
+    await client.query("DELETE FROM goodraise.rewards WHERE campaign_id = $1::uuid", [scope.campaign_id]);
+    await client.query(
+      `
+        DELETE FROM goodraise.donors d
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM goodraise.transactions t
+          WHERE t.donor_id = d.id
+        )
+      `,
+    );
+    await client.query(
+      `
+        UPDATE goodraise.campaigns
+        SET source_filename = NULL,
+            source_checksum_sha256 = NULL,
+            updated_at = NOW()
+        WHERE id = $1::uuid
+      `,
+      [scope.campaign_id],
+    );
+    await client.query("COMMIT");
+
+    const timestamp = new Date().toISOString();
+    await saveCampaignDataset(scope.organization_slug, scope.campaign_slug, {
+      organizationId: scope.organization_slug,
+      campaignId: scope.campaign_slug,
+      rows: [],
+      meta: {
+        uniqueDates: [],
+        projectDates: [],
+        defaultFrom: "",
+        defaultTo: "",
+        minDate: "",
+        maxDate: "",
+        rowCount: 0,
+        projectWindowLabel: "",
+        resetState: true,
+        resetAt: timestamp,
+        resetBy: clearedBy,
+      },
+      sourceLabel: resetSourceLabel,
+      generatedAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    return {
+      organizationId: scope.organization_slug,
+      campaignId: scope.campaign_slug,
+      sourceLabel: resetSourceLabel,
+      clearedAt: timestamp,
+      countsBefore: {
+        transactions: Number(countsBefore.transactions_count || 0),
+        importBatches: Number(countsBefore.import_batches_count || 0),
+        rawRows: Number(countsBefore.raw_rows_count || 0),
+        ambassadors: Number(countsBefore.ambassadors_count || 0),
+        rewards: Number(countsBefore.rewards_count || 0),
+      },
+    };
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function syncCampaignDatasetSnapshot(scope, record, sourceLabel) {
   const organizationKey = scope.organization_slug;
   const campaignKey = scope.campaign_slug;
@@ -457,6 +592,57 @@ async function syncCampaignDatasetSnapshot(scope, record, sourceLabel) {
     rowCount: nextRows.length,
     sourceLabel: String(currentDataset.sourceLabel || sourceLabel || "external-api").trim(),
   };
+}
+
+export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "") {
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
+  try {
+    await ensureSchema(client);
+    const result = await client.query(
+      `
+        SELECT
+          t.source_id,
+          t.occurred_at,
+          t.occurred_at_raw,
+          t.total_amount,
+          t.charged_success,
+          t.charge_result_code,
+          COALESCE(d.email_normalized, d.email, '') AS donor_email,
+          COALESCE(d.full_name, '') AS donor_name,
+          COALESCE(d.city, '') AS city,
+          COALESCE(a.full_name, '') AS ambassador_name
+        FROM goodraise.transactions t
+        LEFT JOIN goodraise.donors d ON d.id = t.donor_id
+        LEFT JOIN goodraise.ambassadors a ON a.id = t.ambassador_id
+        WHERE t.campaign_id = $1::uuid
+        ORDER BY t.occurred_at DESC NULLS LAST, t.created_at DESC
+      `,
+      [scope.campaign_id],
+    );
+    const rows = result.rows.map(buildDatasetRowFromDatabaseRow);
+    const currentDataset = (await getCampaignDataset(scope.organization_slug, scope.campaign_slug)) || {};
+    const nextTimestamp = new Date().toISOString();
+    const nextSourceLabel =
+      String(sourceLabel || "").trim() ||
+      String(currentDataset.sourceLabel || "").trim() ||
+      "google-sheets";
+    await saveCampaignDataset(scope.organization_slug, scope.campaign_slug, {
+      organizationId: scope.organization_slug,
+      campaignId: scope.campaign_slug,
+      rows,
+      meta: buildDatasetMeta(rows),
+      sourceLabel: nextSourceLabel,
+      generatedAt: currentDataset.generatedAt || nextTimestamp,
+      updatedAt: nextTimestamp,
+    });
+    return {
+      rowCount: rows.length,
+      sourceLabel: nextSourceLabel,
+    };
+  } finally {
+    client.release();
+  }
 }
 
 function getConfiguredApiKeys() {
@@ -1023,6 +1209,273 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
   } finally {
     client.release();
   }
+}
+
+export async function ingestCampaignRecords({
+  organizationIdentifier,
+  campaignIdentifier,
+  sourceLabel = "google-sheets",
+  importedBy = "google-sheets-sync",
+  requestReference = "",
+  records = [],
+}) {
+  const normalizedRecords = Array.isArray(records)
+    ? records
+        .map((record) => normalizeExternalRecord(record || {}))
+        .filter((record) => {
+          validateExternalRecordEncoding(record);
+          return !isBlankRecord(record);
+        })
+    : [];
+
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
+  let scope = null;
+  const importBatchId = randomUUID();
+  try {
+    await client.query("BEGIN");
+    await ensureSchema(client);
+
+    scope = await resolveScope(client, organizationIdentifier, campaignIdentifier);
+    if (!scope) {
+      throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
+    }
+
+    const importChecksum = sha256(
+      stableStringify({
+        sourceLabel,
+        importedBy,
+        requestReference,
+        importBatchId,
+        records: normalizedRecords,
+      }),
+    );
+
+    await client.query(
+      `
+        INSERT INTO goodraise.import_batches (
+          id,
+          organization_id,
+          campaign_id,
+          source_filename,
+          source_checksum_sha256,
+          raw_fieldnames,
+          raw_row_count,
+          imported_row_count,
+          skipped_blank_rows,
+          imported_by,
+          notes
+        )
+        VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::jsonb, $7, $8, $9, $10, $11)
+      `,
+      [
+        importBatchId,
+        scope.organization_id,
+        scope.campaign_id,
+        `${normalizeText(sourceLabel) || "google-sheets"}.csv`,
+        importChecksum,
+        JSON.stringify(CSV_FIELD_NAMES),
+        normalizedRecords.length,
+        normalizedRecords.length,
+        0,
+        normalizeText(importedBy) || "google-sheets-sync",
+        requestReference ? `request_reference=${requestReference}` : "",
+      ],
+    );
+
+    for (const [index, record] of normalizedRecords.entries()) {
+      const occurredAt = parseTimestamp(record.created_at);
+      const donor = await upsertDonor(client, record);
+      const ambassador = await upsertAmbassador(client, scope.organization_id, scope.campaign_id, record);
+      const reward = await upsertReward(client, scope.organization_id, scope.campaign_id, record);
+      const currencyCode = await ensureCurrency(client, record.currencyname || scope.currency_code || "ILS");
+
+      await client.query(
+        `
+          INSERT INTO goodraise.transactions (
+            id,
+            organization_id,
+            campaign_id,
+            import_batch_id,
+            source_row_number,
+            source_id,
+            source_transaction_key,
+            canonical_event_key,
+            donor_id,
+            ambassador_id,
+            reward_id,
+            occurred_at,
+            occurred_at_raw,
+            total_amount,
+            currency_code,
+            charged_success,
+            charge_result_code,
+            direct_debit,
+            direct_debit_active,
+            raw_payload
+          )
+          VALUES (
+            $1, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9::uuid, $10::uuid, $11::uuid, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb
+          )
+          ON CONFLICT (campaign_id, canonical_event_key) DO UPDATE
+          SET donor_id = EXCLUDED.donor_id,
+              ambassador_id = EXCLUDED.ambassador_id,
+              reward_id = EXCLUDED.reward_id,
+              occurred_at = EXCLUDED.occurred_at,
+              occurred_at_raw = EXCLUDED.occurred_at_raw,
+              total_amount = EXCLUDED.total_amount,
+              currency_code = EXCLUDED.currency_code,
+              charged_success = EXCLUDED.charged_success,
+              charge_result_code = EXCLUDED.charge_result_code,
+              direct_debit = EXCLUDED.direct_debit,
+              direct_debit_active = EXCLUDED.direct_debit_active,
+              raw_payload = EXCLUDED.raw_payload,
+              import_batch_id = EXCLUDED.import_batch_id
+        `,
+        [
+          randomUUID(),
+          scope.organization_id,
+          scope.campaign_id,
+          importBatchId,
+          index + 1,
+          normalizeText(record.id) || null,
+          buildSourceTransactionKey(record),
+          buildCanonicalEventKey(record),
+          donor.id,
+          ambassador.id,
+          reward.id,
+          occurredAt,
+          record.created_at,
+          parseDecimal(record.total),
+          currencyCode,
+          parseBoolean(record.charged_success),
+          normalizeText(record.charge_result) || null,
+          parseBoolean(record.direct_debit),
+          parseBoolean(record["direct debit active"]),
+          JSON.stringify(record),
+        ],
+      );
+
+      await client.query(
+        `
+          INSERT INTO goodraise.transactions_csv_raw (
+            import_batch_id,
+            organization_id,
+            campaign_id,
+            transaction_id,
+            source_row_number,
+            "id",
+            "created_at",
+            "full_name",
+            "reward",
+            "price",
+            "quantity",
+            "total",
+            "currencyname",
+            "phone",
+            "email",
+            "Ambassador name",
+            "Ambassador email",
+            "shipping_name",
+            "delivery_comment",
+            "google_address_line",
+            "city",
+            "zip",
+            "charged_success",
+            "charge_result",
+            "direct_debit",
+            "direct debit active"
+          )
+          VALUES (
+            $1::uuid, $2::uuid, $3::uuid, NULL, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
+          )
+          ON CONFLICT (import_batch_id, source_row_number) DO UPDATE
+          SET "id" = EXCLUDED."id",
+              "created_at" = EXCLUDED."created_at",
+              "full_name" = EXCLUDED."full_name",
+              "reward" = EXCLUDED."reward",
+              "price" = EXCLUDED."price",
+              "quantity" = EXCLUDED."quantity",
+              "total" = EXCLUDED."total",
+              "currencyname" = EXCLUDED."currencyname",
+              "phone" = EXCLUDED."phone",
+              "email" = EXCLUDED."email",
+              "Ambassador name" = EXCLUDED."Ambassador name",
+              "Ambassador email" = EXCLUDED."Ambassador email",
+              "shipping_name" = EXCLUDED."shipping_name",
+              "delivery_comment" = EXCLUDED."delivery_comment",
+              "google_address_line" = EXCLUDED."google_address_line",
+              "city" = EXCLUDED."city",
+              "zip" = EXCLUDED."zip",
+              "charged_success" = EXCLUDED."charged_success",
+              "charge_result" = EXCLUDED."charge_result",
+              "direct_debit" = EXCLUDED."direct_debit",
+              "direct debit active" = EXCLUDED."direct debit active"
+        `,
+        [
+          importBatchId,
+          scope.organization_id,
+          scope.campaign_id,
+          index + 1,
+          record.id,
+          record.created_at,
+          record.full_name,
+          record.reward,
+          record.price,
+          record.quantity,
+          record.total,
+          record.currencyname,
+          record.phone,
+          record.email,
+          record["Ambassador name"],
+          record["Ambassador email"],
+          record.shipping_name,
+          record.delivery_comment,
+          record.google_address_line,
+          record.city,
+          record.zip,
+          record.charged_success,
+          record.charge_result,
+          record.direct_debit,
+          record["direct debit active"],
+        ],
+      );
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error instanceof IngestHttpError) {
+      throw error;
+    }
+    throw new IngestHttpError(500, "Failed to ingest the Google Sheets campaign records.");
+  } finally {
+    client.release();
+  }
+
+  const dataset = scope ? await rebuildCampaignDatasetSnapshot(scope, sourceLabel) : { rowCount: 0, sourceLabel };
+  return {
+    ok: true,
+    organization: {
+      id: scope.organization_id,
+      slug: scope.organization_slug,
+      name: scope.organization_name,
+    },
+    campaign: {
+      id: scope.campaign_id,
+      slug: scope.campaign_slug,
+      name: scope.campaign_name,
+      status: scope.campaign_status,
+    },
+    importBatch: {
+      id: importBatchId,
+      sourceLabel,
+      requestReference,
+      rawRowCount: normalizedRecords.length,
+    },
+    dataset,
+    processedCount: normalizedRecords.length,
+  };
 }
 
 export { IngestHttpError };

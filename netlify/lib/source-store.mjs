@@ -1,7 +1,34 @@
+import { createHash, createSign } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { jsonResponse, resolveScopedAccess } from "./auth-store.mjs";
 import { normalizeSourceConfig, redactSourceConfig } from "./multi-tenant-model.mjs";
-import { appendAuditEvent, ensureMultiTenantMigration, getCampaignDataset, saveCampaignDataset, getCampaignSource, saveCampaignSource } from "./campaign-repositories.mjs";
+import { appendAuditEvent, ensureMultiTenantMigration, getCampaignSource, saveCampaignSource } from "./campaign-repositories.mjs";
 import { safeFetchUrl } from "./source-security.mjs";
+
+const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const LOCAL_GOOGLE_SERVICE_ACCOUNT_PATH = resolve(ROOT_DIR, "work", "config", "goodraise-google-service-account.local.json");
+const GOOGLE_TOKEN_AUDIENCE = "https://oauth2.googleapis.com/token";
+const GOOGLE_SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly";
+
+function sha256(value) {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
 
 function normalizeMultilineText(value) {
   return String(value || "").replace(/\r\n/g, "\n").trim();
@@ -72,6 +99,20 @@ function parseCsv(text) {
   });
 }
 
+function parseGoogleValues(values) {
+  if (!Array.isArray(values) || !values.length || !Array.isArray(values[0])) {
+    return [];
+  }
+  const headers = values[0].map((value) => String(value || "").trim());
+  return values.slice(1).map((row) => {
+    const record = {};
+    headers.forEach((header, index) => {
+      record[header] = String(row?.[index] || "").trim();
+    });
+    return record;
+  });
+}
+
 function getValueByPath(record, path) {
   return String(path || "")
     .split(".")
@@ -125,8 +166,15 @@ function buildMeta(rows) {
   };
 }
 
+function resolveFieldMapText(sourceConfig) {
+  if (sourceConfig?.mode === "google_sheets") {
+    return sourceConfig?.googleSheets?.fieldMapText || "{}";
+  }
+  return sourceConfig?.api?.fieldMapText || "{}";
+}
+
 function normalizeDatasetRows(rawRows, sourceConfig) {
-  const fieldMapText = sourceConfig?.api?.fieldMapText || "{}";
+  const fieldMapText = resolveFieldMapText(sourceConfig);
   let fieldMap = {};
   try {
     fieldMap = JSON.parse(fieldMapText);
@@ -169,12 +217,199 @@ function resolveJsonRows(payload, sourceConfig) {
   if (!path) {
     return [];
   }
-  const resolved = path.split(".").filter(Boolean).reduce((current, segment) => (current && typeof current === "object" ? current[segment] : undefined), payload);
+  const resolved = path
+    .split(".")
+    .filter(Boolean)
+    .reduce((current, segment) => (current && typeof current === "object" ? current[segment] : undefined), payload);
   return Array.isArray(resolved) ? resolved : [];
 }
 
-async function fetchConfiguredSource(config) {
-  const normalized = normalizeSourceConfig(config);
+function extractSpreadsheetId(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  const match = text.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/i);
+  if (match?.[1]) {
+    return match[1];
+  }
+  if (/^[a-zA-Z0-9-_]+$/.test(text)) {
+    return text;
+  }
+  return "";
+}
+
+function extractSpreadsheetGid(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "";
+  }
+  try {
+    const parsed = new URL(text);
+    const hashMatch = String(parsed.hash || "").match(/gid=([0-9]+)/i);
+    if (hashMatch?.[1]) {
+      return hashMatch[1];
+    }
+    const searchGid = parsed.searchParams.get("gid");
+    return searchGid ? String(searchGid).trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function buildGoogleSheetsSourceLabel(config) {
+  const sheetName = String(config?.sheetName || "").trim();
+  const spreadsheetId = String(config?.spreadsheetId || "").trim() || extractSpreadsheetId(config?.spreadsheetUrl);
+  if (sheetName) {
+    return `Google Sheets · ${sheetName}`;
+  }
+  if (spreadsheetId) {
+    return `Google Sheets · ${spreadsheetId}`;
+  }
+  return "Google Sheets";
+}
+
+function buildGoogleSheetsCsvExportUrl(config) {
+  const spreadsheetUrl = String(config?.spreadsheetUrl || "").trim();
+  const spreadsheetId = String(config?.spreadsheetId || "").trim() || extractSpreadsheetId(spreadsheetUrl);
+  if (!spreadsheetId) {
+    throw new Error("יש להגדיר קודם קישור או Spreadsheet ID של Google Sheets.");
+  }
+  const gid = String(config?.gid || "").trim() || extractSpreadsheetGid(spreadsheetUrl);
+  const exportUrl = new URL(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/export`);
+  exportUrl.searchParams.set("format", "csv");
+  if (gid) {
+    exportUrl.searchParams.set("gid", gid);
+  }
+  return {
+    spreadsheetId,
+    gid,
+    url: exportUrl.toString(),
+  };
+}
+
+function encodeBase64Url(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+async function loadGoogleServiceAccountCredentials() {
+  const rawEnv = String(process.env.GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON || "").trim();
+  const pathEnv = String(process.env.GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON_PATH || "").trim();
+  const rawText =
+    rawEnv ||
+    (pathEnv ? await readFile(pathEnv, "utf8") : "") ||
+    (await readFile(LOCAL_GOOGLE_SERVICE_ACCOUNT_PATH, "utf8").catch(() => ""));
+  if (!rawText) {
+    throw new Error("לא הוגדרו פרטי service account עבור Google Sheets.");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error("קובץ ה-service account של Google Sheets אינו JSON תקין.");
+  }
+  if (!parsed?.client_email || !parsed?.private_key) {
+    throw new Error("חסרים client_email או private_key בהגדרת Google Sheets service account.");
+  }
+  return parsed;
+}
+
+async function getGoogleServiceAccountAccessToken() {
+  const credentials = await loadGoogleServiceAccountCredentials();
+  const now = Math.floor(Date.now() / 1000);
+  const jwtHeader = encodeBase64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const jwtPayload = encodeBase64Url(
+    JSON.stringify({
+      iss: credentials.client_email,
+      scope: GOOGLE_SHEETS_SCOPE,
+      aud: GOOGLE_TOKEN_AUDIENCE,
+      exp: now + 3600,
+      iat: now,
+    }),
+  );
+  const signer = createSign("RSA-SHA256");
+  signer.update(`${jwtHeader}.${jwtPayload}`);
+  signer.end();
+  const signature = signer.sign(credentials.private_key, "base64url");
+  const assertion = `${jwtHeader}.${jwtPayload}.${signature}`;
+
+  const response = await fetch(GOOGLE_TOKEN_AUDIENCE, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.access_token) {
+    throw new Error("המערכת לא הצליחה לקבל access token מ-Google עבור קריאת ה-sheet.");
+  }
+  return String(payload.access_token);
+}
+
+async function fetchGoogleSheetsByServiceAccount(config) {
+  const spreadsheetUrl = String(config?.spreadsheetUrl || "").trim();
+  const spreadsheetId = String(config?.spreadsheetId || "").trim() || extractSpreadsheetId(spreadsheetUrl);
+  const range = String(config?.range || "").trim() || (String(config?.sheetName || "").trim() ? `${String(config.sheetName).trim()}!A:ZZ` : "");
+  if (!spreadsheetId) {
+    throw new Error("יש להגדיר Spreadsheet ID או קישור תקין ל-Google Sheets.");
+  }
+  if (!range) {
+    throw new Error("במצב service account יש להגדיר לפחות Sheet Name או Range.");
+  }
+
+  const token = await getGoogleServiceAccountAccessToken();
+  const endpoint = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS`;
+  const { response, text, finalUrl } = await safeFetchUrl(endpoint, {
+    method: "GET",
+    headers: {
+      Accept: "application/json, text/plain, */*",
+      Authorization: `Bearer ${token}`,
+    },
+    timeoutMs: 15000,
+    maxBytes: 5 * 1024 * 1024,
+    maxRedirects: 1,
+  });
+  if (!response.ok) {
+    throw new Error(`Google Sheets API החזיר שגיאה ${response.status}.`);
+  }
+  const payload = JSON.parse(text || "{}");
+  const rawRows = parseGoogleValues(payload?.values || []);
+  return {
+    payload,
+    rawRows,
+    finalUrl,
+    contentHash: sha256(stableStringify(payload?.values || [])),
+  };
+}
+
+async function fetchGoogleSheetsByPublicCsv(config) {
+  const { url, spreadsheetId } = buildGoogleSheetsCsvExportUrl(config);
+  const { response, text, finalUrl } = await safeFetchUrl(url, {
+    method: "GET",
+    headers: {
+      Accept: "text/csv, text/plain, */*",
+    },
+    timeoutMs: 15000,
+    maxBytes: 5 * 1024 * 1024,
+    maxRedirects: 3,
+  });
+  if (!response.ok) {
+    throw new Error(`Google Sheets export החזיר שגיאה ${response.status}.`);
+  }
+  return {
+    payload: text,
+    rawRows: parseCsv(text),
+    finalUrl,
+    spreadsheetId,
+    contentHash: sha256(text || ""),
+  };
+}
+
+async function fetchApiSource(normalized) {
   const endpoint = normalized.api.endpoint;
   if (!endpoint) {
     throw new Error("יש להגדיר קודם כתובת API תקפה לפני משיכת נתונים.");
@@ -212,17 +447,48 @@ async function fetchConfiguredSource(config) {
 
   const payload = normalized.api.responseFormat === "json" ? JSON.parse(text || "{}") : text;
   const rawRows = normalized.api.responseFormat === "json" ? resolveJsonRows(payload, normalized) : parseCsv(payload);
-  const rows = normalizeDatasetRows(rawRows, normalized);
+  return {
+    payload,
+    rawRows,
+    finalUrl,
+    contentHash: sha256(normalized.api.responseFormat === "json" ? stableStringify(payload) : text || ""),
+  };
+}
+
+export async function fetchConfiguredSource(config) {
+  const normalized = normalizeSourceConfig(config);
+  let fetchedSource = null;
+  let format = "csv";
+  let sourceLabel = "";
+
+  if (normalized.mode === "api") {
+    fetchedSource = await fetchApiSource(normalized);
+    format = normalized.api.responseFormat;
+    sourceLabel = `API · ${fetchedSource.finalUrl}`;
+  } else if (normalized.mode === "google_sheets") {
+    fetchedSource =
+      normalized.googleSheets.accessMode === "service_account"
+        ? await fetchGoogleSheetsByServiceAccount(normalized.googleSheets)
+        : await fetchGoogleSheetsByPublicCsv(normalized.googleSheets);
+    format = normalized.googleSheets.accessMode === "service_account" ? "json" : "csv";
+    sourceLabel = buildGoogleSheetsSourceLabel(normalized.googleSheets);
+  } else {
+    throw new Error("מקור הנתונים הפעיל מוגדר כקובץ ידני ולא כמקור חיצוני.");
+  }
+
+  const rows = normalizeDatasetRows(fetchedSource.rawRows, normalized);
   const meta = buildMeta(rows);
 
   return {
     mode: normalized.mode,
-    sourceLabel: `API · ${finalUrl}`,
+    sourceLabel,
     fetchedAt: new Date().toISOString(),
-    format: normalized.api.responseFormat,
-    payload,
+    format,
+    payload: fetchedSource.payload,
+    rawRows: fetchedSource.rawRows,
     rows,
     meta,
+    contentHash: fetchedSource.contentHash,
   };
 }
 
@@ -232,7 +498,7 @@ export async function getAdminSourceConfig(request, scope = {}) {
     action: "source_view",
     organizationId: scope.organizationId,
     campaignId: scope.campaignId,
-    unauthorizedMessage: "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים.",
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי לנהל את חיבור מקור הנתונים.",
   });
   if (access.error) {
     return access.error;
@@ -253,13 +519,13 @@ export async function saveAdminSourceConfig(request, rawConfig, scope = {}) {
     action: "source_update",
     organizationId: scope.organizationId,
     campaignId: scope.campaignId,
-    unauthorizedMessage: "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים.",
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי לנהל את חיבור מקור הנתונים.",
   });
   if (access.error) {
     return access.error;
   }
 
-  const normalized = await saveCampaignSource(access.organization.id, access.campaign.id, rawConfig);
+  const normalized = await saveCampaignSource(access.organization.id, access.campaign.id, rawConfig, access.auth.email);
   await appendAuditEvent({
     user: access.auth.email,
     role: access.auth.role,
@@ -267,78 +533,21 @@ export async function saveAdminSourceConfig(request, rawConfig, scope = {}) {
     campaignId: access.campaign.id,
     action: "source_update",
     outcome: "success",
+    detail: {
+      mode: normalized.mode,
+      googleSheetsEnabled: normalized.mode === "google_sheets",
+    },
   });
   return jsonResponse(200, {
     saved: true,
     organizationId: access.organization.id,
     campaignId: access.campaign.id,
     config: redactSourceConfig(normalized),
-    message: normalized.mode === "api" ? "חיבור ה-API נשמר בשרת." : "מצב מקור הנתונים נשמר על טעינת קובץ.",
+    message:
+      normalized.mode === "google_sheets"
+        ? "חיבור Google Sheets נשמר בשרת."
+        : normalized.mode === "api"
+          ? "חיבור ה-API נשמר בשרת."
+          : "מצב מקור הנתונים נשמר על טעינת קובץ.",
   });
-}
-
-export async function refreshAdminSource(request, scope = {}) {
-  await ensureMultiTenantMigration();
-  const access = await resolveScopedAccess(request, {
-    action: "source_refresh",
-    organizationId: scope.organizationId,
-    campaignId: scope.campaignId,
-    unauthorizedMessage: "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור.",
-  });
-  if (access.error) {
-    return access.error;
-  }
-
-  try {
-    const config = await getCampaignSource(access.organization.id, access.campaign.id);
-    if (config.mode !== "api") {
-      return jsonResponse(409, {
-        message: "מקור הנתונים הפעיל מוגדר כרגע כקובץ, לא כ-API.",
-      });
-    }
-
-    const payload = await fetchConfiguredSource(config);
-    const existingDataset = await getCampaignDataset(access.organization.id, access.campaign.id);
-    await saveCampaignDataset(access.organization.id, access.campaign.id, {
-      organizationId: access.organization.id,
-      campaignId: access.campaign.id,
-      rows: payload.rows,
-      meta: payload.meta,
-      sourceLabel: payload.sourceLabel,
-      generatedAt: payload.fetchedAt,
-      updatedAt: payload.fetchedAt,
-      previousGeneratedAt: existingDataset?.generatedAt || "",
-    });
-    await appendAuditEvent({
-      user: access.auth.email,
-      role: access.auth.role,
-      organizationId: access.organization.id,
-      campaignId: access.campaign.id,
-      action: "source_refresh",
-      outcome: "success",
-    });
-    return jsonResponse(200, {
-      ok: true,
-      organizationId: access.organization.id,
-      campaignId: access.campaign.id,
-      sourceLabel: payload.sourceLabel,
-      fetchedAt: payload.fetchedAt,
-      rows: payload.rows,
-      meta: payload.meta,
-      message: "הנתונים נמשכו בהצלחה ממערכת המקור ונשמרו עבור הקמפיין.",
-    });
-  } catch (error) {
-    await appendAuditEvent({
-      user: access.auth.email,
-      role: access.auth.role,
-      organizationId: access.organization.id,
-      campaignId: access.campaign.id,
-      action: "source_refresh",
-      outcome: "error",
-      detail: { message: error instanceof Error ? error.message : "refresh_failed" },
-    });
-    return jsonResponse(502, {
-      message: error instanceof Error ? error.message : "משיכת הנתונים ממערכת המקור נכשלה.",
-    });
-  }
 }
