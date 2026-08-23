@@ -3564,7 +3564,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(status, {"message": message})
             return
 
-        database_url = (os.getenv("GOODRAISE_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip()
+        database_url = get_goodraise_database_url()
         if not database_url:
             self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, {"message": "GOODRAISE_DATABASE_URL is not configured on the server."})
             return

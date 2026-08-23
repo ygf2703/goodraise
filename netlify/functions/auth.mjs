@@ -8,6 +8,7 @@ import {
   jsonResponse,
   loginManager,
   logoutManager,
+  resolveScopedAccess,
   setupManagerPassword,
 } from "../lib/auth-store.mjs";
 import {
