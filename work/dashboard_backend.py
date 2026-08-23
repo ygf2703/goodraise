@@ -2689,6 +2689,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     SCOPED_PUBLIC_DATASET_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/public-dataset$")
     SCOPED_SOURCE_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source$")
     SCOPED_SOURCE_REFRESH_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source/refresh$")
+    SCOPED_AMBASSADOR_IMPORT_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/ambassadors/import$")
     SCOPED_INGEST_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/ingest$")
     SCOPED_CAMPAIGN_LIST_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns$")
 
@@ -2855,6 +2856,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.handle_scoped_source_refresh(
                 normalize_slug(source_refresh_match.group(1), "default-org"),
                 normalize_slug(source_refresh_match.group(2), "campaign"),
+            )
+            return True
+
+        ambassador_import_match = self.SCOPED_AMBASSADOR_IMPORT_RE.match(path)
+        if method == "POST" and ambassador_import_match:
+            self.handle_scoped_ambassador_import(
+                normalize_slug(ambassador_import_match.group(1), "default-org"),
+                normalize_slug(ambassador_import_match.group(2), "campaign"),
             )
             return True
 
@@ -3416,6 +3425,137 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             },
         )
         self.audit("source_refresh", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], mode=config.get("mode", "file"))
+
+    def handle_scoped_ambassador_import(self, organization_id: str, campaign_id: str) -> None:
+        auth_context = self.resolve_scoped_access(
+            ROLE_CAMPAIGN_MANAGER,
+            organization_id=organization_id,
+            campaign_id=campaign_id,
+            allow_default=False,
+            require_write=True,
+        )
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לייבא שגרירים."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        payload = self.read_json_body()
+        records = payload.get("records") if isinstance(payload.get("records"), list) else None
+        if records is None:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "ייבוא השגרירים דורש מערך records תקין."})
+            return
+        if not uses_postgres_platform_store():
+            self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, {"message": "ייבוא שגרירים למסד הנתונים דורש חיבור PostgreSQL מקומי פעיל."})
+            return
+
+        normalized_by_key: dict[str, dict[str, Any]] = {}
+        skipped_rows: list[int] = []
+        duplicate_rows = 0
+        for index, raw_record in enumerate(records):
+            record = raw_record if isinstance(raw_record, dict) else {}
+            full_name = str(record.get("fullName") or "").strip()
+            email = normalize_email(str(record.get("email") or ""))
+            nickname = normalize_slug(record.get("nickname") or (email.split("@", 1)[0] if "@" in email else ""), "")
+            ambassador_key = email or nickname
+            if not full_name or not ambassador_key:
+                skipped_rows.append(index + 1)
+                continue
+            if ambassador_key in normalized_by_key:
+                duplicate_rows += 1
+            normalized_by_key[ambassador_key] = {
+                "fullName": full_name,
+                "email": email,
+                "nickname": nickname,
+                "phone": str(record.get("phone") or "").strip(),
+                "referredBy": str(record.get("referredBy") or "").strip(),
+                "wasAmbassadorBefore": record.get("wasAmbassadorBefore") if isinstance(record.get("wasAmbassadorBefore"), bool) else None,
+                "registrationSource": str(record.get("registrationSource") or "").strip(),
+                "isOver18": record.get("isOver18") if isinstance(record.get("isOver18"), bool) else None,
+                "understandsNotPacking": record.get("understandsNotPacking") if isinstance(record.get("understandsNotPacking"), bool) else None,
+                "termsAccepted": record.get("termsAccepted") if isinstance(record.get("termsAccepted"), bool) else None,
+                "registeredAt": str(record.get("registeredAt") or "").strip(),
+                "rawPayload": record,
+            }
+
+        try:
+            with _connect_postgres_platform() as connection:
+                organization = _find_postgres_organization(connection, auth_context["organizationId"])
+                campaign = _find_postgres_campaign(connection, auth_context["organizationId"], auth_context["campaignId"])
+                if not organization or not campaign:
+                    self.respond_json(HTTPStatus.NOT_FOUND, {"message": "הארגון או הקמפיין לא נמצאו במסד הנתונים."})
+                    return
+                with connection.cursor() as cursor:
+                    for ambassador_key, record in normalized_by_key.items():
+                        registered_at = relational_postgres.parse_timestamp(record["registeredAt"]) if relational_postgres else None
+                        cursor.execute(
+                            """
+                            INSERT INTO goodraise.ambassadors (
+                              id, organization_id, campaign_id, ambassador_key, full_name, email, email_normalized,
+                              phone, nickname, referred_by, was_ambassador_before, registration_source, is_over_18,
+                              understands_not_packing, terms_accepted, registered_at, registered_at_raw, registration_payload
+                            ) VALUES (
+                              %s::uuid, %s::uuid, %s::uuid, %s, %s, %s, %s,
+                              %s, %s, %s, %s, %s, %s,
+                              %s, %s, %s, %s, %s::jsonb
+                            )
+                            ON CONFLICT (campaign_id, ambassador_key) DO UPDATE
+                            SET full_name = EXCLUDED.full_name,
+                                email = COALESCE(NULLIF(EXCLUDED.email, ''), goodraise.ambassadors.email),
+                                email_normalized = COALESCE(NULLIF(EXCLUDED.email_normalized, ''), goodraise.ambassadors.email_normalized),
+                                phone = COALESCE(NULLIF(EXCLUDED.phone, ''), goodraise.ambassadors.phone),
+                                nickname = COALESCE(NULLIF(EXCLUDED.nickname, ''), goodraise.ambassadors.nickname),
+                                referred_by = COALESCE(NULLIF(EXCLUDED.referred_by, ''), goodraise.ambassadors.referred_by),
+                                was_ambassador_before = COALESCE(EXCLUDED.was_ambassador_before, goodraise.ambassadors.was_ambassador_before),
+                                registration_source = COALESCE(NULLIF(EXCLUDED.registration_source, ''), goodraise.ambassadors.registration_source),
+                                is_over_18 = COALESCE(EXCLUDED.is_over_18, goodraise.ambassadors.is_over_18),
+                                understands_not_packing = COALESCE(EXCLUDED.understands_not_packing, goodraise.ambassadors.understands_not_packing),
+                                terms_accepted = COALESCE(EXCLUDED.terms_accepted, goodraise.ambassadors.terms_accepted),
+                                registered_at = COALESCE(EXCLUDED.registered_at, goodraise.ambassadors.registered_at),
+                                registered_at_raw = COALESCE(NULLIF(EXCLUDED.registered_at_raw, ''), goodraise.ambassadors.registered_at_raw),
+                                registration_payload = EXCLUDED.registration_payload,
+                                updated_at = NOW()
+                            """,
+                            (
+                                str(uuid.uuid4()),
+                                organization["dbId"],
+                                campaign["dbId"],
+                                ambassador_key,
+                                record["fullName"],
+                                record["email"],
+                                record["email"],
+                                record["phone"],
+                                record["nickname"],
+                                record["referredBy"],
+                                record["wasAmbassadorBefore"],
+                                record["registrationSource"],
+                                record["isOver18"],
+                                record["understandsNotPacking"],
+                                record["termsAccepted"],
+                                registered_at,
+                                record["registeredAt"],
+                                json.dumps(record["rawPayload"], ensure_ascii=False),
+                            ),
+                        )
+                connection.commit()
+        except Exception:
+            self.audit("ambassador_import", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], outcome="error")
+            self.respond_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"message": "שמירת השגרירים במסד הנתונים נכשלה. בדוק שחיבור PostgreSQL פעיל."})
+            return
+
+        result = {
+            "ok": True,
+            "organizationId": auth_context["organizationId"],
+            "campaignId": auth_context["campaignId"],
+            "sourceLabel": str(payload.get("sourceLabel") or "ambassador-registration-csv").strip() or "ambassador-registration-csv",
+            "totalRows": len(records),
+            "importedCount": len(normalized_by_key),
+            "duplicateRows": duplicate_rows,
+            "skippedRows": skipped_rows,
+        }
+        self.audit("ambassador_import", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], outcome="success", importedCount=result["importedCount"], duplicateRows=duplicate_rows, skippedRows=len(skipped_rows))
+        self.respond_json(HTTPStatus.OK, result)
 
     def handle_scoped_external_ingest(self, organization_id: str, campaign_id: str) -> None:
         is_valid, status, message = validate_ingest_api_key(self.headers)
