@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getDonationRecordValidationError, normalizeExternalRecord } from "../netlify/lib/postgres-ingest.mjs";
+import { buildDatasetMeta, getDonationRecordValidationError, normalizeExternalRecord } from "../netlify/lib/postgres-ingest.mjs";
 
 test("rejects a source row that only contains ambassador data", () => {
   assert.match(
@@ -58,4 +58,30 @@ test("normalizes the active Google Sheets transaction column names", () => {
   assert.equal(record["Ambassador name"], "שגריר בדיקה");
   assert.equal(record.charged_success, "true");
   assert.equal(getDonationRecordValidationError(record), "");
+});
+
+test("keeps the configured campaign date window when donations currently exist on one day", () => {
+  const meta = buildDatasetMeta(
+    [{ date: "2026-08-23" }],
+    {
+      campaign_starts_at: "2026-08-23T09:00:00.000Z",
+      campaign_ends_at: "2026-09-01T22:59:00.000Z",
+    },
+  );
+
+  assert.deepEqual(meta.uniqueDates, ["2026-08-23"]);
+  assert.deepEqual(meta.projectDates, [
+    "2026-08-23",
+    "2026-08-24",
+    "2026-08-25",
+    "2026-08-26",
+    "2026-08-27",
+    "2026-08-28",
+    "2026-08-29",
+    "2026-08-30",
+    "2026-08-31",
+    "2026-09-01",
+  ]);
+  assert.equal(meta.defaultFrom, "2026-08-23");
+  assert.equal(meta.defaultTo, "2026-09-01");
 });

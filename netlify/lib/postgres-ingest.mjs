@@ -543,13 +543,43 @@ function buildSourceTransactionKey(record) {
   return buildCanonicalEventKey(record);
 }
 
-function buildDatasetMeta(rows) {
+function toDateKey(value) {
+  const raw = String(value || "").trim();
+  const datePrefix = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (datePrefix) {
+    return datePrefix[1];
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+}
+
+function buildCampaignDateRange(startAt, endAt) {
+  const start = toDateKey(startAt);
+  const end = toDateKey(endAt);
+  if (!start || !end || start > end) {
+    return [];
+  }
+
+  const current = new Date(`${start}T00:00:00.000Z`);
+  const last = new Date(`${end}T00:00:00.000Z`);
+  const dates = [];
+  // A campaign window should always be bounded; the limit avoids a malformed range creating an unbounded payload.
+  while (current <= last && dates.length < 366) {
+    dates.push(current.toISOString().slice(0, 10));
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+export function buildDatasetMeta(rows, campaignScope = {}) {
   const uniqueDates = [...new Set(rows.map((row) => row.date).filter(Boolean))].sort();
-  const defaultFrom = uniqueDates[0] || "";
-  const defaultTo = uniqueDates[uniqueDates.length - 1] || "";
+  const configuredDates = buildCampaignDateRange(campaignScope.campaign_starts_at, campaignScope.campaign_ends_at);
+  const projectDates = configuredDates.length ? configuredDates : uniqueDates;
+  const defaultFrom = projectDates[0] || "";
+  const defaultTo = projectDates[projectDates.length - 1] || "";
   return {
     uniqueDates,
-    projectDates: uniqueDates,
+    projectDates,
     defaultFrom,
     defaultTo,
     minDate: defaultFrom,
@@ -672,14 +702,7 @@ export async function clearCampaignOperationalData({
       campaignId: scope.campaign_slug,
       rows: [],
       meta: {
-        uniqueDates: [],
-        projectDates: [],
-        defaultFrom: "",
-        defaultTo: "",
-        minDate: "",
-        maxDate: "",
-        rowCount: 0,
-        projectWindowLabel: "",
+        ...buildDatasetMeta([], scope),
         resetState: true,
         resetAt: timestamp,
         resetBy: clearedBy,
@@ -729,7 +752,7 @@ async function syncCampaignDatasetSnapshot(scope, record, sourceLabel) {
   await saveCampaignDataset(organizationKey, campaignKey, {
     ...currentDataset,
     rows: nextRows,
-    meta: buildDatasetMeta(nextRows),
+    meta: buildDatasetMeta(nextRows, scope),
     sourceLabel: String(currentDataset.sourceLabel || sourceLabel || "external-api").trim(),
     generatedAt: currentDataset.generatedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -777,7 +800,7 @@ export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "") {
       organizationId: scope.organization_slug,
       campaignId: scope.campaign_slug,
       rows,
-      meta: buildDatasetMeta(rows),
+      meta: buildDatasetMeta(rows, scope),
       sourceLabel: nextSourceLabel,
       generatedAt: currentDataset.generatedAt || nextTimestamp,
       updatedAt: nextTimestamp,
@@ -905,7 +928,9 @@ async function resolveScope(client, organizationIdentifier, campaignIdentifier) 
         c.slug AS campaign_slug,
         c.name AS campaign_name,
         c.status AS campaign_status,
-        c.currency_code AS currency_code
+        c.currency_code AS currency_code,
+        c.starts_at AS campaign_starts_at,
+        c.ends_at AS campaign_ends_at
       FROM goodraise.organizations o
       INNER JOIN goodraise.campaigns c
         ON c.organization_id = o.id
