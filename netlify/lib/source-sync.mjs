@@ -34,6 +34,18 @@ function isGoogleSheetsSyncEnabled(config) {
   return config?.mode === "google_sheets" && config?.googleSheets?.syncEnabled !== false;
 }
 
+function getDetectedSourceColumns(rows) {
+  const columnNames = new Set();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    for (const key of Object.keys(row || {})) {
+      const label = String(key || "").trim();
+      if (label) columnNames.add(label);
+      if (columnNames.size >= 32) return [...columnNames];
+    }
+  }
+  return [...columnNames];
+}
+
 export async function syncCampaignSourceOnce({
   organizationId,
   campaignId,
@@ -54,6 +66,7 @@ export async function syncCampaignSourceOnce({
   }
 
   const fetched = await fetchConfiguredSource(normalized);
+  const detectedColumns = getDetectedSourceColumns(fetched.rawRows);
 
   if (
     normalized.mode === "google_sheets" &&
@@ -125,7 +138,7 @@ export async function syncCampaignSourceOnce({
         lastRowCount: syncResult?.dataset?.rowCount ?? fetched.rows.length,
         lastStatus: "success",
         lastMessage: syncResult?.skippedInvalidRows
-          ? `סונכרנו ${syncResult.processedCount} תרומות מ-Google Sheets. ${syncResult.skippedInvalidRows} שורות ללא תאריך או סכום נדחו.`
+          ? `סונכרנו ${syncResult.processedCount} תרומות מ-Google Sheets. ${syncResult.skippedInvalidRows} שורות ללא תאריך או סכום נדחו.${detectedColumns.length ? ` עמודות שזוהו: ${detectedColumns.join(", ")}.` : ""}`
           : `סונכרנו ${syncResult?.processedCount ?? fetched.rows.length} רשומות מ-Google Sheets.`,
         lastSourceLabel: fetched.sourceLabel,
       },
@@ -143,6 +156,7 @@ export async function syncCampaignSourceOnce({
     rowCount: syncResult?.dataset?.rowCount ?? fetched.rows.length,
     processedCount: syncResult?.processedCount ?? fetched.rawRows.length,
     skippedInvalidRows: syncResult?.skippedInvalidRows ?? 0,
+    detectedColumns,
     dataset: syncResult?.dataset || {
       rowCount: fetched.rows.length,
       sourceLabel: fetched.sourceLabel,
@@ -150,7 +164,7 @@ export async function syncCampaignSourceOnce({
     message:
       normalized.mode === "google_sheets"
         ? syncResult?.skippedInvalidRows
-          ? `סונכרנו ${syncResult.processedCount} תרומות מ-Google Sheets. ${syncResult.skippedInvalidRows} שורות ללא תאריך או סכום נדחו.`
+          ? `סונכרנו ${syncResult.processedCount} תרומות מ-Google Sheets. ${syncResult.skippedInvalidRows} שורות ללא תאריך או סכום נדחו.${detectedColumns.length ? ` עמודות שזוהו: ${detectedColumns.join(", ")}.` : ""}`
           : `סונכרנו ${syncResult?.processedCount ?? fetched.rows.length} רשומות מ-Google Sheets.`
         : "הנתונים נמשכו ונשמרו בהצלחה ממערכת המקור.",
   };

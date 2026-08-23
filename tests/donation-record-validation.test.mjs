@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getDonationRecordValidationError } from "../netlify/lib/postgres-ingest.mjs";
+import { getDonationRecordValidationError, normalizeExternalRecord } from "../netlify/lib/postgres-ingest.mjs";
 
 test("rejects a source row that only contains ambassador data", () => {
   assert.match(
@@ -23,4 +23,22 @@ test("accepts a complete donation record", () => {
     }),
     "",
   );
+});
+
+test("normalizes formatted Hebrew Google Sheets donation rows", () => {
+  const record = normalizeExternalRecord({
+    "מספר עסקה": "sheet-001",
+    "תאריך ושעה": "19.08.2026 14:34",
+    "שם התורם": "תורם בדיקה",
+    "שם השגריר": "שגריר בדיקה",
+    "סכום תרומה": "₪ 1,250",
+    "כתובת מייל": "donor@example.test",
+  });
+
+  assert.equal(record.id, "sheet-001");
+  assert.equal(record.created_at, "19.08.2026 14:34");
+  assert.equal(record.total, "₪ 1,250");
+  assert.equal(record.full_name, "תורם בדיקה");
+  assert.equal(record["Ambassador name"], "שגריר בדיקה");
+  assert.equal(getDonationRecordValidationError(record), "");
 });

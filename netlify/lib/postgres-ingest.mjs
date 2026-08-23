@@ -52,6 +52,44 @@ const CSV_FIELD_ALIASES = {
   directDebitActive: "direct debit active",
 };
 
+// Google Sheets often exposes human-readable Hebrew headers and formatted
+// values instead of the machine headers used by the original CSV export.
+// Keep this translation at ingestion time so the canonical database schema
+// remains unchanged for every source.
+const HUMAN_FIELD_ALIASES = {
+  id: ["transaction id", "order id", "donation id", "מזהה", "מזהה עסקה", "מספר עסקה", "מספר הזמנה", "מספר תרומה"],
+  created_at: ["date", "date time", "datetime", "created at", "transaction date", "donation date", "תאריך", "תאריך ושעה", "מועד עסקה", "תאריך עסקה", "תאריך תרומה"],
+  full_name: ["name", "donor", "donor name", "שם מלא", "שם התורם", "שם התורמת", "תורם", "תורמת"],
+  reward: ["reward", "gift", "שי", "תגמול", "פרס"],
+  price: ["price", "מחיר"],
+  quantity: ["quantity", "qty", "כמות"],
+  total: ["amount", "total amount", "donation amount", "transaction amount", "סכום", "סכום תרומה", "סכום עסקה", "סהכ", "סך הכל", "סכום כולל"],
+  currencyname: ["currency", "מטבע"],
+  phone: ["phone", "mobile", "טלפון", "נייד", "מספר טלפון"],
+  email: ["email", "e-mail", "mail", "מייל", "דואל", "דוא ל", "כתובת מייל"],
+  "Ambassador name": ["ambassador", "ambassador name", "referrer", "שגריר", "שגרירה", "שם שגריר", "שם השגריר", "שם שגרירה"],
+  "Ambassador email": ["ambassador email", "שגריר מייל", "מייל שגריר", "מייל השגריר"],
+  city: ["city", "עיר"],
+  charged_success: ["charged success", "success", "payment success", "סטטוס", "חיוב הצליח", "סליקה הצליחה"],
+  charge_result: ["charge result", "payment result", "תוצאת סליקה", "תוצאת חיוב"],
+};
+
+function normalizeSourceFieldName(value) {
+  return String(value || "")
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .toLowerCase()
+    .replace(/["'`]/g, "")
+    .replace(/[()/:\\_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+const NORMALIZED_HUMAN_FIELD_ALIASES = Object.fromEntries(
+  Object.entries(HUMAN_FIELD_ALIASES).flatMap(([canonical, aliases]) =>
+    aliases.map((alias) => [normalizeSourceFieldName(alias), canonical]),
+  ),
+);
+
 const SCHEMA_SQL = `
 CREATE SCHEMA IF NOT EXISTS goodraise;
 
@@ -245,7 +283,10 @@ function normalizePhone(value) {
 }
 
 function parseDecimal(value) {
-  const raw = normalizeText(value).replace(/,/g, "");
+  const raw = normalizeText(value)
+    .replace(/[\s\u00A0]/g, "")
+    .replace(/[^0-9,.-]/g, "")
+    .replace(/,/g, "");
   if (!raw) {
     return null;
   }
@@ -332,12 +373,12 @@ function parseTimestamp(value) {
   if (!raw) {
     return null;
   }
-  const shortMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{2})(?:\s+(\d{2}):(\d{2}))?$/);
+  const shortMatch = raw.match(/^(\d{2})[./-](\d{2})[./-](\d{2})(?:\s+(\d{2}):(\d{2}))?$/);
   if (shortMatch) {
     const [, day, month, year, hours = "00", minutes = "00"] = shortMatch;
     return new Date(Date.UTC(Number(`20${year}`), Number(month) - 1, Number(day), Number(hours), Number(minutes)));
   }
-  const longMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+  const longMatch = raw.match(/^(\d{2})[./-](\d{2})[./-](\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
   if (longMatch) {
     const [, day, month, year, hours = "00", minutes = "00"] = longMatch;
     return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hours), Number(minutes)));
@@ -363,11 +404,12 @@ function stableStringify(value) {
   return JSON.stringify(value ?? null);
 }
 
-function normalizeExternalRecord(payload = {}) {
+export function normalizeExternalRecord(payload = {}) {
   const record = payload && typeof payload.record === "object" && !Array.isArray(payload.record) ? payload.record : payload;
   const normalized = Object.fromEntries(CSV_FIELD_NAMES.map((field) => [field, ""]));
   for (const [key, value] of Object.entries(record || {})) {
-    const canonicalKey = CSV_FIELD_ALIASES[key] || key;
+    const normalizedKey = normalizeSourceFieldName(key);
+    const canonicalKey = CSV_FIELD_ALIASES[key] || NORMALIZED_HUMAN_FIELD_ALIASES[normalizedKey] || key;
     if (canonicalKey in normalized) {
       normalized[canonicalKey] = value == null ? "" : String(value).trim();
     }

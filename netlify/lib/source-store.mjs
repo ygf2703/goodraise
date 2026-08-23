@@ -139,10 +139,10 @@ function parseCreatedAt(value) {
   if (!raw) {
     return null;
   }
-  const ddmmyy = raw.match(/^(\d{2})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
-  if (ddmmyy) {
-    const [, day, month, year, hour, minute] = ddmmyy;
-    const fullYear = Number(year) >= 70 ? `19${year}` : `20${year}`;
+  const localizedDate = raw.match(/^(\d{2})[./-](\d{2})[./-](\d{2}|\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+  if (localizedDate) {
+    const [, day, month, suppliedYear, hour = "00", minute = "00"] = localizedDate;
+    const fullYear = suppliedYear.length === 4 ? suppliedYear : Number(suppliedYear) >= 70 ? `19${suppliedYear}` : `20${suppliedYear}`;
     const isoCandidate = `${fullYear}-${month}-${day}T${hour}:${minute}:00`;
     return Number.isFinite(Date.parse(isoCandidate)) ? isoCandidate : null;
   }
