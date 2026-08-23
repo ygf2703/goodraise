@@ -1616,7 +1616,7 @@ def get_platform_public_bundle(organization_id: str, campaign_id: str) -> dict[s
         "campaign": campaign,
         "rows": payload.get("rows", []),
         "meta": payload.get("meta", {}),
-        "sourceLabel": payload.get("sourceLabel", "×§×•×‘×¥ ×‘×¡×™×¡ ×¦×™×‘×•×¨×™"),
+        "sourceLabel": payload.get("sourceLabel", "קובץ בסיס ציבורי"),
         "generatedAt": payload.get("generatedAt", ""),
     }
     return _runtime_cache_set(cache_key, bundle, PLATFORM_CACHE_TTL_SECONDS)
@@ -1632,7 +1632,7 @@ def build_public_dataset_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
                 "date": row.get("date", ""),
                 "hour": int(row.get("hour", 0) or 0),
                 "email": "",
-                "donor": "×ž×•×¡×ª×¨ ×‘×¦×¤×™×™×” ×¦×™×‘×•×¨×™×ª",
+                "donor": "מוסתר בצפייה ציבורית",
                 "ambassador": row.get("ambassador", ""),
                 "amount": float(row.get("amount", 0) or 0),
                 "city": "",
@@ -1702,7 +1702,7 @@ def get_legacy_active_campaign_dataset(organization_id: str, campaign_id: str) -
         "campaign": campaign,
         "rows": active_dataset.get("rows", []),
         "meta": active_dataset.get("meta", {}),
-        "sourceLabel": active_dataset.get("sourceLabel", "×§×•×‘×¥ ×‘×¡×™×¡ ×¦×™×‘×•×¨×™"),
+        "sourceLabel": active_dataset.get("sourceLabel", "קובץ בסיס ציבורי"),
         "generatedAt": active_dataset.get("generatedAt", ""),
     }
 
@@ -2467,18 +2467,18 @@ def validate_external_source_url(raw_url: str) -> Any:
     try:
         parsed = urlparse(str(raw_url or "").strip())
     except ValueError as exc:
-        raise ValueError("×›×ª×•×‘×ª ×”-API ××™× ×” ×ª×§×™× ×”.") from exc
+        raise ValueError("כתובת ה-API אינה תקינה.") from exc
 
     if parsed.scheme not in {"https", "http"}:
-        raise ValueError("×ž×•×ª×¨ ×œ×”×©×ª×ž×© ×¨×§ ×‘-HTTPS, ××• ×‘-HTTP ×ž×§×•×ž×™ ×‘×¡×‘×™×‘×ª ×¤×™×ª×•×—.")
+        raise ValueError("מותר להשתמש רק ב-HTTPS, או ב-HTTP מקומי בסביבת פיתוח.")
     if parsed.scheme == "http" and not is_local_source_development_mode():
-        raise ValueError("×‘×¤×¨×•×“×§×©×Ÿ ×ž×•×ª×¨ ×œ×”×©×ª×ž×© ×¨×§ ×‘-HTTPS.")
+        raise ValueError("בפרודקשן מותר להשתמש רק ב-HTTPS.")
     if parsed.username or parsed.password:
-        raise ValueError("××™×Ÿ ×œ×”×¢×‘×™×¨ ×¤×¨×˜×™ ×’×™×©×” ×›×—×œ×§ ×ž×”-URL.")
+        raise ValueError("אין להעביר פרטי גישה כחלק מה-URL.")
 
     hostname = str(parsed.hostname or "").strip().lower()
     if not hostname:
-        raise ValueError("×›×ª×•×‘×ª ×”-API ××™× ×” ×›×•×œ×œ×ª host ×ª×§×™×Ÿ.")
+        raise ValueError("כתובת ה-API אינה כוללת host תקין.")
     if is_blocked_source_hostname(hostname):
         raise ValueError("\u05d4\u05db\u05ea\u05d5\u05d1\u05ea \u05de\u05e6\u05d1\u05d9\u05e2\u05d4 \u05dc\u05d9\u05e2\u05d3 \u05e4\u05e0\u05d9\u05de\u05d9 \u05e9\u05d0\u05d9\u05e0\u05d5 \u05de\u05d5\u05e8\u05e9\u05d4.")
     if is_blocked_source_ip(hostname):
@@ -2522,7 +2522,7 @@ def build_google_sheets_csv_export_url(config: dict[str, Any]) -> str:
     spreadsheet_url = str(config.get("spreadsheetUrl") or "").strip()
     spreadsheet_id = str(config.get("spreadsheetId") or "").strip() or extract_google_spreadsheet_id(spreadsheet_url)
     if not spreadsheet_id:
-        raise ValueError("×™×© ×œ×”×’×“×™×¨ ×§×™×©×•×¨ ××• Spreadsheet ID ×©×œ Google Sheets.")
+        raise ValueError("יש להגדיר קישור או Spreadsheet ID של Google Sheets.")
     gid = str(config.get("gid") or "").strip() or extract_google_spreadsheet_gid(spreadsheet_url)
     export_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv"
     if gid:
@@ -2560,7 +2560,7 @@ def read_limited_response_body(stream: Any, max_bytes: int) -> str:
             break
         total += len(chunk)
         if total > max_bytes:
-            raise RuntimeError("×ª×’×•×‘×ª ×”-API ×—×•×¨×’×ª ×ž×ž×’×‘×œ×ª ×”×’×•×“×œ ×”×ž×•×ª×¨×ª.")
+            raise RuntimeError("תגובת ה-API חורגת ממגבלת הגודל המותרת.")
         chunks.append(chunk)
     charset = "utf-8"
     if hasattr(stream, "headers") and stream.headers:
@@ -2586,15 +2586,15 @@ def safe_fetch_url(raw_url: str, *, method: str, headers: dict[str, str], body: 
             if exc.code in SOURCE_REDIRECT_STATUS_CODES:
                 location = exc.headers.get("Location") if exc.headers else ""
                 if not location:
-                    raise RuntimeError("×”-API ×”×—×–×™×¨ ×”×¤× ×™×” ×œ×œ× ×›×ª×•×‘×ª ×™×¢×“.") from exc
+                    raise RuntimeError("ה-API החזיר הפניה ללא כתובת יעד.") from exc
                 current_url = urljoin(parsed.geturl(), location)
                 redirects += 1
                 continue
-            raise RuntimeError(f"×”×ž×¢×¨×›×ª ×”×—×™×¦×•× ×™×ª ×”×—×–×™×¨×” ×©×’×™××” {exc.code}.") from exc
+            raise RuntimeError(f"המערכת החיצונית החזירה שגיאה {exc.code}.") from exc
         except urllib_error.URLError as exc:
-            raise RuntimeError("×œ× × ×™×ª×Ÿ ×”×™×” ×œ×”×’×™×¢ ×œ×›×ª×•×‘×ª ×”-API ×©×”×•×’×“×¨×”.") from exc
+            raise RuntimeError("לא ניתן היה להגיע לכתובת ה-API שהוגדרה.") from exc
 
-    raise RuntimeError("× ×—×¡×ž×” ×©×¨×©×¨×ª ×”×¤× ×™×•×ª ××¨×•×›×” ×ž×“×™.")
+    raise RuntimeError("נחסמה שרשרת הפניות ארוכה מדי.")
 
 
 def fetch_source_payload(config: dict[str, Any]) -> dict[str, Any]:
@@ -2771,11 +2771,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/yellow-project-dashboard.html":
             self.serve_file(self.dashboard_server.shell_output, "text/html; charset=utf-8")
             return
-        self.respond_json(HTTPStatus.NOT_FOUND, {"message": "×”× ×ª×™×‘ ×”×ž×‘×•×§×© ×œ× × ×ž×¦×."})
+        self.respond_json(HTTPStatus.NOT_FOUND, {"message": "הנתיב המבוקש לא נמצא."})
 
     def do_POST(self) -> None:
         if not self.is_request_origin_allowed():
-            self.respond_json(HTTPStatus.FORBIDDEN, {"message": "×ž×§×•×¨ ×”×‘×§×©×” ××™× ×• ×ž×•×¨×©×”."})
+            self.respond_json(HTTPStatus.FORBIDDEN, {"message": "מקור הבקשה אינו מורשה."})
             return
         parsed = urlparse(self.path)
         if self.try_handle_scoped_request("POST", parsed.path):
@@ -2804,7 +2804,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/admin/source-refresh":
             self.handle_source_refresh()
             return
-        self.respond_json(HTTPStatus.NOT_FOUND, {"message": "×”× ×ª×™×‘ ×”×ž×‘×•×§×© ×œ× × ×ž×¦×."})
+        self.respond_json(HTTPStatus.NOT_FOUND, {"message": "הנתיב המבוקש לא נמצא."})
 
     def try_handle_scoped_request(self, method: str, path: str) -> bool:
         campaign_list_match = self.SCOPED_CAMPAIGN_LIST_RE.match(path)
@@ -2922,7 +2922,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return {
                 "error": True,
                 "status": HTTPStatus.FORBIDDEN,
-                "message": "××™×Ÿ ×”×¨×©××” ×ž×¡×¤×§×ª ×œ×‘×™×¦×•×¢ ×”×¤×¢×•×œ×” ×”×ž×‘×•×§×©×ª.",
+                "message": "אין הרשאה מספקת לביצוע הפעולה המבוקשת.",
                 "context": context,
             }
         return context
@@ -3006,7 +3006,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if not path.exists():
             self.respond_json(
                 HTTPStatus.NOT_FOUND,
-                {"message": f"×”×§×•×‘×¥ {path.name} ×¢×“×™×™×Ÿ ×œ× × ×‘× ×”. ×”×¨×™×¦×• ×§×•×“× ××ª build ×”×“×©×‘×•×¨×“."},
+                {"message": f"הקובץ {path.name} עדיין לא נבנה. הריצו קודם את build הדשבורד."},
             )
             return
         content = path.read_bytes()
@@ -3078,7 +3078,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return {
                 "error": True,
                 "status": HTTPStatus.FORBIDDEN if resource_exists else HTTPStatus.NOT_FOUND,
-                "message": "××™×Ÿ ×”×¨×©××” ×œ×§×ž×¤×™×™×Ÿ ××• ×œ××¨×’×•×Ÿ ×”×ž×‘×•×§×©." if resource_exists else "×”×§×ž×¤×™×™×Ÿ ×”×ž×‘×•×§×© ××™× ×• ×§×™×™×.",
+                "message": "אין הרשאה לקמפיין או לארגון המבוקש." if resource_exists else "הקמפיין המבוקש אינו קיים.",
                 "context": auth_context,
             }
 
@@ -3087,7 +3087,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return {
                 "error": True,
                 "status": HTTPStatus.NOT_FOUND,
-                "message": "×œ× × ×ž×¦× ×§×ž×¤×™×™×Ÿ ×–×ž×™×Ÿ ×¢×‘×•×¨ ×”×ž×©×ª×ž×© ×”×ž×—×•×‘×¨.",
+                "message": "לא נמצא קמפיין זמין עבור המשתמש המחובר.",
                 "context": auth_context,
             }
 
@@ -3095,7 +3095,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return {
                 "error": True,
                 "status": HTTPStatus.FORBIDDEN,
-                "message": "××™×Ÿ ×”×¨×©××ª ×›×ª×™×‘×” ×œ×§×ž×¤×™×™×Ÿ ×”×ž×‘×•×§×©.",
+                "message": "אין הרשאת כתיבה לקמפיין המבוקש.",
                 "context": auth_context,
             }
 
@@ -3115,7 +3115,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def handle_scoped_campaign_list(self, organization_id: str) -> None:
         auth_context = self.resolve_scoped_access(ROLE_VIEWER, organization_id=organization_id, allow_default=False)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×¨×©×™×ž×ª ×”×§×ž×¤×™×™× ×™×."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את רשימת הקמפיינים."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3140,7 +3140,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def handle_scoped_dataset(self, organization_id: str, campaign_id: str) -> None:
         auth_context = self.resolve_scoped_access(ROLE_ANALYST, organization_id=organization_id, campaign_id=campaign_id, allow_default=False)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™×™×."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים."})
             return
         if auth_context.get("error"):
             denied_context = auth_context.get("context", {})
@@ -3149,7 +3149,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         payload = get_platform_campaign_dataset(auth_context["organizationId"], auth_context["campaignId"])
         if not payload:
-            self.respond_json(HTTPStatus.NOT_FOUND, {"message": "×ž××’×¨ ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™ ×œ×§×ž×¤×™×™×Ÿ ×”×ž×‘×•×§×© ××™× ×• ×–×ž×™×Ÿ ×›×¨×’×¢."})
+            self.respond_json(HTTPStatus.NOT_FOUND, {"message": "מאגר הנתונים הניהולי לקמפיין המבוקש אינו זמין כרגע."})
             return
         self.respond_json(
             HTTPStatus.OK,
@@ -3160,7 +3160,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "campaign": auth_context["campaign"],
                 "rows": payload.get("rows", []),
                 "meta": payload.get("meta", {}),
-                "sourceLabel": payload.get("sourceLabel", "×§×•×‘×¥ ×‘×¡×™×¡ ×ž××•×‘×˜×—"),
+                "sourceLabel": payload.get("sourceLabel", "קובץ בסיס מאובטח"),
                 "generatedAt": payload.get("generatedAt", ""),
             },
         )
@@ -3173,7 +3173,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if not organization or not campaign or not payload:
             legacy_payload = get_legacy_active_campaign_dataset(organization_id, campaign_id)
             if not legacy_payload:
-                self.respond_json(HTTPStatus.NOT_FOUND, {"message": "×ž××’×¨ ×”× ×ª×•× ×™× ×”×¦×™×‘×•×¨×™ ×œ×§×ž×¤×™×™×Ÿ ×”×ž×‘×•×§×© ××™× ×• ×–×ž×™×Ÿ ×›×¨×’×¢."})
+                self.respond_json(HTTPStatus.NOT_FOUND, {"message": "מאגר הנתונים הציבורי לקמפיין המבוקש אינו זמין כרגע."})
                 return
             organization = legacy_payload["organization"]
             campaign = legacy_payload["campaign"]
@@ -3187,7 +3187,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "campaign": campaign,
                 "rows": build_public_dataset_rows(payload.get("rows", [])),
                 "meta": payload.get("meta", {}),
-                "sourceLabel": payload.get("sourceLabel", "×§×•×‘×¥ ×‘×¡×™×¡ ×¦×™×‘×•×¨×™"),
+                "sourceLabel": payload.get("sourceLabel", "קובץ בסיס ציבורי"),
                 "generatedAt": payload.get("generatedAt", ""),
             },
         )
@@ -3197,7 +3197,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if not public_bundle:
             legacy_payload = get_legacy_active_campaign_dataset(organization_id, campaign_id)
             if not legacy_payload:
-                self.respond_json(HTTPStatus.NOT_FOUND, {"message": "Ã—Å¾Ã—ÂÃ—â€™Ã—Â¨ Ã—â€Ã—Â Ã—ÂªÃ—â€¢Ã—Â Ã—â„¢Ã—Â Ã—â€Ã—Â¦Ã—â„¢Ã—â€˜Ã—â€¢Ã—Â¨Ã—â„¢ Ã—Å“Ã—Â§Ã—Å¾Ã—Â¤Ã—â„¢Ã—â„¢Ã—Å¸ Ã—â€Ã—Å¾Ã—â€˜Ã—â€¢Ã—Â§Ã—Â© Ã—ÂÃ—â„¢Ã—Â Ã—â€¢ Ã—â€“Ã—Å¾Ã—â„¢Ã—Å¸ Ã—â€ºÃ—Â¨Ã—â€™Ã—Â¢."})
+                self.respond_json(HTTPStatus.NOT_FOUND, {"message": "מאגר הנתונים הציבורי לקמפיין המבוקש אינו זמין כרגע."})
                 return
             public_bundle = legacy_payload
         self.respond_json(
@@ -3209,7 +3209,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "campaign": public_bundle["campaign"],
                 "rows": build_public_dataset_rows(public_bundle.get("rows", [])),
                 "meta": public_bundle.get("meta", {}),
-                "sourceLabel": public_bundle.get("sourceLabel", "Ã—Â§Ã—â€¢Ã—â€˜Ã—Â¥ Ã—â€˜Ã—Â¡Ã—â„¢Ã—Â¡ Ã—Â¦Ã—â„¢Ã—â€˜Ã—â€¢Ã—Â¨Ã—â„¢"),
+                "sourceLabel": public_bundle.get("sourceLabel", "קובץ בסיס ציבורי"),
                 "generatedAt": public_bundle.get("generatedAt", ""),
             },
         )
@@ -3221,7 +3221,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
         summary = get_default_public_campaign_summary()
         if not summary:
-            self.respond_json(HTTPStatus.NOT_FOUND, {"message": "×œ× × ×ž×¦× ×§×ž×¤×™×™×Ÿ ×¦×™×‘×•×¨×™ ×¤×¢×™×œ ×œ×”×¦×’×” ×›×¨×’×¢."})
+            self.respond_json(HTTPStatus.NOT_FOUND, {"message": "לא נמצא קמפיין ציבורי פעיל להצגה כרגע."})
             return
         organization_id = normalize_slug(summary.get("organizationId"), "default-org")
         campaign_id = normalize_slug(summary.get("campaignId"), "campaign")
@@ -3259,7 +3259,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def handle_scoped_source_config(self, organization_id: str, campaign_id: str) -> None:
         auth_context = self.resolve_scoped_access(ROLE_CAMPAIGN_MANAGER, organization_id=organization_id, campaign_id=campaign_id, allow_default=False)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ× ×”×œ ×—×™×‘×•×¨×™ API ×©×œ ×ž×§×•×¨ ×”× ×ª×•× ×™×."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3271,7 +3271,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "organizationId": auth_context["organizationId"],
                 "campaignId": auth_context["campaignId"],
                 "config": redact_source_config(config),
-                "message": "×”×’×“×¨×•×ª ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×˜×¢× ×•.",
+                "message": "הגדרות מקור הנתונים נטענו.",
             },
         )
         self.audit("source_config_view", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"])
@@ -3285,7 +3285,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             require_write=True,
         )
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×©×ž×•×¨ ×—×™×‘×•×¨ API."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור חיבור API."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3307,7 +3307,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "organizationId": auth_context["organizationId"],
                 "campaignId": auth_context["campaignId"],
                 "config": redact_source_config(normalized),
-                "message": "×—×™×‘×•×¨ ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×©×ž×¨ ×‘×©×¨×ª ×”×ž×§×•×ž×™." if normalized.get("mode") == "api" else "×ž×¦×‘ ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×©×ž×¨ ×¢×œ ×˜×¢×™× ×ª ×§×•×‘×¥.",
+                "message": "חיבור מקור הנתונים נשמר בשרת המקומי." if normalized.get("mode") == "api" else "מצב מקור הנתונים נשמר על טעינת קובץ.",
             },
         )
         self.audit("source_config_saved", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], mode=normalized.get("mode", "file"))
@@ -3315,7 +3315,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def handle_scoped_campaign_config(self, organization_id: str, campaign_id: str) -> None:
         auth_context = self.resolve_scoped_access(ROLE_CAMPAIGN_MANAGER, organization_id=organization_id, campaign_id=campaign_id, allow_default=False)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הגדרות הקמפיין."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3333,7 +3333,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "portfolio": auth_context.get("accessibleCampaigns", []),
                 "updatedAt": active_entry.get("updatedAt", "") if isinstance(active_entry, dict) else "",
                 "updatedBy": active_entry.get("updatedBy", "") if isinstance(active_entry, dict) else "",
-                "message": "×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ × ×˜×¢× ×• ×ž×”×©×¨×ª ×”×ž×§×•×ž×™.",
+                "message": "הגדרות הקמפיין נטענו מהשרת המקומי.",
             },
         )
         self.audit("campaign_config_view", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"])
@@ -3347,7 +3347,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             require_write=True,
         )
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×©×ž×•×¨ ××ª ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור את הגדרות הקמפיין."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3374,7 +3374,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 },
                 "updatedAt": saved["updatedAt"],
                 "updatedBy": saved["updatedBy"],
-                "message": "×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ × ×©×ž×¨×• ×‘×©×¨×ª ×”×ž×§×•×ž×™.",
+                "message": "הגדרות הקמפיין נשמרו בשרת המקומי.",
             },
         )
         self.audit("campaign_config_saved", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"])
@@ -3388,14 +3388,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             require_write=True,
         )
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×ž×©×•×š × ×ª×•× ×™× ×ž×ž×¢×¨×›×ª ×”×ž×§×•×¨."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
             return
         config = get_platform_campaign_source(auth_context["organizationId"], auth_context["campaignId"]) or get_default_source_config()
         if config.get("mode") != "api":
-            self.respond_json(HTTPStatus.CONFLICT, {"message": "×ž×§×•×¨ ×”× ×ª×•× ×™× ×”×¤×¢×™×œ ×ž×•×’×“×¨ ×›×¨×’×¢ ×›×§×•×‘×¥, ×œ× ×›-API."})
+            self.respond_json(HTTPStatus.CONFLICT, {"message": "מקור הנתונים הפעיל מוגדר כרגע כקובץ, לא כ-API."})
             return
         try:
             payload = fetch_source_payload(config)
@@ -3412,7 +3412,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "organizationId": auth_context["organizationId"],
                 "campaignId": auth_context["campaignId"],
                 **payload,
-                "message": "×”× ×ª×•× ×™× × ×ž×©×›×• ×‘×”×¦×œ×—×” ×ž×”×ž×¢×¨×›×ª ×”×—×™×¦×•× ×™×ª.",
+                "message": "הנתונים נמשכו בהצלחה מהמערכת החיצונית.",
             },
         )
         self.audit("source_refresh", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], mode=config.get("mode", "file"))
@@ -3501,7 +3501,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def handle_admin_dataset(self) -> None:
         auth_context = self.require_authenticated_admin(ROLE_ANALYST)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™×™×."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים."})
             return
         if auth_context.get("error"):
             denied_context = auth_context.get("context", {})
@@ -3513,7 +3513,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if not payload:
             self.respond_json(
                 HTTPStatus.NOT_FOUND,
-                {"message": "×ž××’×¨ ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™ ×œ× ×–×ž×™×Ÿ ×›×¨×’×¢. ××¤×©×¨ ×œ×”×¢×œ×•×ª ×§×•×‘×¥ ×¢×¡×§××•×ª ×™×“× ×™×ª ×œ××—×¨ ×”×›× ×™×¡×”."},
+                {"message": "מאגר הנתונים הניהולי לא זמין כרגע. אפשר להעלות קובץ עסקאות ידנית לאחר הכניסה."},
             )
             return
 
@@ -3522,7 +3522,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             {
                 "rows": payload.get("rows", []),
                 "meta": payload.get("meta", {}),
-                "sourceLabel": payload.get("sourceLabel", "×§×•×‘×¥ ×‘×¡×™×¡ ×ž××•×‘×˜×—"),
+                "sourceLabel": payload.get("sourceLabel", "קובץ בסיס מאובטח"),
                 "generatedAt": payload.get("generatedAt", ""),
             },
         )
@@ -3537,14 +3537,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 authenticated_email = get_authenticated_email(connection, token)
 
         if not authenticated_email:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™×™×."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הנתונים הניהוליים."})
             return
 
         payload = load_admin_dataset_payload()
         if not payload:
             self.respond_json(
                 HTTPStatus.NOT_FOUND,
-                {"message": "×ž××’×¨ ×”× ×ª×•× ×™× ×”× ×™×”×•×œ×™ ×œ× ×–×ž×™×Ÿ ×›×¨×’×¢. ××¤×©×¨ ×œ×”×¢×œ×•×ª ×§×•×‘×¥ ×¢×¡×§××•×ª ×™×“× ×™×ª ×œ××—×¨ ×”×›× ×™×¡×”."},
+                {"message": "מאגר הנתונים הניהולי לא זמין כרגע. אפשר להעלות קובץ עסקאות ידנית לאחר הכניסה."},
             )
             return
 
@@ -3553,7 +3553,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             {
                 "rows": payload.get("rows", []),
                 "meta": payload.get("meta", {}),
-                "sourceLabel": payload.get("sourceLabel", "×§×•×‘×¥ ×‘×¡×™×¡ ×ž××•×‘×˜×—"),
+                "sourceLabel": payload.get("sourceLabel", "קובץ בסיס מאובטח"),
                 "generatedAt": payload.get("generatedAt", ""),
             },
         )
@@ -3566,7 +3566,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return {
                 "error": True,
                 "status": HTTPStatus.FORBIDDEN,
-                "message": "××™×Ÿ ×”×¨×©××” ×ž×¡×¤×§×ª ×œ×‘×™×¦×•×¢ ×”×¤×¢×•×œ×” ×”×ž×‘×•×§×©×ª.",
+                "message": "אין הרשאה מספקת לביצוע הפעולה המבוקשת.",
                 "context": context,
             }
         return context
@@ -3581,7 +3581,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def handle_source_config_get(self) -> None:
         auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ× ×”×œ ×—×™×‘×•×¨×™ API ×©×œ ×ž×§×•×¨ ×”× ×ª×•× ×™×."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3592,14 +3592,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             HTTPStatus.OK,
             {
                 "config": redact_source_config(config),
-                "message": "×”×’×“×¨×•×ª ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×˜×¢× ×•.",
+                "message": "הגדרות מקור הנתונים נטענו.",
             },
         )
         self.audit("source_config_view", auth_context["email"], role=auth_context["role"])
         return
         authenticated_email = self.require_authenticated_admin()
         if not authenticated_email:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ× ×”×œ ×—×™×‘×•×¨×™ API ×©×œ ×ž×§×•×¨ ×”× ×ª×•× ×™×."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לנהל חיבורי API של מקור הנתונים."})
             return
 
         config = load_source_config()
@@ -3607,14 +3607,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             HTTPStatus.OK,
             {
                 "config": redact_source_config(config),
-                "message": "×”×’×“×¨×•×ª ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×˜×¢× ×•.",
+                "message": "הגדרות מקור הנתונים נטענו.",
             },
         )
 
     def handle_source_config_save(self) -> None:
         auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×©×ž×•×¨ ×—×™×‘×•×¨ API."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור חיבור API."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3632,14 +3632,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             {
                 "saved": True,
                 "config": redact_source_config(normalized),
-                "message": "×—×™×‘×•×¨ ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×©×ž×¨ ×‘×©×¨×ª ×”×ž×§×•×ž×™." if normalized.get("mode") == "api" else "×ž×¦×‘ ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×©×ž×¨ ×¢×œ ×˜×¢×™× ×ª ×§×•×‘×¥.",
+                "message": "חיבור מקור הנתונים נשמר בשרת המקומי." if normalized.get("mode") == "api" else "מצב מקור הנתונים נשמר על טעינת קובץ.",
             },
         )
         self.audit("source_config_saved", auth_context["email"], role=auth_context["role"], mode=normalized.get("mode", "file"))
         return
         authenticated_email = self.require_authenticated_admin()
         if not authenticated_email:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×©×ž×•×¨ ×—×™×‘×•×¨ API."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור חיבור API."})
             return
 
         payload = self.read_json_body()
@@ -3650,14 +3650,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             {
                 "saved": True,
                 "config": redact_source_config(normalized),
-                "message": "×—×™×‘×•×¨ ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×©×ž×¨ ×‘×©×¨×ª ×”×ž×§×•×ž×™." if normalized.get("mode") == "api" else "×ž×¦×‘ ×ž×§×•×¨ ×”× ×ª×•× ×™× × ×©×ž×¨ ×¢×œ ×˜×¢×™× ×ª ×§×•×‘×¥.",
+                "message": "חיבור מקור הנתונים נשמר בשרת המקומי." if normalized.get("mode") == "api" else "מצב מקור הנתונים נשמר על טעינת קובץ.",
             },
         )
 
     def handle_campaign_config_get(self) -> None:
         auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הגדרות הקמפיין."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3679,14 +3679,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "config": config,
                 "updatedAt": stored_payload.get("updatedAt", ""),
                 "updatedBy": stored_payload.get("updatedBy", ""),
-                "message": "×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ × ×˜×¢× ×• ×ž×”×©×¨×ª ×”×ž×§×•×ž×™.",
+                "message": "הגדרות הקמפיין נטענו מהשרת המקומי.",
             },
         )
         self.audit("campaign_config_view", auth_context["email"], role=auth_context["role"])
         return
         authenticated_email = self.require_authenticated_admin()
         if not authenticated_email:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×˜×¢×•×Ÿ ××ª ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לטעון את הגדרות הקמפיין."})
             return
 
         stored_payload: dict[str, Any] = {}
@@ -3705,14 +3705,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "config": config,
                 "updatedAt": stored_payload.get("updatedAt", ""),
                 "updatedBy": stored_payload.get("updatedBy", ""),
-                "message": "×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ × ×˜×¢× ×• ×ž×”×©×¨×ª ×”×ž×§×•×ž×™.",
+                "message": "הגדרות הקמפיין נטענו מהשרת המקומי.",
             },
         )
 
     def handle_campaign_config_save(self) -> None:
         auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×©×ž×•×¨ ××ª ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור את הגדרות הקמפיין."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3728,14 +3728,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "config": saved.get("config", {}),
                 "updatedAt": saved.get("updatedAt", ""),
                 "updatedBy": saved.get("updatedBy", ""),
-                "message": "×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ × ×©×ž×¨×• ×‘×©×¨×ª ×”×ž×§×•×ž×™.",
+                "message": "הגדרות הקמפיין נשמרו בשרת המקומי.",
             },
         )
         self.audit("campaign_config_saved", auth_context["email"], role=auth_context["role"])
         return
         authenticated_email = self.require_authenticated_admin()
         if not authenticated_email:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×©×ž×•×¨ ××ª ×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי לשמור את הגדרות הקמפיין."})
             return
 
         payload = self.read_json_body()
@@ -3748,14 +3748,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "config": saved.get("config", {}),
                 "updatedAt": saved.get("updatedAt", ""),
                 "updatedBy": saved.get("updatedBy", ""),
-                "message": "×”×’×“×¨×•×ª ×”×§×ž×¤×™×™×Ÿ × ×©×ž×¨×• ×‘×©×¨×ª ×”×ž×§×•×ž×™.",
+                "message": "הגדרות הקמפיין נשמרו בשרת המקומי.",
             },
         )
 
     def handle_source_refresh(self) -> None:
         auth_context = self.require_authenticated_admin(ROLE_CAMPAIGN_MANAGER)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×ž×©×•×š × ×ª×•× ×™× ×ž×ž×¢×¨×›×ª ×”×ž×§×•×¨."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3763,7 +3763,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         config = load_source_config()
         if config.get("mode") != "api":
-            self.respond_json(HTTPStatus.CONFLICT, {"message": "×ž×§×•×¨ ×”× ×ª×•× ×™× ×”×¤×¢×™×œ ×ž×•×’×“×¨ ×›×¨×’×¢ ×›×§×•×‘×¥, ×œ× ×›-API."})
+            self.respond_json(HTTPStatus.CONFLICT, {"message": "מקור הנתונים הפעיל מוגדר כרגע כקובץ, לא כ-API."})
             return
 
         try:
@@ -3780,19 +3780,19 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             {
                 "ok": True,
                 **payload,
-                "message": "×”× ×ª×•× ×™× × ×ž×©×›×• ×‘×”×¦×œ×—×” ×ž×”×ž×¢×¨×›×ª ×”×—×™×¦×•× ×™×ª.",
+                "message": "הנתונים נמשכו בהצלחה מהמערכת החיצונית.",
             },
         )
         self.audit("source_refresh", auth_context["email"], role=auth_context["role"], mode=config.get("mode", "file"))
         return
         authenticated_email = self.require_authenticated_admin()
         if not authenticated_email:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×ž× ×”×œ ×›×“×™ ×œ×ž×©×•×š × ×ª×•× ×™× ×ž×ž×¢×¨×›×ª ×”×ž×§×•×¨."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי למשוך נתונים ממערכת המקור."})
             return
 
         config = load_source_config()
         if config.get("mode") != "api":
-            self.respond_json(HTTPStatus.CONFLICT, {"message": "×ž×§×•×¨ ×”× ×ª×•× ×™× ×”×¤×¢×™×œ ×ž×•×’×“×¨ ×›×¨×’×¢ ×›×§×•×‘×¥, ×œ× ×›-API."})
+            self.respond_json(HTTPStatus.CONFLICT, {"message": "מקור הנתונים הפעיל מוגדר כרגע כקובץ, לא כ-API."})
             return
 
         try:
@@ -3806,7 +3806,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             {
                 "ok": True,
                 **payload,
-                "message": "×”× ×ª×•× ×™× × ×ž×©×›×• ×‘×”×¦×œ×—×” ×ž×”×ž×¢×¨×›×ª ×”×—×™×¦×•× ×™×ª.",
+                "message": "הנתונים נמשכו בהצלחה מהמערכת החיצונית.",
             },
         )
 
@@ -3815,7 +3815,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         email = normalize_email(str(payload.get("email", "")))
         password = str(payload.get("password", ""))
         if not email or not password:
-            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "×™×© ×œ×ž×œ× ×’× ×ž×™×™×œ ×•×’× ×¡×™×¡×ž×”."})
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש למלא גם מייל וגם סיסמה."})
             return
 
         auth_context: dict[str, Any] | None = None
@@ -3826,21 +3826,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 if not admin or not bool(admin["is_active"]):
                     self.respond_json(
                         HTTPStatus.FORBIDDEN,
-                        {"message": "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ×’×™×©×” ×œ×¤×× ×œ ×”× ×™×”×•×œ."},
+                        {"message": "המייל שהוזן אינו מורשה לגישה לפאנל הניהול."},
                     )
                     return
                 if not admin["password_hash"]:
                     self.respond_json(
                         HTTPStatus.CONFLICT,
                         {
-                            "message": "×–×• ×›× ×™×¡×” ×¨××©×•× ×” ×¢×‘×•×¨ ×”×ž×™×™×œ ×”×–×”. ×™×© ×œ×”×’×“×™×¨ ×¡×™×¡×ž×” ××™×©×™×ª ×œ×¤× ×™ ×›× ×™×¡×”.",
+                            "message": "זו כניסה ראשונה עבור המייל הזה. יש להגדיר סיסמה אישית לפני כניסה.",
                             "code": "setup_required",
                             "setupRequired": True,
                         },
                     )
                     return
                 if not verify_password(password, str(admin["password_hash"])):
-                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "×”×¡×™×¡×ž×” ×©×’×•×™×”. × ×¡×• ×©×•×‘."})
+                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה שגויה. נסו שוב."})
                     return
                 token = create_session_postgres(connection, email)
                 auth_context = get_authenticated_admin_context_postgres(connection, token) or build_admin_auth_context(email, admin)
@@ -3852,21 +3852,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 if not admin or not bool(admin["is_active"]):
                     self.respond_json(
                         HTTPStatus.FORBIDDEN,
-                        {"message": "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ×’×™×©×” ×œ×¤×× ×œ ×”× ×™×”×•×œ."},
+                        {"message": "המייל שהוזן אינו מורשה לגישה לפאנל הניהול."},
                     )
                     return
                 if not admin["password_hash"]:
                     self.respond_json(
                         HTTPStatus.CONFLICT,
                         {
-                            "message": "×–×• ×›× ×™×¡×” ×¨××©×•× ×” ×¢×‘×•×¨ ×”×ž×™×™×œ ×”×–×”. ×™×© ×œ×”×’×“×™×¨ ×¡×™×¡×ž×” ××™×©×™×ª ×œ×¤× ×™ ×›× ×™×¡×”.",
+                            "message": "זו כניסה ראשונה עבור המייל הזה. יש להגדיר סיסמה אישית לפני כניסה.",
                             "code": "setup_required",
                             "setupRequired": True,
                         },
                     )
                     return
                 if not verify_password(password, str(admin["password_hash"])):
-                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "×”×¡×™×¡×ž×” ×©×’×•×™×”. × ×¡×• ×©×•×‘."})
+                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה שגויה. נסו שוב."})
                     return
                 token = create_session(connection, email)
                 auth_context = get_authenticated_admin_context(connection, token) or build_admin_auth_context(email, admin)
@@ -3882,7 +3882,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "campaignSlugs": auth_context["campaignSlugs"] if auth_context else [],
                 "accessibleCampaigns": accessible_campaigns,
                 "sessionExpiresAt": auth_context["expiresAt"] if auth_context else "",
-                "message": "×”×›× ×™×¡×” ×”×¦×œ×™×—×”. ×”×“×©×‘×•×¨×“ ×”× ×™×”×•×œ×™ × ×¤×ª×—.",
+                "message": "הכניסה הצליחה. הדשבורד הניהולי נפתח.",
             },
             extra_headers=[("Set-Cookie", build_set_cookie(token, SESSION_DURATION_HOURS * 60 * 60))],
         )
@@ -3893,13 +3893,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         password = str(payload.get("password", ""))
         confirm_password = str(payload.get("confirmPassword", ""))
         if not email or not password or not confirm_password:
-            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "×™×© ×œ×ž×œ× ×ž×™×™×œ, ×¡×™×¡×ž×” ×•××™×ž×•×ª ×¡×™×¡×ž×”."})
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש למלא מייל, סיסמה ואימות סיסמה."})
             return
         if password != confirm_password:
-            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "××™×ž×•×ª ×”×¡×™×¡×ž×” ×œ× ×ª×•××."})
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "אימות הסיסמה לא תואם."})
             return
         if len(password) < 8:
-            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "×™×© ×œ×‘×—×•×¨ ×¡×™×¡×ž×” ×‘××•×¨×š 8 ×ª×•×•×™× ×œ×¤×—×•×ª."})
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש לבחור סיסמה באורך 8 תווים לפחות."})
             return
 
         auth_context: dict[str, Any] | None = None
@@ -3910,13 +3910,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 if not admin or not bool(admin["is_active"]):
                     self.respond_json(
                         HTTPStatus.FORBIDDEN,
-                        {"message": "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ×”×’×“×™×¨ ×’×™×©×ª ×ž× ×”×œ."},
+                        {"message": "המייל שהוזן אינו מורשה להגדיר גישת מנהל."},
                     )
                     return
                 if admin["password_hash"]:
                     self.respond_json(
                         HTTPStatus.CONFLICT,
-                        {"message": "×›×‘×¨ ×”×•×’×“×¨×” ×¡×™×¡×ž×” ×¢×‘×•×¨ ×”×ž×™×™×œ ×”×–×”. × ×™×ª×Ÿ ×œ×¢×‘×•×¨ ×œ×ž×¡×š ×”×›× ×™×¡×” ×”×¨×’×™×œ."},
+                        {"message": "כבר הוגדרה סיסמה עבור המייל הזה. ניתן לעבור למסך הכניסה הרגיל."},
                     )
                     return
                 update_admin_password_postgres(connection, email, password)
@@ -3930,13 +3930,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 if not admin or not bool(admin["is_active"]):
                     self.respond_json(
                         HTTPStatus.FORBIDDEN,
-                        {"message": "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ×”×’×“×™×¨ ×’×™×©×ª ×ž× ×”×œ."},
+                        {"message": "המייל שהוזן אינו מורשה להגדיר גישת מנהל."},
                     )
                     return
                 if admin["password_hash"]:
                     self.respond_json(
                         HTTPStatus.CONFLICT,
-                        {"message": "×›×‘×¨ ×”×•×’×“×¨×” ×¡×™×¡×ž×” ×¢×‘×•×¨ ×”×ž×™×™×œ ×”×–×”. × ×™×ª×Ÿ ×œ×¢×‘×•×¨ ×œ×ž×¡×š ×”×›× ×™×¡×” ×”×¨×’×™×œ."},
+                        {"message": "כבר הוגדרה סיסמה עבור המייל הזה. ניתן לעבור למסך הכניסה הרגיל."},
                     )
                     return
                 update_admin_password(connection, email, password)
@@ -3954,7 +3954,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 "campaignSlugs": auth_context["campaignSlugs"] if auth_context else [],
                 "accessibleCampaigns": accessible_campaigns,
                 "sessionExpiresAt": auth_context["expiresAt"] if auth_context else "",
-                "message": "×”×¡×™×¡×ž×” × ×©×ž×¨×” ×•×”×’×™×©×” ×œ×¤×× ×œ ×”× ×™×”×•×œ × ×¤×ª×—×”.",
+                "message": "הסיסמה נשמרה והגישה לפאנל הניהול נפתחה.",
             },
             extra_headers=[("Set-Cookie", build_set_cookie(token, SESSION_DURATION_HOURS * 60 * 60))],
         )
@@ -3981,7 +3981,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def handle_auth_change_password(self) -> None:
         auth_context = self.require_authenticated_admin(ROLE_VIEWER)
         if not auth_context:
-            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "× ×“×¨×©×ª ×”×ª×—×‘×¨×•×ª ×›×“×™ ×œ×”×—×œ×™×£ ×¡×™×¡×ž×”."})
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות כדי להחליף סיסמה."})
             return
         if auth_context.get("error"):
             self.respond_json(auth_context["status"], {"message": auth_context["message"]})
@@ -3992,13 +3992,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         new_password = str(payload.get("newPassword", ""))
         confirm_password = str(payload.get("confirmPassword", ""))
         if not current_password or not new_password or not confirm_password:
-            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "×™×© ×œ×ž×œ× ×¡×™×¡×ž×” × ×•×›×—×™×ª, ×¡×™×¡×ž×” ×—×“×©×” ×•××™×ž×•×ª ×¡×™×¡×ž×”."})
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש למלא סיסמה נוכחית, סיסמה חדשה ואימות סיסמה."})
             return
         if new_password != confirm_password:
-            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "××™×ž×•×ª ×”×¡×™×¡×ž×” ×”×—×“×©×” ×œ× ×ª×•××."})
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "אימות הסיסמה החדשה לא תואם."})
             return
         if len(new_password) < 8:
-            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "×”×¡×™×¡×ž×” ×”×—×“×©×” ×—×™×™×‘×ª ×œ×›×œ×•×œ ×œ×¤×—×•×ª 8 ×ª×•×•×™×."})
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "הסיסמה החדשה חייבת לכלול לפחות 8 תווים."})
             return
 
         if uses_postgres_platform_store():
@@ -4006,7 +4006,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 seed_admins_postgres(connection)
                 admin = get_admin_postgres(connection, auth_context["email"])
                 if not admin or not admin["password_hash"] or not verify_password(current_password, str(admin["password_hash"])):
-                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "×”×¡×™×¡×ž×” ×”× ×•×›×—×™×ª ×©×’×•×™×”."})
+                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה הנוכחית שגויה."})
                     return
                 update_admin_password_postgres(connection, auth_context["email"], new_password)
                 delete_sessions_for_email_postgres(connection, auth_context["email"])
@@ -4017,7 +4017,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 seed_admins(connection)
                 admin = get_admin(connection, auth_context["email"])
                 if not admin or not admin["password_hash"] or not verify_password(current_password, str(admin["password_hash"])):
-                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "×”×¡×™×¡×ž×” ×”× ×•×›×—×™×ª ×©×’×•×™×”."})
+                    self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "הסיסמה הנוכחית שגויה."})
                     return
                 update_admin_password(connection, auth_context["email"], new_password)
                 delete_sessions_for_email(connection, auth_context["email"])
@@ -4027,7 +4027,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             HTTPStatus.OK,
             {
                 "changed": True,
-                "message": "×”×¡×™×¡×ž×” ×”×•×—×œ×¤×” ×‘×”×¦×œ×—×”.",
+                "message": "הסיסמה הוחלפה בהצלחה.",
             },
             extra_headers=[("Set-Cookie", build_set_cookie(token, SESSION_DURATION_HOURS * 60 * 60))],
         )
@@ -4037,7 +4037,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         payload = self.read_json_body()
         email = normalize_email(str(payload.get("email", "")))
         if not email:
-            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "×™×© ×œ×”×–×™×Ÿ ×ž×™×™×œ ×ž× ×”×œ/×ª ×›×“×™ ×œ××¤×¡ ×¡×™×¡×ž×”."})
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש להזין מייל מנהל/ת כדי לאפס סיסמה."})
             return
 
         if uses_postgres_platform_store():
@@ -4047,7 +4047,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 if not admin or not bool(admin["is_active"]):
                     self.respond_json(
                         HTTPStatus.FORBIDDEN,
-                        {"message": "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ××™×¤×•×¡ ×‘×ž×¢×¨×›×ª ×”× ×™×”×•×œ ×”×ž×§×•×ž×™×ª."},
+                        {"message": "המייל שהוזן אינו מורשה לאיפוס במערכת הניהול המקומית."},
                     )
                     return
                 reset_admin_password_postgres(connection, email)
@@ -4059,7 +4059,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 if not admin or not bool(admin["is_active"]):
                     self.respond_json(
                         HTTPStatus.FORBIDDEN,
-                        {"message": "×”×ž×™×™×œ ×©×”×•×–×Ÿ ××™× ×• ×ž×•×¨×©×” ×œ××™×¤×•×¡ ×‘×ž×¢×¨×›×ª ×”× ×™×”×•×œ ×”×ž×§×•×ž×™×ª."},
+                        {"message": "המייל שהוזן אינו מורשה לאיפוס במערכת הניהול המקומית."},
                     )
                     return
                 connection.execute(
@@ -4081,7 +4081,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             {
                 "reset": True,
                 "email": email,
-                "message": "×”×¡×™×¡×ž×” ××•×¤×¡×” ×‘×ž×¢×¨×›×ª ×”×ž×§×•×ž×™×ª. ×‘×›× ×™×¡×” ×”×‘××” ×™×© ×œ×”×’×“×™×¨ ×¡×™×¡×ž×” ×—×“×©×”.",
+                "message": "הסיסמה אופסה במערכת המקומית. בכניסה הבאה יש להגדיר סיסמה חדשה.",
             },
             extra_headers=[("Set-Cookie", build_set_cookie(None, 0))],
         )
