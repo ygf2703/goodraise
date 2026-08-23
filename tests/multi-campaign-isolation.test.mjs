@@ -397,6 +397,8 @@ test("multi-campaign isolation, authorization and campaign creation are enforced
     assert.equal(a1Source.payload.config.api.bearerToken, "");
 
     const a2ConfigBefore = await getCampaignConfig("org-alpha", "alpha-2");
+    const a1SourceBeforeCampaignSave = await getCampaignSource("org-alpha", "alpha-1");
+    const a1DatasetBeforeCampaignSave = await getCampaignDataset("org-alpha", "alpha-1");
     await requestJson("http://localhost/api/organizations/org-alpha/campaigns/alpha-1", {
       method: "POST",
       cookie: platformCookie,
@@ -416,8 +418,12 @@ test("multi-campaign isolation, authorization and campaign creation are enforced
     });
     const a1ConfigAfter = await getCampaignConfig("org-alpha", "alpha-1");
     const a2ConfigAfter = await getCampaignConfig("org-alpha", "alpha-2");
+    const a1SourceAfterCampaignSave = await getCampaignSource("org-alpha", "alpha-1");
+    const a1DatasetAfterCampaignSave = await getCampaignDataset("org-alpha", "alpha-1");
     assert.equal(a1ConfigAfter.basics.target, 111111);
     assert.equal(a2ConfigAfter.basics.target, a2ConfigBefore.basics.target);
+    assert.equal(a1SourceAfterCampaignSave.api.endpoint, a1SourceBeforeCampaignSave.api.endpoint);
+    assert.deepEqual(a1DatasetAfterCampaignSave.rows, a1DatasetBeforeCampaignSave.rows);
 
     const orgAlphaList = await requestJson("http://localhost/api/organizations/org-alpha/campaigns", { cookie: orgAdminCookie });
     const orgBetaForbidden = await requestJson("http://localhost/api/organizations/org-beta/campaigns/beta-1/dataset", { cookie: orgAdminCookie });

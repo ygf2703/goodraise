@@ -240,16 +240,21 @@ async function createOrUpdateScopedCampaign({ auth, organization, campaignId, sn
   });
 
   const savedConfig = await saveCampaignConfig(organization.id, savedCampaign.id, snapshot, auth.email);
-  await saveCampaignSource(organization.id, savedCampaign.id, normalizeSourceConfig(snapshot.dataSource || snapshot.source || {}));
-  await saveCampaignDataset(organization.id, savedCampaign.id, {
-    organizationId: organization.id,
-    campaignId: savedCampaign.id,
-    rows: [],
-    meta: {},
-    sourceLabel: "",
-    generatedAt: now,
-    updatedAt: now,
-  });
+  // Campaign settings are saved independently from operational data. Updating
+  // design, copy or goals must never reset a configured source or its dataset.
+  // New campaigns still receive an initial source and an empty isolated dataset.
+  if (!existingCampaign) {
+    await saveCampaignSource(organization.id, savedCampaign.id, normalizeSourceConfig(snapshot.dataSource || snapshot.source || {}));
+    await saveCampaignDataset(organization.id, savedCampaign.id, {
+      organizationId: organization.id,
+      campaignId: savedCampaign.id,
+      rows: [],
+      meta: {},
+      sourceLabel: "",
+      generatedAt: now,
+      updatedAt: now,
+    });
+  }
 
   return {
     campaign: savedCampaign,
