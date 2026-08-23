@@ -420,6 +420,12 @@ export function normalizeExternalRecord(payload = {}) {
       normalized[canonicalKey] = value == null ? "" : String(value).trim();
     }
   }
+  // The active Google Sheets transaction feed contains completed transaction
+  // rows but no explicit payment-status column. Do not present those valid
+  // rows as failed; an explicit source status always takes precedence.
+  if (!normalizeText(normalized.charged_success) && normalized.id && normalized.created_at && normalized.total) {
+    normalized.charged_success = "true";
+  }
   return normalized;
 }
 
