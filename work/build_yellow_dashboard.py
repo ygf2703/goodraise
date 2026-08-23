@@ -3650,7 +3650,6 @@ def build_fragment(
               const CAMPAIGN_REGISTRY_STORAGE_KEY = "yellow-dashboard.campaign-registry";
               const AMBASSADOR_DIRECTORY_KEY = "yellow-dashboard.ambassador-directory";
               const LAST_ADMIN_EMAIL_KEY = "yellow-dashboard.last-admin-email";
-              const XLSX_MODULE_URL = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm";
               const root = document.getElementById("yellow-dashboard-root");
               root.style.setProperty("--brand-pattern-campaign", `url("${INITIAL_CAMPAIGN_LOGO}")`);
               root.style.setProperty("--brand-pattern-organization", `url("${INITIAL_ORG_LOGO}")`);
@@ -8996,22 +8995,143 @@ def build_fragment(
                     : `${formatNumber(rows.length)} רשומות`;
               }
 
+              function decodeXmlEntities(value) {
+                return String(value || "")
+                  .replace(/&lt;/g, "<")
+                  .replace(/&gt;/g, ">")
+                  .replace(/&quot;/g, '"')
+                  .replace(/&apos;/g, "'")
+                  .replace(/&amp;/g, "&");
+              }
+
+              function readZipUint16(view, offset) {
+                return view.getUint16(offset, true);
+              }
+
+              function readZipUint32(view, offset) {
+                return view.getUint32(offset, true);
+              }
+
+              async function inflateZipEntry(bytes, compressionMethod) {
+                if (compressionMethod === 0) {
+                  return bytes;
+                }
+                if (compressionMethod !== 8 || typeof DecompressionStream === "undefined") {
+                  throw new Error("הדפדפן אינו תומך בקריאת קובץ Excel זה. אפשר לשמור אותו כ-CSV ולנסות שוב.");
+                }
+                const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+                return new Uint8Array(await new Response(stream).arrayBuffer());
+              }
+
+              async function readXlsxEntries(buffer) {
+                const bytes = new Uint8Array(buffer);
+                if (!bytes.length || bytes.length > 2 * 1024 * 1024) {
+                  throw new Error("קובץ הפרסים גדול מדי. יש להעלות קובץ עד 2MB.");
+                }
+                const view = new DataView(buffer);
+                const minimumOffset = Math.max(0, bytes.length - 65557);
+                let endOfDirectory = -1;
+                for (let offset = bytes.length - 22; offset >= minimumOffset; offset -= 1) {
+                  if (readZipUint32(view, offset) === 0x06054b50) {
+                    endOfDirectory = offset;
+                    break;
+                  }
+                }
+                if (endOfDirectory < 0) {
+                  throw new Error("קובץ הפרסים אינו קובץ Excel תקין.");
+                }
+                const entryCount = readZipUint16(view, endOfDirectory + 10);
+                const centralDirectoryOffset = readZipUint32(view, endOfDirectory + 16);
+                if (entryCount > 128 || centralDirectoryOffset >= bytes.length) {
+                  throw new Error("קובץ הפרסים אינו נתמך או מכיל יותר מדי קבצים פנימיים.");
+                }
+                const entries = new Map();
+                let cursor = centralDirectoryOffset;
+                let totalExtractedBytes = 0;
+                for (let index = 0; index < entryCount; index += 1) {
+                  if (cursor + 46 > bytes.length || readZipUint32(view, cursor) !== 0x02014b50) {
+                    throw new Error("מבנה קובץ הפרסים אינו תקין.");
+                  }
+                  const compressionMethod = readZipUint16(view, cursor + 10);
+                  const compressedSize = readZipUint32(view, cursor + 20);
+                  const uncompressedSize = readZipUint32(view, cursor + 24);
+                  const fileNameLength = readZipUint16(view, cursor + 28);
+                  const extraLength = readZipUint16(view, cursor + 30);
+                  const commentLength = readZipUint16(view, cursor + 32);
+                  const localHeaderOffset = readZipUint32(view, cursor + 42);
+                  const fileNameStart = cursor + 46;
+                  const fileNameEnd = fileNameStart + fileNameLength;
+                  if (fileNameEnd > bytes.length || uncompressedSize > 5 * 1024 * 1024) {
+                    throw new Error("קובץ הפרסים חורג ממגבלת הגודל המותרת.");
+                  }
+                  const fileName = new TextDecoder("utf-8").decode(bytes.slice(fileNameStart, fileNameEnd));
+                  totalExtractedBytes += uncompressedSize;
+                  if (totalExtractedBytes > 8 * 1024 * 1024 || localHeaderOffset + 30 > bytes.length || readZipUint32(view, localHeaderOffset) !== 0x04034b50) {
+                    throw new Error("קובץ הפרסים חורג ממגבלת הגודל המותרת.");
+                  }
+                  const localNameLength = readZipUint16(view, localHeaderOffset + 26);
+                  const localExtraLength = readZipUint16(view, localHeaderOffset + 28);
+                  const payloadStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+                  const payloadEnd = payloadStart + compressedSize;
+                  if (payloadEnd > bytes.length) {
+                    throw new Error("מבנה קובץ הפרסים אינו תקין.");
+                  }
+                  entries.set(fileName, await inflateZipEntry(bytes.slice(payloadStart, payloadEnd), compressionMethod));
+                  cursor = fileNameEnd + extraLength + commentLength;
+                }
+                return entries;
+              }
+
+              function parseXlsxSharedStrings(xml) {
+                const values = [];
+                String(xml || "").match(/<si(?:\\s[^>]*)?>([\\s\\S]*?)<\\/si>/g)?.forEach((item) => {
+                  const text = [...item.matchAll(/<t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/t>/g)].map((match) => decodeXmlEntities(match[1])).join("");
+                  values.push(text);
+                });
+                return values;
+              }
+
+              function spreadsheetColumnIndex(reference) {
+                const letters = String(reference || "").match(/[A-Z]+/i)?.[0] || "";
+                return [...letters.toUpperCase()].reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+              }
+
+              function parseXlsxSheet(xml, sharedStrings) {
+                const matrix = [];
+                String(xml || "").match(/<row(?:\\s[^>]*)?>([\\s\\S]*?)<\\/row>/g)?.forEach((rowXml) => {
+                  const row = [];
+                  [...rowXml.matchAll(/<c\\s+([^>]*)>([\\s\\S]*?)<\\/c>/g)].forEach((match) => {
+                    const attributes = match[1] || "";
+                    const cellXml = match[2] || "";
+                    const reference = attributes.match(/\\br="([^"]+)"/)?.[1] || "";
+                    const type = attributes.match(/\\bt="([^"]+)"/)?.[1] || "";
+                    const column = spreadsheetColumnIndex(reference);
+                    const rawValue = cellXml.match(/<v>([\\s\\S]*?)<\\/v>/)?.[1] || "";
+                    const inlineValue = [...cellXml.matchAll(/<t(?:\\s[^>]*)?>([\\s\\S]*?)<\\/t>/g)].map((value) => decodeXmlEntities(value[1])).join("");
+                    row[Math.max(0, column)] = type === "s" ? (sharedStrings[Number(rawValue)] || "") : (inlineValue || decodeXmlEntities(rawValue));
+                  });
+                  matrix.push(row);
+                });
+                return matrix;
+              }
+
+              async function parseXlsxMatrix(file) {
+                const entries = await readXlsxEntries(await file.arrayBuffer());
+                const decoder = new TextDecoder("utf-8");
+                const sharedStrings = parseXlsxSharedStrings(decoder.decode(entries.get("xl/sharedStrings.xml") || new Uint8Array()));
+                const sheetName = [...entries.keys()].filter((name) => /^xl\\/worksheets\\/sheet\\d+\\.xml$/i.test(name)).sort()[0];
+                if (!sheetName) {
+                  throw new Error("לא נמצא גיליון נתונים בקובץ הפרסים.");
+                }
+                return parseXlsxSheet(decoder.decode(entries.get(sheetName)), sharedStrings);
+              }
+
               async function loadPrizeModelFromFile(file) {
                 if (file.name.toLowerCase().endsWith(".csv")) {
                   const text = await file.text();
                   return buildPrizeModelFromMatrix(parseCsv(text));
                 }
-
-                const buffer = await file.arrayBuffer();
-                const XLSX = await import(XLSX_MODULE_URL);
-                const workbook = XLSX.read(buffer, { type: "array" });
-                const firstSheetName = workbook.SheetNames[0];
-                const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], {
-                  header: 1,
-                  raw: false,
-                  defval: "",
-                });
-                return buildPrizeModelFromMatrix(matrix);
+                return buildPrizeModelFromMatrix(await parseXlsxMatrix(file));
               }
 
               async function applyPrizeModelUpload(file, options = {}) {

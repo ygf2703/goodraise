@@ -35,6 +35,22 @@ import {
 
 const JSON_METHODS = new Set(["POST", "PUT", "PATCH"]);
 
+// Audit history is useful, but an unavailable audit store must never block a
+// successful database operation such as importing an ambassador directory.
+async function appendAuditEventSafely(event) {
+  try {
+    await appendAuditEvent(event);
+  } catch (error) {
+    console.error("audit_event_write_failed", {
+      action: event.action,
+      outcome: event.outcome,
+      organizationId: event.organizationId,
+      campaignId: event.campaignId,
+      message: error instanceof Error ? error.message : "Unknown audit error",
+    });
+  }
+}
+
 function matchScopedCampaignRoute(pathname, suffix = "") {
   const escapedSuffix = suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const expression = new RegExp(`^/api/organizations/([^/]+)/campaigns/([^/]+)${escapedSuffix}$`);
@@ -91,7 +107,7 @@ async function importCampaignAmbassadors(request, payload, scope) {
       importedBy: access.auth.email,
       sourceLabel: payload.sourceLabel || "ambassador-registration-csv",
     });
-    await appendAuditEvent({
+    await appendAuditEventSafely({
       user: access.auth.email,
       role: access.auth.role,
       organizationId: access.organization.id,
@@ -108,7 +124,7 @@ async function importCampaignAmbassadors(request, payload, scope) {
   } catch (error) {
     const status = error instanceof IngestHttpError ? error.status : 500;
     const message = error instanceof IngestHttpError ? error.message : "ייבוא השגרירים נכשל.";
-    await appendAuditEvent({
+    await appendAuditEventSafely({
       user: access.auth.email,
       role: access.auth.role,
       organizationId: access.organization.id,
