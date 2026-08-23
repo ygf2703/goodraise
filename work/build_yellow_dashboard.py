@@ -2218,6 +2218,74 @@ def build_fragment(
               gap: var(--space-4);
             }
 
+            #yellow-dashboard-root .daily-winners-table-wrap {
+              overflow-x: auto;
+              border: 1px solid rgba(17, 29, 74, 0.1);
+              border-radius: var(--radius-lg);
+              background: var(--white);
+            }
+
+            #yellow-dashboard-root .daily-winners-table {
+              width: 100%;
+              min-width: 760px;
+              border-collapse: collapse;
+              font-variant-numeric: tabular-nums;
+            }
+
+            #yellow-dashboard-root .daily-winners-table th,
+            #yellow-dashboard-root .daily-winners-table td {
+              padding: 0.85rem 1rem;
+              text-align: right;
+              border-bottom: 1px solid rgba(17, 29, 74, 0.08);
+              vertical-align: middle;
+            }
+
+            #yellow-dashboard-root .daily-winners-table th {
+              color: var(--navy-950);
+              background: rgba(17, 29, 74, 0.045);
+              font-size: 0.86rem;
+              font-weight: 800;
+              white-space: nowrap;
+            }
+
+            #yellow-dashboard-root .daily-winners-table tbody tr:nth-child(even) {
+              background: rgba(246, 247, 250, 0.72);
+            }
+
+            #yellow-dashboard-root .daily-winners-table tbody tr:hover {
+              background: rgba(255, 242, 173, 0.28);
+            }
+
+            #yellow-dashboard-root .daily-winners-table tbody tr:last-child td {
+              border-bottom: 0;
+            }
+
+            #yellow-dashboard-root .daily-winner-deals {
+              display: block;
+              margin-top: 2px;
+              color: var(--text-muted);
+              font-size: 0.82rem;
+              font-weight: 500;
+            }
+
+            #yellow-dashboard-root .daily-winner-status {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              padding: 0.35rem 0.62rem;
+              border-radius: 999px;
+              background: var(--navy-950);
+              color: var(--yolk-500);
+              font-size: 0.82rem;
+              font-weight: 800;
+              white-space: nowrap;
+            }
+
+            #yellow-dashboard-root .daily-winner-status.is-pending {
+              background: rgba(17, 29, 74, 0.08);
+              color: var(--text-muted);
+            }
+
             #yellow-dashboard-root .prize-page-layout {
               display: grid;
               grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
@@ -7579,7 +7647,7 @@ def build_fragment(
               }
 
               function computeDailyWinners(referenceRows) {
-                const projectDates = state.meta.projectDates?.length ? state.meta.projectDates : state.meta.uniqueDates || [];
+                const projectDates = (state.meta.projectDates?.length ? state.meta.projectDates : state.meta.uniqueDates || []).slice(0, 10);
                 const groupedByDate = new Map();
                 referenceRows.forEach((row) => {
                   const dateKey = row.date;
@@ -7603,6 +7671,7 @@ def build_fragment(
                 const usedAmbassadors = new Set();
                 return projectDates.map((dateKey, index) => {
                   const candidates = Array.from((groupedByDate.get(dateKey) || new Map()).values())
+                    .filter((candidate) => candidate.total >= 20)
                     .sort((left, right) => {
                       if (right.total !== left.total) {
                         return right.total - left.total;
@@ -7612,7 +7681,9 @@ def build_fragment(
                       }
                       return left.ambassador.localeCompare(right.ambassador, "he");
                     });
-                  const uniqueCandidate = candidates.find((candidate) => !usedAmbassadors.has(candidate.ambassador)) || candidates[0] || null;
+                  // A campaign ambassador may go on the field only once. When the daily
+                  // leader has already been selected, advance to the next eligible person.
+                  const uniqueCandidate = candidates.find((candidate) => !usedAmbassadors.has(candidate.ambassador)) || null;
                   if (uniqueCandidate) {
                     usedAmbassadors.add(uniqueCandidate.ambassador);
                   }
@@ -7620,6 +7691,8 @@ def build_fragment(
                     date: dateKey,
                     dayNumber: index + 1,
                     winner: uniqueCandidate,
+                    dailyRank: uniqueCandidate ? candidates.indexOf(uniqueCandidate) + 1 : null,
+                    fieldPosition: uniqueCandidate ? usedAmbassadors.size : null,
                   };
                 });
               }
@@ -8449,36 +8522,48 @@ def build_fragment(
                   ? `
                       <div class="dashboard-section">
                         <div class="section-head">
-                          <h3>מנצחי הימים / עולים לדשא</h3>
-                          <div class="text-small text-muted">לכל יום קלנדרי נבחר/ת השגריר/ה שגייס/ה הכי הרבה בין 00:00 ל-23:59. אם אותו שגריר כבר זכה ביום אחר, מוצג/ת הבא/ה אחריו/ה.</div>
+                          <h3>טבלת דירוג יומית - עולים לדשא</h3>
+                          <div class="text-small text-muted">עד עשרה עולים שונים: בכל יום נבחר/ת המוביל/ה היומי/ת. מי שכבר עלה/תה לדשא ביום קודם מדולג/ת והבא/ה בדירוג נבחר/ת במקומו/ה.</div>
                         </div>
-                        <div class="daily-winners-grid">
-                          ${dailyWinners
-                            .map((item) => {
-                              return item.winner
-                                ? `
-                                    <article class="daily-winner-card">
-                                      <div class="daily-winner-head">
-                                        <span class="daily-winner-day">יום ${escapeHtml(String(item.dayNumber))}</span>
-                                        <span class="daily-winner-date">${escapeHtml(formatDate(item.date))}</span>
-                                      </div>
-                                      <div class="daily-winner-name">${escapeHtml(item.winner.ambassador)}</div>
-                                      <div class="daily-winner-amount">${escapeHtml(formatAmount(item.winner.total))}</div>
-                                      <div class="text-small text-muted">${escapeHtml(formatNumber(item.winner.deals))} עסקאות באותו יום</div>
-                                    </article>
-                                  `
-                                : `
-                                    <article class="daily-winner-card">
-                                      <div class="daily-winner-head">
-                                        <span class="daily-winner-day">יום ${escapeHtml(String(item.dayNumber))}</span>
-                                        <span class="daily-winner-date">${escapeHtml(formatDate(item.date))}</span>
-                                      </div>
-                                      <div class="daily-winner-name">עדיין אין מנצח/ת ליום הזה</div>
-                                      <div class="text-small text-muted">ברגע שייקלטו עסקאות ליום הזה, המוביל/ה יוצג/תוצג כאן.</div>
-                                    </article>
+                        <div class="daily-winners-table-wrap">
+                          <table class="daily-winners-table">
+                            <thead>
+                              <tr>
+                                <th scope="col">יום</th>
+                                <th scope="col">תאריך</th>
+                                <th scope="col">מוביל/ה יומי/ת</th>
+                                <th scope="col">דירוג יומי</th>
+                                <th scope="col">גיוס יומי</th>
+                                <th scope="col">סטטוס</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              ${dailyWinners
+                                .map((item) => {
+                                  const winner = item.winner;
+                                  return `
+                                    <tr>
+                                      <td><span class="daily-winner-day">יום ${escapeHtml(String(item.dayNumber))}</span></td>
+                                      <td>${escapeHtml(formatDate(item.date))}</td>
+                                      <td>
+                                        <strong>${escapeHtml(winner ? winner.ambassador : "אין עדיין מועמד/ת חדש/ה")}</strong>
+                                        ${winner ? `<span class="daily-winner-deals">${escapeHtml(formatNumber(winner.deals))} עסקאות</span>` : ""}
+                                      </td>
+                                      <td>${winner ? `#${escapeHtml(String(item.dailyRank))}` : "-"}</td>
+                                      <td>${winner ? escapeHtml(formatAmount(winner.total)) : "-"}</td>
+                                      <td>
+                                        ${
+                                          winner
+                                            ? `<span class="daily-winner-status">עולה לדשא #${escapeHtml(String(item.fieldPosition))}</span>`
+                                            : `<span class="daily-winner-status is-pending">ממתין לנתונים</span>`
+                                        }
+                                      </td>
+                                    </tr>
                                   `;
-                            })
-                            .join("")}
+                                })
+                                .join("")}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     `
