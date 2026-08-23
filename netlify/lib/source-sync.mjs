@@ -13,7 +13,7 @@ import { hasConfiguredRelationalIngest, ingestCampaignRecords } from "./postgres
 
 // Bump this only when accepted source formats change. It makes a previously
 // rejected but unchanged sheet eligible for one safe re-processing pass.
-const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-23-google-formats-v1";
+const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-23-google-transaction-columns-v2";
 
 function normalizeGoogleSheetsSyncState(config, patch = {}) {
   return normalizeSourceConfig(

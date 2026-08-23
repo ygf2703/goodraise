@@ -42,3 +42,19 @@ test("normalizes formatted Hebrew Google Sheets donation rows", () => {
   assert.equal(record["Ambassador name"], "שגריר בדיקה");
   assert.equal(getDonationRecordValidationError(record), "");
 });
+
+test("normalizes the active Google Sheets transaction column names", () => {
+  const record = normalizeExternalRecord({
+    transaction_id: "live-sheet-001",
+    transaction_datetime: "23/08/2026 09:10",
+    transaction_amount: "730",
+    ambassador_name: "שגריר בדיקה",
+    ambassador_email: "ambassador@example.test",
+  });
+
+  assert.equal(record.id, "live-sheet-001");
+  assert.equal(record.created_at, "23/08/2026 09:10");
+  assert.equal(record.total, "730");
+  assert.equal(record["Ambassador name"], "שגריר בדיקה");
+  assert.equal(getDonationRecordValidationError(record), "");
+});

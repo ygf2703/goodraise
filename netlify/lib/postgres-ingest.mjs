@@ -35,6 +35,12 @@ const CSV_FIELD_NAMES = [
 ];
 
 const CSV_FIELD_ALIASES = {
+  transaction_id: "id",
+  transactionId: "id",
+  transaction_datetime: "created_at",
+  transactionDateTime: "created_at",
+  transaction_amount: "total",
+  transactionAmount: "total",
   ambassador_name: "Ambassador name",
   ambassadorName: "Ambassador name",
   ambassador_email: "Ambassador email",
@@ -57,13 +63,13 @@ const CSV_FIELD_ALIASES = {
 // Keep this translation at ingestion time so the canonical database schema
 // remains unchanged for every source.
 const HUMAN_FIELD_ALIASES = {
-  id: ["transaction id", "order id", "donation id", "מזהה", "מזהה עסקה", "מספר עסקה", "מספר הזמנה", "מספר תרומה"],
-  created_at: ["date", "date time", "datetime", "created at", "transaction date", "donation date", "תאריך", "תאריך ושעה", "מועד עסקה", "תאריך עסקה", "תאריך תרומה"],
+  id: ["transaction id", "transaction_id", "order id", "donation id", "מזהה", "מזהה עסקה", "מספר עסקה", "מספר הזמנה", "מספר תרומה"],
+  created_at: ["date", "date time", "datetime", "created at", "transaction date", "transaction datetime", "transaction_datetime", "donation date", "תאריך", "תאריך ושעה", "מועד עסקה", "תאריך עסקה", "תאריך תרומה"],
   full_name: ["name", "donor", "donor name", "שם מלא", "שם התורם", "שם התורמת", "תורם", "תורמת"],
   reward: ["reward", "gift", "שי", "תגמול", "פרס"],
   price: ["price", "מחיר"],
   quantity: ["quantity", "qty", "כמות"],
-  total: ["amount", "total amount", "donation amount", "transaction amount", "סכום", "סכום תרומה", "סכום עסקה", "סהכ", "סך הכל", "סכום כולל"],
+  total: ["amount", "total amount", "donation amount", "transaction amount", "transaction_amount", "סכום", "סכום תרומה", "סכום עסקה", "סהכ", "סך הכל", "סכום כולל"],
   currencyname: ["currency", "מטבע"],
   phone: ["phone", "mobile", "טלפון", "נייד", "מספר טלפון"],
   email: ["email", "e-mail", "mail", "מייל", "דואל", "דוא ל", "כתובת מייל"],
