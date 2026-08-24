@@ -6212,7 +6212,7 @@ def build_fragment(
                 try {
                   const { response, payload } = await authRequest(AUTH_CONFIG.statusEndpoint);
                   state.auth.backendAvailable = response.ok;
-                  if (response.ok && payload?.authenticated && payload?.email) {
+              if (response.ok && payload?.authenticated && payload?.email) {
                     setAuthenticatedSession(payload.email);
                     const scope = resolvePreferredCampaignScope(
                       payload,
@@ -10999,12 +10999,18 @@ def build_fragment(
                           : getActiveCampaignIdentity()
                       );
                       applyServerScope(effectivePayload, scope);
-                      try {
-                        await loadProtectedManagerData(scope, { includeCampaignBuilder: false });
-                        syncSourceAutoRefresh();
-                      } catch (datasetError) {
-                        setImportMessage(datasetError?.message || "הכניסה הצליחה, אך טעינת הנתונים המוגנים נכשלה. אפשר להעלות קובץ עסקאות ידנית.", "warning");
-                      }
+              try {
+                await loadProtectedManagerData(scope, { includeCampaignBuilder: false });
+                syncSourceAutoRefresh();
+              } catch (datasetError) {
+                const loadedPublicDataset = await loadPublicDataset(scope).catch(() => false);
+                setImportMessage(
+                  loadedPublicDataset
+                    ? "טעינת נתוני הניהול נכשלה זמנית. מוצגים נתוני אמת עדכניים ממקור הקמפיין ללא פרטי תורמים."
+                    : datasetError?.message || "הכניסה הצליחה, אך טעינת נתוני הקמפיין נכשלה.",
+                  "warning"
+                );
+              }
                       setSetupMode(false);
                       elements.loginPassword.value = "";
                       if (elements.loginPasswordConfirm) {
