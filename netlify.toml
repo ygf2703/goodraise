@@ -10,6 +10,11 @@
   directory = "netlify/functions"
   included_files = ["netlify/data/**"]
 
+# Keep the schedule in the deployment manifest so Netlify always registers this
+# worker as a Scheduled Function, including when the function bundle changes.
+[functions."google-sheets-sync"]
+  schedule = "*/2 * * * *"
+
 [[headers]]
   for = "/*"
   [headers.values]
