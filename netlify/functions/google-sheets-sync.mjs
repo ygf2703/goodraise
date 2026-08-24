@@ -14,5 +14,6 @@ export default async () => {
 };
 
 export const config = {
-  schedule: "*/5 * * * *",
+  // GoodRaise keeps live campaign dashboards current without requiring a manager action.
+  schedule: "*/2 * * * *",
 };

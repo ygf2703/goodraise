@@ -223,7 +223,7 @@ export function defaultSourceConfig() {
       range: "",
       accessMode: "public_csv",
       syncEnabled: true,
-      syncIntervalMinutes: 5,
+      syncIntervalMinutes: 2,
       fieldMapText: JSON.stringify(getDefaultSourceFieldMap(), null, 2),
       lastSyncedAt: "",
       lastSuccessfulSyncAt: "",

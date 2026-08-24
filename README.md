@@ -47,7 +47,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - File upload for base campaign CSV
 - Source-mode switch between manual file upload, a backend-managed external API connection, and Google Sheets synchronization
 - Secure admin-side API connector with saved endpoint, method, response format, optional bearer token, custom headers, and JSON field mapping
-- Campaign-scoped Google Sheets connector with public CSV mode or service-account mode, checksum-based change detection, and scheduled 5-minute sync into PostgreSQL
+- Campaign-scoped Google Sheets connector with public CSV mode or service-account mode, checksum-based change detection, and scheduled 2-minute sync into PostgreSQL
 - One-time prelaunch reset scheduler that can clear campaign donation data before go-live while preserving campaign setup
 - Manual pull plus optional timed auto-refresh from the fundraising platform API while managers monitor the campaign
 - File upload for comparison CSV
@@ -282,7 +282,7 @@ This repository now includes the minimum files Netlify needs in order to actuall
   - `/api/auth/login`
   - `/api/auth/setup`
   - `/api/auth/logout`
-- `netlify/functions/google-sheets-sync.mjs` runs every 5 minutes and syncs all campaigns whose source mode is `google_sheets` and `syncEnabled=true`
+- `netlify/functions/google-sheets-sync.mjs` runs every 2 minutes and syncs all campaigns whose source mode is `google_sheets` and `syncEnabled=true`
 - `netlify/functions/prelaunch-reset.mjs` runs every 5 minutes and executes a one-time reset when the configured launch-reset window arrives
 - the build writes the protected admin dataset to `netlify/data/admin-dataset.json` for authenticated manager fetches
 - manager passwords and sessions are persisted with Netlify Blobs
@@ -311,7 +311,7 @@ Recommended flow for the next project:
    - a published/public Google Sheets link
    - or a spreadsheet ID plus `service_account` mode for a private sheet
 3. Keep the Google sheet columns aligned with the known CSV field names already used by GoodRaise.
-4. Let the scheduled sync pull every 5 minutes into PostgreSQL.
+4. Let the scheduled sync pull every 2 minutes into PostgreSQL.
 5. The dashboard then reflects the data from the stored campaign dataset snapshot, which is rebuilt from the database-backed sync process.
 
 Important behavior:
