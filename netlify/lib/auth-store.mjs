@@ -881,7 +881,9 @@ export async function getRuntimeHealth() {
     service: "goodraise-multi-tenant-auth",
     application: {
       status: "ok",
-      runtime: process.env.NETLIFY || process.env.NETLIFY_LOCAL ? "netlify" : "local-dev-store",
+      runtime: process.env.NETLIFY || process.env.NETLIFY_LOCAL ? "netlify" : "local",
+      persistenceBackend: usesPostgresAuthStore() ? "postgresql" : "platform-store",
+      googleSheetsServiceAccountConfigured: Boolean(String(process.env.GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON || "").trim()),
     },
     persistence: {
       status: "ok",
