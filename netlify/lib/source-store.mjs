@@ -113,6 +113,27 @@ function parseGoogleValues(values) {
   });
 }
 
+function normalizeGoogleHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLocaleLowerCase("he-IL")
+    .replace(/["'`]/g, "")
+    .replace(/[()/:\\_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function scoreGoogleSheetValues(values) {
+  const headers = Array.isArray(values?.[0]) ? values[0].map(normalizeGoogleHeader) : [];
+  const contains = (...needles) => needles.some((needle) => headers.some((header) => header === needle || header.includes(needle)));
+  let score = 0;
+  if (contains("id", "transaction", "עסקה", "תרומה", "הזמנה")) score += 2;
+  if (contains("date", "created", "תאריך", "מועד")) score += 4;
+  if (contains("amount", "total", "סכום")) score += 4;
+  if (contains("ambassador", "שגריר")) score += 2;
+  if (contains("donor", "תורם", "שם מלא")) score += 1;
+  return score;
+}
+
 function getValueByPath(record, path) {
   return String(path || "")
     .split(".")
@@ -257,8 +278,8 @@ function extractSpreadsheetGid(value) {
   }
 }
 
-function buildGoogleSheetsSourceLabel(config) {
-  const sheetName = String(config?.sheetName || "").trim();
+function buildGoogleSheetsSourceLabel(config, resolvedSheetName = "") {
+  const sheetName = String(resolvedSheetName || config?.sheetName || "").trim();
   const spreadsheetId = String(config?.spreadsheetId || "").trim() || extractSpreadsheetId(config?.spreadsheetUrl);
   if (sheetName) {
     return `Google Sheets · ${sheetName}`;
@@ -360,35 +381,83 @@ async function getGoogleServiceAccountAccessToken() {
 async function fetchGoogleSheetsByServiceAccount(config) {
   const spreadsheetUrl = String(config?.spreadsheetUrl || "").trim();
   const spreadsheetId = String(config?.spreadsheetId || "").trim() || extractSpreadsheetId(spreadsheetUrl);
-  const range = String(config?.range || "").trim() || (String(config?.sheetName || "").trim() ? `${String(config.sheetName).trim()}!A:ZZ` : "");
+  const configuredSheetName = String(config?.sheetName || "").trim();
+  const configuredRange = String(config?.range || "").trim();
+  const range = configuredRange || (configuredSheetName ? `${configuredSheetName}!A:ZZ` : "A:ZZ");
   if (!spreadsheetId) {
     throw new Error("יש להגדיר Spreadsheet ID או קישור תקין ל-Google Sheets.");
   }
-  if (!range) {
-    throw new Error("במצב service account יש להגדיר לפחות Sheet Name או Range.");
-  }
-
   const token = await getGoogleServiceAccountAccessToken();
-  const endpoint = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?majorDimension=ROWS`;
-  const { response, text, finalUrl } = await safeFetchUrl(endpoint, {
-    method: "GET",
-    headers: {
-      Accept: "application/json, text/plain, */*",
-      Authorization: `Bearer ${token}`,
-    },
-    timeoutMs: 15000,
-    maxBytes: 5 * 1024 * 1024,
-    maxRedirects: 1,
-  });
-  if (!response.ok) {
-    throw new Error(`Google Sheets API החזיר שגיאה ${response.status}.`);
+  const requestHeaders = {
+    Accept: "application/json, text/plain, */*",
+    Authorization: `Bearer ${token}`,
+  };
+  const fetchValues = async (requestedRange) => {
+    const endpoint = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(requestedRange)}?majorDimension=ROWS`;
+    const { response, text, finalUrl } = await safeFetchUrl(endpoint, {
+      method: "GET",
+      headers: requestHeaders,
+      timeoutMs: 15000,
+      maxBytes: 5 * 1024 * 1024,
+      maxRedirects: 1,
+    });
+    if (!response.ok) {
+      throw new Error(`Google Sheets API החזיר שגיאה ${response.status}.`);
+    }
+    return { payload: JSON.parse(text || "{}"), finalUrl };
+  };
+
+  let selectedRange = range;
+  let resolvedSheetName = configuredSheetName;
+  let { payload, finalUrl } = await fetchValues(selectedRange);
+
+  // If the campaign owner did not select a tab, stay within the approved
+  // spreadsheet and select the tab that actually contains transaction headers.
+  if (!configuredSheetName && !configuredRange.includes("!")) {
+    try {
+      const metadataEndpoint = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties(title,index)`;
+      const metadataResponse = await safeFetchUrl(metadataEndpoint, {
+        method: "GET",
+        headers: requestHeaders,
+        timeoutMs: 10000,
+        maxBytes: 128 * 1024,
+        maxRedirects: 1,
+      });
+      const metadata = metadataResponse.response.ok ? JSON.parse(metadataResponse.text || "{}") : {};
+      const sheetNames = Array.isArray(metadata?.sheets)
+        ? metadata.sheets.map((sheet) => String(sheet?.properties?.title || "").trim()).filter(Boolean).slice(0, 20)
+        : [];
+      const candidates = [{ values: payload?.values || [], finalUrl, sheetName: "" }];
+      for (const sheetName of sheetNames) {
+        const candidate = await fetchValues(`${sheetName}!A:ZZ`);
+        candidates.push({ values: candidate.payload?.values || [], finalUrl: candidate.finalUrl, sheetName });
+      }
+      const best = candidates
+        .map((candidate) => ({ ...candidate, score: scoreGoogleSheetValues(candidate.values) }))
+        .sort((left, right) => right.score - left.score || right.values.length - left.values.length)[0];
+      const defaultScore = scoreGoogleSheetValues(payload?.values || []);
+      const defaultRowCount = Array.isArray(payload?.values) ? payload.values.length : 0;
+      if (
+        best &&
+        best.sheetName &&
+        (best.score > defaultScore || (best.score === defaultScore && best.values.length > defaultRowCount))
+      ) {
+        payload = { values: best.values };
+        finalUrl = best.finalUrl;
+        resolvedSheetName = best.sheetName;
+        selectedRange = `${best.sheetName}!A:ZZ`;
+      }
+    } catch {
+      // The normal default-tab request above remains a safe fallback.
+    }
   }
-  const payload = JSON.parse(text || "{}");
   const rawRows = parseGoogleValues(payload?.values || []);
   return {
     payload,
     rawRows,
     finalUrl,
+    resolvedSheetName,
+    resolvedRange: selectedRange,
     contentHash: sha256(stableStringify(payload?.values || [])),
   };
 }
@@ -478,7 +547,7 @@ export async function fetchConfiguredSource(config) {
         ? await fetchGoogleSheetsByServiceAccount(normalized.googleSheets)
         : await fetchGoogleSheetsByPublicCsv(normalized.googleSheets);
     format = normalized.googleSheets.accessMode === "service_account" ? "json" : "csv";
-    sourceLabel = buildGoogleSheetsSourceLabel(normalized.googleSheets);
+    sourceLabel = buildGoogleSheetsSourceLabel(normalized.googleSheets, fetchedSource.resolvedSheetName);
   } else {
     throw new Error("מקור הנתונים הפעיל מוגדר כקובץ ידני ולא כמקור חיצוני.");
   }
