@@ -15,6 +15,7 @@ import {
   normalizeStableId,
 } from "./multi-tenant-model.mjs";
 import { createPlatformStore } from "./platform-store.mjs";
+import { normalizePostgresConnectionString, shouldRunRuntimeSchemaMigrations } from "./postgres-connection.mjs";
 import {
   appendAuditEvent,
   buildCampaignContext,
@@ -87,7 +88,7 @@ function usesPostgresAuthStore() {
 async function getPostgresPool() {
   if (!postgresPoolPromise) {
     postgresPoolPromise = import("pg").then(({ Pool }) => {
-      const connectionString = getDatabaseUrl();
+      const connectionString = normalizePostgresConnectionString(getDatabaseUrl());
       if (!connectionString) {
         throw new Error("GOODRAISE_DATABASE_URL is not configured.");
       }
@@ -111,7 +112,11 @@ async function ensurePostgresAuthSchema() {
       const pool = await getPostgresPool();
       const client = await pool.connect();
       try {
-        await client.query(POSTGRES_AUTH_SCHEMA_SQL);
+        if (shouldRunRuntimeSchemaMigrations()) {
+          await client.query(POSTGRES_AUTH_SCHEMA_SQL);
+        } else {
+          await client.query("SELECT 1");
+        }
       } finally {
         client.release();
       }

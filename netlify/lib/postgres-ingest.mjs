@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { getCampaignDataset, saveCampaignDataset } from "./campaign-repositories.mjs";
 import { normalizeEmail } from "./multi-tenant-model.mjs";
+import { normalizePostgresConnectionString, shouldRunRuntimeSchemaMigrations } from "./postgres-connection.mjs";
 
 let postgresPoolPromise = null;
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -942,7 +943,7 @@ export function validateIngestApiKey(request) {
 async function getPostgresPool() {
   if (!postgresPoolPromise) {
     postgresPoolPromise = import("pg").then(({ Pool }) => {
-      const connectionString = String(process.env.GOODRAISE_DATABASE_URL || process.env.DATABASE_URL || "").trim();
+      const connectionString = normalizePostgresConnectionString(process.env.GOODRAISE_DATABASE_URL || process.env.DATABASE_URL);
       if (!connectionString) {
         throw new IngestHttpError(503, "GOODRAISE_DATABASE_URL is not configured on the server.");
       }
@@ -958,7 +959,11 @@ async function getPostgresPool() {
 }
 
 async function ensureSchema(client) {
-  await client.query(SCHEMA_SQL);
+  if (shouldRunRuntimeSchemaMigrations()) {
+    await client.query(SCHEMA_SQL);
+    return;
+  }
+  await client.query("SELECT 1");
 }
 
 async function resolveScope(client, organizationIdentifier, campaignIdentifier) {

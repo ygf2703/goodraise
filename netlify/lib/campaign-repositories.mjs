@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 
 import { createPlatformStore } from "./platform-store.mjs";
+import { normalizePostgresConnectionString, shouldRunRuntimeSchemaMigrations } from "./postgres-connection.mjs";
 import {
   DEFAULT_PLATFORM_ORGANIZATION_ID,
   DEFAULT_PLATFORM_ORGANIZATION_SLUG,
@@ -132,7 +133,7 @@ function usesPostgresCampaignStore() {
 async function getPostgresPool() {
   if (!postgresPoolPromise) {
     postgresPoolPromise = import("pg").then(({ Pool }) => {
-      const connectionString = getDatabaseUrl();
+      const connectionString = normalizePostgresConnectionString(getDatabaseUrl());
       if (!connectionString) {
         throw new Error("GOODRAISE_DATABASE_URL is not configured.");
       }
@@ -156,7 +157,11 @@ async function ensurePostgresSchema() {
       const pool = await getPostgresPool();
       const client = await pool.connect();
       try {
-        await client.query(POSTGRES_CAMPAIGN_SCHEMA_SQL);
+        if (shouldRunRuntimeSchemaMigrations()) {
+          await client.query(POSTGRES_CAMPAIGN_SCHEMA_SQL);
+        } else {
+          await client.query("SELECT 1");
+        }
       } finally {
         client.release();
       }
