@@ -1475,6 +1475,26 @@ export async function ingestCampaignRecords({
       throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
     }
 
+    // A Google Sheet may be polled by the Netlify scheduler and an open manager
+    // session at the same time. Only one writer may import a campaign at once;
+    // the other run exits immediately rather than waiting on row locks.
+    const lockResult = await client.query(
+      "SELECT pg_try_advisory_xact_lock(hashtext($1)) AS acquired",
+      [`goodraise-google-sheets-sync:${scope.campaign_id}`],
+    );
+    if (!lockResult.rows[0]?.acquired) {
+      await client.query("ROLLBACK");
+      return {
+        ok: true,
+        skipped: true,
+        reason: "sync_in_progress",
+        processedCount: 0,
+        skippedBlankRows,
+        skippedInvalidRows,
+        dataset: { rowCount: 0, sourceLabel },
+      };
+    }
+
     const importChecksum = sha256(
       stableStringify({
         sourceLabel,

@@ -140,6 +140,18 @@ export async function syncCampaignSourceOnce({
     };
   }
 
+  if (syncResult?.skipped && syncResult?.reason === "sync_in_progress") {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "sync_in_progress",
+      sourceLabel: fetched.sourceLabel,
+      fetchedAt: fetched.fetchedAt,
+      rowCount: syncResult?.dataset?.rowCount || 0,
+      message: "סנכרון אחר של אותו קמפיין כבר מתבצע.",
+    };
+  }
+
   if (normalized.mode === "google_sheets") {
     await persistGoogleSheetsSyncState(
       organizationId,
