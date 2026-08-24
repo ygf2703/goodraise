@@ -1495,6 +1495,50 @@ export async function ingestCampaignRecords({
       };
     }
 
+    // A Sheets refresh normally appends a handful of donations to a dataset
+    // that has already been imported. Avoid re-upserting every historic row:
+    // it makes scheduled syncs slow enough to hit serverless time limits.
+    const knownKeysResult = await client.query(
+      `
+        SELECT canonical_event_key
+        FROM goodraise.transactions
+        WHERE campaign_id = $1::uuid
+          AND canonical_event_key = ANY($2::text[])
+      `,
+      [
+        scope.campaign_id,
+        normalizedRecords.map((record) => buildCanonicalEventKey(record)),
+      ],
+    );
+    const knownEventKeys = new Set(knownKeysResult.rows.map((row) => String(row.canonical_event_key || "")));
+    const recordsToWrite = normalizedRecords.filter((record) => !knownEventKeys.has(buildCanonicalEventKey(record)));
+    const unchangedRows = normalizedRecords.length - recordsToWrite.length;
+
+    if (!recordsToWrite.length) {
+      await client.query("COMMIT");
+      const dataset = await rebuildCampaignDatasetSnapshot(scope, sourceLabel, { fetchedAt });
+      return {
+        ok: true,
+        organization: {
+          id: scope.organization_id,
+          slug: scope.organization_slug,
+          name: scope.organization_name,
+        },
+        campaign: {
+          id: scope.campaign_id,
+          slug: scope.campaign_slug,
+          name: scope.campaign_name,
+          status: scope.campaign_status,
+        },
+        importBatch: null,
+        dataset,
+        processedCount: 0,
+        unchangedRows,
+        skippedBlankRows,
+        skippedInvalidRows,
+      };
+    }
+
     const importChecksum = sha256(
       stableStringify({
         sourceLabel,
@@ -1531,7 +1575,7 @@ export async function ingestCampaignRecords({
         importChecksum,
         JSON.stringify(CSV_FIELD_NAMES),
         sourceRecords.length,
-        normalizedRecords.length,
+        recordsToWrite.length,
         skippedBlankRows,
         skippedInvalidRows,
         normalizeText(importedBy) || "google-sheets-sync",
@@ -1539,7 +1583,7 @@ export async function ingestCampaignRecords({
       ],
     );
 
-    for (const [index, record] of normalizedRecords.entries()) {
+    for (const [index, record] of recordsToWrite.entries()) {
       const occurredAt = parseTimestamp(record.created_at);
       const donor = await upsertDonor(client, record);
       const ambassador = await upsertAmbassador(client, scope.organization_id, scope.campaign_id, record);
@@ -1732,7 +1776,8 @@ export async function ingestCampaignRecords({
       skippedInvalidRows,
     },
     dataset,
-    processedCount: normalizedRecords.length,
+    processedCount: recordsToWrite.length,
+    unchangedRows,
     skippedBlankRows,
     skippedInvalidRows,
   };
