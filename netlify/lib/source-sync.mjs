@@ -9,7 +9,7 @@ import {
   saveCampaignSource,
 } from "./campaign-repositories.mjs";
 import { fetchConfiguredSource } from "./source-store.mjs";
-import { hasConfiguredRelationalIngest, ingestCampaignRecords } from "./postgres-ingest.mjs";
+import { hasConfiguredRelationalIngest, ingestCampaignRecords, markCampaignDatasetSnapshotFresh } from "./postgres-ingest.mjs";
 
 // Bump this only when accepted source formats change. It makes a previously
 // rejected but unchanged sheet eligible for one safe re-processing pass.
@@ -79,6 +79,14 @@ export async function syncCampaignSourceOnce({
     String(normalized.googleSheets.lastChecksum || "").trim() === String(fetched.contentHash || "").trim() &&
     String(normalized.googleSheets.lastNormalizerVersion || "").trim() === GOOGLE_SHEETS_NORMALIZER_VERSION
   ) {
+    if (hasConfiguredRelationalIngest()) {
+      await markCampaignDatasetSnapshotFresh({
+        organizationIdentifier: organizationId,
+        campaignIdentifier: campaignId,
+        sourceLabel: fetched.sourceLabel,
+        fetchedAt: fetched.fetchedAt,
+      });
+    }
     await persistGoogleSheetsSyncState(
       organizationId,
       campaignId,
@@ -110,6 +118,7 @@ export async function syncCampaignSourceOnce({
       sourceLabel: fetched.sourceLabel,
       importedBy: triggeredBy,
       requestReference: `${triggeredBy}:${fetched.fetchedAt}`,
+      fetchedAt: fetched.fetchedAt,
       records: fetched.rawRows,
     });
   } else {
@@ -296,6 +305,18 @@ export async function runScheduledGoogleSheetsSync({ triggeredBy = "scheduled-go
         },
       });
     } catch (error) {
+      // Scheduled functions have no browser response. Persist the failure on the
+      // campaign itself so a manager can immediately see why data is stale.
+      await persistGoogleSheetsSyncState(
+        campaign.organizationId,
+        campaign.id,
+        normalized,
+        {
+          lastSyncedAt: new Date().toISOString(),
+          lastStatus: "error",
+          lastMessage: error instanceof Error ? error.message : "google_sheets_sync_failed",
+        },
+      ).catch(() => {});
       summary.errors.push({
         organizationId: campaign.organizationId,
         campaignId: campaign.id,

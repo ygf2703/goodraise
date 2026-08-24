@@ -571,9 +571,15 @@ function buildCampaignDateRange(startAt, endAt) {
   return dates;
 }
 
-export function buildDatasetMeta(rows, campaignScope = {}) {
+export function buildDatasetMeta(rows, campaignScope = {}, snapshot = {}) {
   const uniqueDates = [...new Set(rows.map((row) => row.date).filter(Boolean))].sort();
-  const configuredDates = buildCampaignDateRange(campaignScope.campaign_starts_at, campaignScope.campaign_ends_at);
+  const fetchedAt = String(snapshot.fetchedAt || snapshot.updatedAt || "").trim();
+  const campaignStart = toDateKey(campaignScope.campaign_starts_at);
+  const campaignEnd = toDateKey(campaignScope.campaign_ends_at);
+  const fetchedDate = toDateKey(fetchedAt);
+  // A live dashboard must not present future campaign dates as already covered.
+  const effectiveEnd = fetchedDate && campaignEnd && fetchedDate < campaignEnd ? fetchedDate : campaignEnd;
+  const configuredDates = buildCampaignDateRange(campaignStart, effectiveEnd);
   const projectDates = configuredDates.length ? configuredDates : uniqueDates;
   const defaultFrom = projectDates[0] || "";
   const defaultTo = projectDates[projectDates.length - 1] || "";
@@ -586,6 +592,8 @@ export function buildDatasetMeta(rows, campaignScope = {}) {
     maxDate: defaultTo,
     rowCount: rows.length,
     projectWindowLabel: defaultFrom && defaultTo ? `${defaultFrom} עד ${defaultTo}` : "",
+    fetchedAt,
+    dataThroughAt: fetchedAt,
   };
 }
 
@@ -763,7 +771,7 @@ async function syncCampaignDatasetSnapshot(scope, record, sourceLabel) {
   };
 }
 
-export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "") {
+export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "", options = {}) {
   const pool = await getPostgresPool();
   const client = await pool.connect();
   try {
@@ -791,7 +799,7 @@ export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "") {
     );
     const rows = result.rows.map(buildDatasetRowFromDatabaseRow);
     const currentDataset = (await getCampaignDataset(scope.organization_slug, scope.campaign_slug)) || {};
-    const nextTimestamp = new Date().toISOString();
+    const nextTimestamp = String(options.fetchedAt || "").trim() || new Date().toISOString();
     const nextSourceLabel =
       String(sourceLabel || "").trim() ||
       String(currentDataset.sourceLabel || "").trim() ||
@@ -800,15 +808,51 @@ export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "") {
       organizationId: scope.organization_slug,
       campaignId: scope.campaign_slug,
       rows,
-      meta: buildDatasetMeta(rows, scope),
+      meta: buildDatasetMeta(rows, scope, { fetchedAt: nextTimestamp }),
       sourceLabel: nextSourceLabel,
-      generatedAt: currentDataset.generatedAt || nextTimestamp,
+      generatedAt: nextTimestamp,
       updatedAt: nextTimestamp,
     });
     return {
       rowCount: rows.length,
       sourceLabel: nextSourceLabel,
     };
+  } finally {
+    client.release();
+  }
+}
+
+// An unchanged source still represents a new verified point-in-time read.
+// Update snapshot freshness without reprocessing every transaction.
+export async function markCampaignDatasetSnapshotFresh({
+  organizationIdentifier,
+  campaignIdentifier,
+  sourceLabel = "",
+  fetchedAt = "",
+}) {
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
+  try {
+    await ensureSchema(client);
+    const scope = await resolveScope(client, organizationIdentifier, campaignIdentifier);
+    if (!scope) {
+      throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
+    }
+    const currentDataset = (await getCampaignDataset(scope.organization_slug, scope.campaign_slug)) || { rows: [], meta: {}, sourceLabel: "" };
+    const rows = Array.isArray(currentDataset.rows) ? currentDataset.rows : [];
+    const timestamp = String(fetchedAt || "").trim() || new Date().toISOString();
+    const nextSourceLabel = String(sourceLabel || currentDataset.sourceLabel || "google-sheets").trim();
+    await saveCampaignDataset(scope.organization_slug, scope.campaign_slug, {
+      ...currentDataset,
+      organizationId: scope.organization_slug,
+      campaignId: scope.campaign_slug,
+      rows,
+      meta: buildDatasetMeta(rows, scope, { fetchedAt: timestamp }),
+      sourceLabel: nextSourceLabel,
+      generatedAt: timestamp,
+      updatedAt: timestamp,
+    });
+    return { rowCount: rows.length, sourceLabel: nextSourceLabel, fetchedAt: timestamp };
   } finally {
     client.release();
   }
@@ -1392,6 +1436,7 @@ export async function ingestCampaignRecords({
   sourceLabel = "google-sheets",
   importedBy = "google-sheets-sync",
   requestReference = "",
+  fetchedAt = "",
   records = [],
 }) {
   const sourceRecords = Array.isArray(records) ? records : [];
@@ -1639,7 +1684,7 @@ export async function ingestCampaignRecords({
     client.release();
   }
 
-  const dataset = scope ? await rebuildCampaignDatasetSnapshot(scope, sourceLabel) : { rowCount: 0, sourceLabel };
+  const dataset = scope ? await rebuildCampaignDatasetSnapshot(scope, sourceLabel, { fetchedAt }) : { rowCount: 0, sourceLabel };
   return {
     ok: true,
     organization: {
