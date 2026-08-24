@@ -166,6 +166,12 @@ async function main() {
     const statusBeforePayload = await readJson(statusBefore);
     assert(statusBeforePayload.authenticated === false, "Status before setup should be logged out.");
 
+    const publicContext = await authHandler(new Request("http://localhost/api/public-context"));
+    const publicContextPayload = await readJson(publicContext);
+    assert(publicContext.status === 200, "Public campaign context should be available without manager login.");
+    assert(publicContextPayload.organizationId === "verify-org", "Public context should resolve the active organization.");
+    assert(publicContextPayload.campaignId === "verify-campaign", "Public context should resolve the active campaign.");
+
     const datasetBefore = await authHandler(new Request("http://localhost/api/admin/dataset"));
     const datasetBeforePayload = await readJson(datasetBefore);
     assert(datasetBefore.status === 401, "Admin dataset should be blocked before login.");

@@ -29,12 +29,6 @@
   force = true
 
 [[redirects]]
-  from = "/api/public-context"
-  to = "/.netlify/functions/auth"
-  status = 200
-  force = true
-
-[[redirects]]
   from = "/admin"
   to = "/index.html"
   status = 200

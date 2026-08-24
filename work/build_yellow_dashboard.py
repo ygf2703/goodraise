@@ -6221,7 +6221,19 @@ def build_fragment(
                         : getActiveCampaignIdentity()
                     );
                     applyServerScope(payload, scope);
-                    await loadProtectedManagerData(scope, { includeCampaignBuilder: false });
+                    try {
+                      await loadProtectedManagerData(scope, { includeCampaignBuilder: false });
+                    } catch (error) {
+                      // Never leave an authenticated manager looking at embedded sample data.
+                      const loadedPublicDataset = await loadPublicDataset(scope).catch(() => false);
+                      if (!loadedPublicDataset) {
+                        throw error;
+                      }
+                      setImportMessage(
+                        "טעינת נתוני הניהול נכשלה זמנית. מוצגים כעת נתוני אמת מעודכנים ממקור הקמפיין ללא פרטי תורמים.",
+                        "warning"
+                      );
+                    }
                     syncSourceAutoRefresh();
                   }
                 } catch (_error) {
@@ -11319,7 +11331,9 @@ def build_fragment(
                 setSetupMode(false);
                 applyAmbassadorContextFromUrl();
                 await hydrateAuthSession();
-                if (!isManagerAuthenticated()) {
+                // Public data is always loaded from the live campaign endpoint. The
+                // embedded file is only a startup shell and must never remain visible.
+                if (!state.auth.adminDatasetLoaded) {
                   await loadPublicDataset(getActiveCampaignIdentity()).catch(() => false);
                 }
                 setPage(state.session ? "admin" : "project");
