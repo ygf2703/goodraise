@@ -6579,8 +6579,9 @@ def build_fragment(
                 sourceRefreshTimerId = window.setInterval(async () => {
                   try {
                     if (config.mode === "google_sheets") {
-                      await loadAdminDataset(getActiveCampaignIdentity());
-                      renderAll();
+                      // The manager session is a safe fallback for live campaigns:
+                      // pull the source first, then render the fresh persisted dataset.
+                      await refreshSourceDataFromApi({ silent: true });
                     } else {
                       await refreshSourceDataFromApi({ silent: true });
                     }
@@ -6607,14 +6608,14 @@ def build_fragment(
                 } else {
                   await hydrateSourceConfig(scope);
                 }
-                if (state.sourceConfig.mode === "api") {
+                if (state.sourceConfig.mode === "api" || state.sourceConfig.mode === "google_sheets") {
                   try {
                     return await refreshSourceDataFromApi({ silent: true, render: false, scope });
                   } catch (error) {
                     try {
                       await loadAdminDataset(scope);
                       setImportMessage(
-                        `${error?.message || "משיכת הנתונים מה-API נכשלה."} נטען בינתיים מאגר הבסיס המוגן.`,
+                        `${error?.message || "משיכת הנתונים ממערכת המקור נכשלה."} נטען בינתיים מאגר הבסיס המוגן.`,
                         "warning"
                       );
                       return true;
