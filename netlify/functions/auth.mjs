@@ -31,6 +31,7 @@ import {
   IngestHttpError,
   importAmbassadorRegistrations,
   ingestCampaignRecord,
+  ingestManualContribution,
   validateIngestApiKey,
 } from "../lib/postgres-ingest.mjs";
 
@@ -138,6 +139,57 @@ async function importCampaignAmbassadors(request, payload, scope) {
   }
 }
 
+async function addCampaignManualContribution(request, payload, scope) {
+  const access = await resolveScopedAccess(request, {
+    action: "campaign_update",
+    organizationId: scope.organizationId,
+    campaignId: scope.campaignId,
+    unauthorizedMessage: "נדרשת התחברות מנהל כדי להוסיף הכפלה ידנית.",
+  });
+  if (access.error) {
+    return access.error;
+  }
+
+  try {
+    const result = await ingestManualContribution({
+      organizationIdentifier: access.organization.id,
+      campaignIdentifier: access.campaign.id,
+      enteredBy: payload.enteredBy,
+      amount: payload.amount,
+    });
+    await appendAuditEventSafely({
+      user: access.auth.email,
+      role: access.auth.role,
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      action: "manual_contribution_create",
+      outcome: "success",
+      detail: {
+        transactionId: result.transaction.id,
+        amount: result.transaction.totalAmount,
+        source: "manual-match",
+      },
+    });
+    return jsonResponse(result.created === false ? 200 : 201, {
+      ...result,
+      message: result.created === false ? "ההכפלה כבר קיימת ברשומות." : "ההכפלה נוספה לסכום הקמפיין.",
+    });
+  } catch (error) {
+    const status = error instanceof IngestHttpError ? error.status : 500;
+    const message = error instanceof IngestHttpError ? error.message : "שמירת ההכפלה נכשלה.";
+    await appendAuditEventSafely({
+      user: access.auth.email,
+      role: access.auth.role,
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      action: "manual_contribution_create",
+      outcome: "error",
+      detail: { reason: message },
+    });
+    return jsonResponse(status, { message });
+  }
+}
+
 export default async (request) => {
   await ensureMultiTenantMigration();
   const url = new URL(request.url);
@@ -226,6 +278,12 @@ export default async (request) => {
 
   if (pathname === "/api/admin/source-refresh" && request.method === "POST") {
     return refreshAdminSource(request);
+  }
+
+  const scopedManualContribution = matchScopedCampaignRoute(pathname, "/manual-contributions");
+  if (scopedManualContribution && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return addCampaignManualContribution(request, payload, scopedManualContribution);
   }
 
   const scopedIngest = matchScopedCampaignRoute(pathname, "/ingest");

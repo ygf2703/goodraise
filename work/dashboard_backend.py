@@ -2690,6 +2690,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     SCOPED_SOURCE_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source$")
     SCOPED_SOURCE_REFRESH_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/source/refresh$")
     SCOPED_AMBASSADOR_IMPORT_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/ambassadors/import$")
+    SCOPED_MANUAL_CONTRIBUTION_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/manual-contributions$")
     SCOPED_INGEST_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns/([^/]+)/ingest$")
     SCOPED_CAMPAIGN_LIST_RE = re.compile(r"^/api/organizations/([^/]+)/campaigns$")
 
@@ -2864,6 +2865,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.handle_scoped_ambassador_import(
                 normalize_slug(ambassador_import_match.group(1), "default-org"),
                 normalize_slug(ambassador_import_match.group(2), "campaign"),
+            )
+            return True
+
+        manual_contribution_match = self.SCOPED_MANUAL_CONTRIBUTION_RE.match(path)
+        if method == "POST" and manual_contribution_match:
+            self.handle_scoped_manual_contribution(
+                normalize_slug(manual_contribution_match.group(1), "default-org"),
+                normalize_slug(manual_contribution_match.group(2), "campaign"),
             )
             return True
 
@@ -3556,6 +3565,87 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         }
         self.audit("ambassador_import", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], outcome="success", importedCount=result["importedCount"], duplicateRows=duplicate_rows, skippedRows=len(skipped_rows))
         self.respond_json(HTTPStatus.OK, result)
+
+    def handle_scoped_manual_contribution(self, organization_id: str, campaign_id: str) -> None:
+        auth_context = self.resolve_scoped_access(
+            ROLE_CAMPAIGN_MANAGER,
+            organization_id=organization_id,
+            campaign_id=campaign_id,
+            allow_default=False,
+            require_write=True,
+        )
+        if not auth_context:
+            self.respond_json(HTTPStatus.UNAUTHORIZED, {"message": "נדרשת התחברות מנהל כדי להוסיף הכפלה ידנית."})
+            return
+        if auth_context.get("error"):
+            self.respond_json(auth_context["status"], {"message": auth_context["message"]})
+            return
+
+        payload = self.read_json_body()
+        entered_by = " ".join(str(payload.get("enteredBy") or "").split())
+        try:
+            amount = relational_postgres.parse_decimal(str(payload.get("amount") or "")) if relational_postgres else None
+        except Exception:
+            amount = None
+        if not entered_by:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש להזין את שם המכניס/ה."})
+            return
+        if amount is None or amount <= 0:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": "יש להזין סכום חיובי."})
+            return
+
+        database_url = get_goodraise_database_url()
+        if not database_url or psycopg is None or relational_postgres is None:
+            self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, {"message": "הוספת הכפלה דורשת חיבור PostgreSQL פעיל."})
+            return
+
+        reference = f"manual-match-{uuid.uuid4()}"
+        record = {
+            "id": reference,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "full_name": f"הכפלה - {entered_by}",
+            "total": str(amount),
+            "currencyname": "ILS",
+            "charged_success": "true",
+            "charge_result": "manual_match",
+        }
+        try:
+            with psycopg.connect(database_url) as connection:
+                result = relational_postgres.ingest_external_record(
+                    connection,
+                    auth_context["organizationId"],
+                    auth_context["campaignId"],
+                    record,
+                    source_label="manual-match",
+                    imported_by=auth_context["email"],
+                    request_reference=reference,
+                )
+        except LookupError as exc:
+            self.respond_json(HTTPStatus.NOT_FOUND, {"message": str(exc)})
+            return
+        except ValueError as exc:
+            self.respond_json(HTTPStatus.BAD_REQUEST, {"message": str(exc)})
+            return
+        except Exception:
+            self.audit("manual_contribution_create", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], outcome="error")
+            self.respond_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"message": "שמירת ההכפלה נכשלה."})
+            return
+
+        self.audit(
+            "manual_contribution_create",
+            auth_context["email"],
+            role=auth_context["role"],
+            organizationId=auth_context["organizationId"],
+            campaignId=auth_context["campaignId"],
+            outcome="success",
+            transactionId=result.get("transactionId", ""),
+            amount=str(amount),
+            source="manual-match",
+        )
+        self.respond_json(
+            HTTPStatus.OK if result.get("created") is False else HTTPStatus.CREATED,
+            {"ok": True, **result, "message": "ההכפלה נוספה לסכום הקמפיין."},
+        )
 
     def handle_scoped_external_ingest(self, organization_id: str, campaign_id: str) -> None:
         is_valid, status, message = validate_ingest_api_key(self.headers)

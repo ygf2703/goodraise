@@ -1682,6 +1682,45 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
   }
 }
 
+// A manual match is still a real ledger transaction. Keeping it on the same
+// ingestion path makes it visible in all campaign calculations and exports.
+export function buildManualContributionRecord({ enteredBy, amount, createdAt = new Date().toISOString(), id = randomUUID() } = {}) {
+  const cleanName = normalizeText(enteredBy);
+  const parsedAmount = parseDecimal(amount);
+  if (!cleanName) {
+    throw new IngestHttpError(400, "יש להזין את שם המכניס/ה.");
+  }
+  if (parsedAmount === null || parsedAmount <= 0) {
+    throw new IngestHttpError(400, "יש להזין סכום חיובי.");
+  }
+
+  const reference = `manual-match-${normalizeText(id) || randomUUID()}`;
+  return {
+    id: reference,
+    created_at: createdAt,
+    full_name: `הכפלה - ${cleanName}`,
+    total: String(parsedAmount),
+    currencyname: "ILS",
+    charged_success: "true",
+    charge_result: "manual_match",
+    sourceLabel: "manual-match",
+    requestId: reference,
+  };
+}
+
+export async function ingestManualContribution({ organizationIdentifier, campaignIdentifier, enteredBy, amount } = {}) {
+  const record = buildManualContributionRecord({ enteredBy, amount });
+  return ingestCampaignRecord({
+    organizationIdentifier,
+    campaignIdentifier,
+    payload: {
+      ...record,
+      sourceLabel: "manual-match",
+      requestId: record.requestId,
+    },
+  });
+}
+
 export async function ingestCampaignRecords({
   organizationIdentifier,
   campaignIdentifier,

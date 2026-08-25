@@ -48,6 +48,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - Source-mode switch between manual file upload, a backend-managed external API connection, and Google Sheets synchronization
 - Secure admin-side API connector with saved endpoint, method, response format, optional bearer token, custom headers, and JSON field mapping
 - Campaign-scoped Google Sheets connector with public CSV mode or service-account mode, checksum-based change detection, and scheduled 2-minute sync into PostgreSQL
+- Manager-only manual match entry: adds a clean `הכפלה - שם` donation row to the active campaign ledger and refreshes the dashboard immediately
 - One-time prelaunch reset scheduler that can clear campaign donation data before go-live while preserving campaign setup
 - Manual pull plus optional timed auto-refresh from the fundraising platform API while managers monitor the campaign
 - File upload for comparison CSV

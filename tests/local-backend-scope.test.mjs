@@ -383,6 +383,13 @@ test("local backend enforces campaign scope and returns scoped payloads", { conc
     });
     assert.equal(ambassadorImportForbidden.response.status, 403);
 
+    const manualContributionForbidden = await requestJson(`${baseUrl}/api/organizations/org-alpha/campaigns/alpha-2/manual-contributions`, {
+      method: "POST",
+      cookie: managerCookie,
+      body: { enteredBy: "Local Tester", amount: 50 },
+    });
+    assert.equal(manualContributionForbidden.response.status, 403);
+
     const sourceConfig = await requestJson(`${baseUrl}/api/organizations/org-alpha/campaigns/alpha-1/source`, { cookie: managerCookie });
     assert.equal(sourceConfig.response.status, 200);
     assert.equal(sourceConfig.payload.config.api.hasBearerToken, true);

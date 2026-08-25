@@ -1869,6 +1869,46 @@ def build_fragment(
               justify-content: flex-start;
             }
 
+            #yellow-dashboard-root .manual-contribution-dialog {
+              width: min(100% - 2rem, 520px);
+              border: 1px solid var(--border-light);
+              border-radius: var(--radius-lg);
+              padding: 0;
+              background: var(--off-white);
+              color: var(--graphite);
+              box-shadow: 0 26px 80px rgba(7, 13, 36, 0.28);
+            }
+
+            #yellow-dashboard-root .manual-contribution-dialog::backdrop {
+              background: rgba(7, 13, 36, 0.56);
+            }
+
+            #yellow-dashboard-root .manual-contribution-form,
+            #yellow-dashboard-root .manual-contribution-header {
+              display: grid;
+            }
+
+            #yellow-dashboard-root .manual-contribution-form {
+              gap: var(--space-5);
+              padding: var(--space-6);
+            }
+
+            #yellow-dashboard-root .manual-contribution-header {
+              gap: var(--space-2);
+            }
+
+            #yellow-dashboard-root .manual-contribution-header h3,
+            #yellow-dashboard-root .manual-contribution-header p {
+              margin: 0;
+            }
+
+            #yellow-dashboard-root .manual-contribution-actions {
+              display: flex;
+              justify-content: flex-start;
+              gap: var(--space-3);
+              flex-wrap: wrap;
+            }
+
             #yellow-dashboard-root .active-filter-summary {
               min-height: 50px;
               display: flex;
@@ -3549,6 +3589,7 @@ def build_fragment(
                               <div class="control-actions control-actions--inline">
                                 <button id="save-source-config" class="button-secondary action-button secondary" type="button">שמירת חיבור מקור</button>
                                 <button id="refresh-source-api" class="button-primary action-button" type="button">משיכת נתונים מהמערכת</button>
+                                <button id="add-manual-contribution" class="button-secondary action-button secondary" type="button">הוספת הכפלה ידנית</button>
                               </div>
                               <div id="source-config-status" class="status-note text-small" aria-live="polite">כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה.</div>
                             </section>
@@ -3808,6 +3849,27 @@ def build_fragment(
               </section>
             </main>
           </div>
+          <dialog id="manual-contribution-dialog" class="manual-contribution-dialog" aria-labelledby="manual-contribution-title">
+            <form id="manual-contribution-form" class="manual-contribution-form" novalidate>
+              <div class="manual-contribution-header">
+                <h3 id="manual-contribution-title">הוספת הכפלה ידנית</h3>
+                <p class="text-small text-muted">הסכום יתווסף מיד לקמפיין וישמר כרשומה בשם תורם/ת: הכפלה - שם המכניס/ה.</p>
+              </div>
+              <label class="form-label">
+                שם המכניס/ה
+                <input id="manual-contribution-entered-by" class="form-control" type="text" autocomplete="name" maxlength="120" required />
+              </label>
+              <label class="form-label">
+                סכום להוספה
+                <input id="manual-contribution-amount" class="form-control" type="number" inputmode="decimal" min="0.01" step="0.01" required dir="ltr" />
+              </label>
+              <div id="manual-contribution-status" class="status-note text-small" aria-live="polite"></div>
+              <div class="manual-contribution-actions">
+                <button class="button-primary action-button" type="submit">הוספת סכום</button>
+                <button id="manual-contribution-cancel" class="button-ghost" type="button">ביטול</button>
+              </div>
+            </form>
+          </dialog>
           <script>
             (async () => {
               const INITIAL_ROWS = __INITIAL_ROWS__;
@@ -3907,6 +3969,13 @@ def build_fragment(
                 sourceGoogleFields: root.querySelector("#source-google-fields"),
                 saveSourceConfig: root.querySelector("#save-source-config"),
                 refreshSourceApi: root.querySelector("#refresh-source-api"),
+                addManualContribution: root.querySelector("#add-manual-contribution"),
+                manualContributionDialog: root.querySelector("#manual-contribution-dialog"),
+                manualContributionForm: root.querySelector("#manual-contribution-form"),
+                manualContributionEnteredBy: root.querySelector("#manual-contribution-entered-by"),
+                manualContributionAmount: root.querySelector("#manual-contribution-amount"),
+                manualContributionStatus: root.querySelector("#manual-contribution-status"),
+                manualContributionCancel: root.querySelector("#manual-contribution-cancel"),
                 sourceConfigStatus: root.querySelector("#source-config-status"),
                 goalTotal: root.querySelector("#goal-total"),
                 goalDaily: root.querySelector("#goal-daily"),
@@ -5876,6 +5945,9 @@ def build_fragment(
                 if (kind === "ambassador-import") {
                   return buildAuthUrl(`${basePath}/ambassadors/import`);
                 }
+                if (kind === "manual-contribution") {
+                  return buildAuthUrl(`${basePath}/manual-contributions`);
+                }
                 return getFallbackAdminEndpoint(kind);
               }
 
@@ -6579,6 +6651,55 @@ def build_fragment(
                 } finally {
                   sourceRefreshInFlight = false;
                 }
+              }
+
+              function setManualContributionStatus(message = "", tone = "") {
+                if (!elements.manualContributionStatus) {
+                  return;
+                }
+                elements.manualContributionStatus.textContent = message;
+                elements.manualContributionStatus.dataset.tone = tone;
+              }
+
+              function openManualContributionDialog() {
+                if (!isManagerAuthenticated() || !canUseBackendAuth()) {
+                  throw new Error("הוספת הכפלה ידנית זמינה רק למנהל מחובר דרך שרת הניהול.");
+                }
+                if (!elements.manualContributionDialog?.showModal) {
+                  throw new Error("לא ניתן לפתוח את חלונית ההכפלה בדפדפן זה.");
+                }
+                elements.manualContributionForm?.reset();
+                setManualContributionStatus("");
+                elements.manualContributionDialog.showModal();
+                window.setTimeout(() => elements.manualContributionEnteredBy?.focus(), 0);
+              }
+
+              async function submitManualContribution() {
+                const enteredBy = String(elements.manualContributionEnteredBy?.value || "").trim().replace(/\\s+/g, " ");
+                const amount = Number(elements.manualContributionAmount?.value || 0);
+                if (!enteredBy) {
+                  throw new Error("יש להזין את שם המכניס/ה.");
+                }
+                if (!Number.isFinite(amount) || amount <= 0) {
+                  throw new Error("יש להזין סכום חיובי.");
+                }
+                const scope = getActiveCampaignIdentity();
+                const endpoint = buildScopedAdminEndpoint("manual-contribution", scope);
+                if (!endpoint) {
+                  throw new Error("לא נמצאה זהות קמפיין לשמירת ההכפלה.");
+                }
+                const { response, payload } = await authRequest(endpoint, {
+                  method: "POST",
+                  body: { enteredBy, amount },
+                });
+                if (!response.ok) {
+                  throw new Error(payload?.message || "שמירת ההכפלה נכשלה.");
+                }
+                applyServerScope(payload, scope);
+                await loadAdminDataset(scope);
+                renderAll();
+                setImportMessage(payload?.message || "ההכפלה נוספה לסכום הקמפיין.", "success");
+                return payload;
               }
 
               function syncSourceAutoRefresh() {
@@ -11169,6 +11290,43 @@ def build_fragment(
                       await refreshSourceDataFromApi();
                     } catch (error) {
                       setSourceConfigStatus(error?.message || "משיכת הנתונים מהמערכת החיצונית נכשלה.", "error");
+                    }
+                  });
+                }
+
+                if (elements.addManualContribution) {
+                  elements.addManualContribution.addEventListener("click", () => {
+                    try {
+                      openManualContributionDialog();
+                    } catch (error) {
+                      setImportMessage(error?.message || "לא ניתן לפתוח את חלונית ההכפלה.", "error");
+                    }
+                  });
+                }
+
+                if (elements.manualContributionCancel) {
+                  elements.manualContributionCancel.addEventListener("click", () => {
+                    elements.manualContributionDialog?.close();
+                  });
+                }
+
+                if (elements.manualContributionForm) {
+                  elements.manualContributionForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    const submitButton = elements.manualContributionForm.querySelector('button[type="submit"]');
+                    try {
+                      setManualContributionStatus("שומר את ההכפלה...", "loading");
+                      if (submitButton) {
+                        submitButton.disabled = true;
+                      }
+                      await submitManualContribution();
+                      elements.manualContributionDialog?.close();
+                    } catch (error) {
+                      setManualContributionStatus(error?.message || "שמירת ההכפלה נכשלה.", "error");
+                    } finally {
+                      if (submitButton) {
+                        submitButton.disabled = false;
+                      }
                     }
                   });
                 }
