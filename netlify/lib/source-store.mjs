@@ -438,6 +438,22 @@ async function fetchGoogleSheetsByServiceAccount(config) {
     }
     return { payload: JSON.parse(text || "{}"), finalUrl };
   };
+  const fetchValuesBatch = async (requestedRanges) => {
+    const endpoint = new URL(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet`);
+    endpoint.searchParams.set("majorDimension", "ROWS");
+    requestedRanges.forEach((requestedRange) => endpoint.searchParams.append("ranges", requestedRange));
+    const { response, text, finalUrl } = await safeFetchUrl(endpoint.toString(), {
+      method: "GET",
+      headers: requestHeaders,
+      timeoutMs: 15000,
+      maxBytes: 5 * 1024 * 1024,
+      maxRedirects: 1,
+    });
+    if (!response.ok) {
+      throw new Error(`Google Sheets API החזיר שגיאה ${response.status}.`);
+    }
+    return { payload: JSON.parse(text || "{}"), finalUrl };
+  };
 
   let selectedRange = range;
   let resolvedSheetName = configuredSheetName;
@@ -459,11 +475,17 @@ async function fetchGoogleSheetsByServiceAccount(config) {
       const sheetNames = Array.isArray(metadata?.sheets)
         ? metadata.sheets.map((sheet) => String(sheet?.properties?.title || "").trim()).filter(Boolean).slice(0, 20)
         : [];
-      const candidates = [{ values: payload?.values || [], finalUrl, sheetName: "" }];
-      for (const sheetName of sheetNames) {
-        const candidate = await fetchValues(`${sheetName}!A:ZZ`);
-        candidates.push({ values: candidate.payload?.values || [], finalUrl: candidate.finalUrl, sheetName });
-      }
+      const sheetRanges = sheetNames.map((sheetName) => `${sheetName}!A:ZZ`);
+      const batch = sheetRanges.length ? await fetchValuesBatch(sheetRanges) : { payload: { valueRanges: [] }, finalUrl };
+      const valueRanges = Array.isArray(batch.payload?.valueRanges) ? batch.payload.valueRanges : [];
+      const candidates = [
+        { values: payload?.values || [], finalUrl, sheetName: "" },
+        ...sheetNames.map((sheetName, index) => ({
+          values: valueRanges[index]?.values || [],
+          finalUrl: batch.finalUrl,
+          sheetName,
+        })),
+      ];
       const best = selectGoogleSheetCandidate(candidates);
       const defaultScore = scoreGoogleSheetValues(payload?.values || []);
       const defaultLatestTimestamp = getGoogleSheetLatestTimestamp(payload?.values || []);
@@ -603,6 +625,8 @@ export async function fetchConfiguredSource(config) {
     rows,
     meta,
     contentHash: fetchedSource.contentHash,
+    resolvedSheetName: String(fetchedSource.resolvedSheetName || "").trim(),
+    resolvedRange: String(fetchedSource.resolvedRange || "").trim(),
   };
 }
 

@@ -3432,7 +3432,7 @@ def build_fragment(
                               <strong id="admin-window-label">-</strong>
                             </div>
                             <div class="hero-meta">
-                              <span>עדכון אחרון</span>
+                              <span>עדכון נתונים אחרון</span>
                               <strong id="admin-last-updated">-</strong>
                             </div>
                             <div class="hero-meta">
@@ -4092,6 +4092,8 @@ def build_fragment(
                 rows: cloneSerializable(INITIAL_ROWS),
                 meta: cloneSerializable(INITIAL_META),
                 sourceLabel: INITIAL_SOURCE_LABEL,
+                // Dataset freshness is the source read/snapshot time, not the newest donation timestamp.
+                datasetFreshnessAt: String(INITIAL_META?.fetchedAt || INITIAL_META?.dataThroughAt || "").trim(),
                 compare: {
                   rows: [],
                   meta: null,
@@ -4335,6 +4337,7 @@ def build_fragment(
                 state.rows = enrichRows(cloneSerializable(INITIAL_ROWS), cloneSerializable(INITIAL_META));
                 state.meta = cloneSerializable(INITIAL_META);
                 state.sourceLabel = INITIAL_SOURCE_LABEL;
+                state.datasetFreshnessAt = String(INITIAL_META?.fetchedAt || INITIAL_META?.dataThroughAt || "").trim();
                 state.compare = {
                   rows: [],
                   meta: null,
@@ -6455,6 +6458,7 @@ def build_fragment(
                 state.rows = enrichRows(payload.rows, payload.meta);
                 state.meta = payload.meta;
                 state.sourceLabel = payload.sourceLabel || "קובץ בסיס מאובטח";
+                state.datasetFreshnessAt = String(payload.generatedAt || payload.meta?.fetchedAt || payload.meta?.dataThroughAt || "").trim();
                 state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
                 state.auth.adminDatasetLoaded = true;
                 state.filters = getDefaultFilters(state.meta);
@@ -6499,6 +6503,7 @@ def build_fragment(
                 state.rows = enrichRows(payload.rows, payload.meta);
                 state.meta = payload.meta;
                 state.sourceLabel = payload.sourceLabel || "קובץ בסיס ציבורי";
+                state.datasetFreshnessAt = String(payload.generatedAt || payload.meta?.fetchedAt || payload.meta?.dataThroughAt || "").trim();
                 state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
                 state.filters = getDefaultFilters(state.meta);
                 resetFilterOptions();
@@ -6748,6 +6753,7 @@ def build_fragment(
                     state.meta = ingested.meta;
                     state.rows = enrichRows(ingested.normalized, ingested.meta);
                     state.sourceLabel = payload?.sourceLabel || "Source sync";
+                    state.datasetFreshnessAt = String(payload?.generatedAt || payload?.fetchedAt || ingested.meta?.fetchedAt || new Date().toISOString()).trim();
                     state.filters = getDefaultFilters(ingested.meta);
                     state.auth.adminDatasetLoaded = true;
                     resetFilterOptions();
@@ -7140,6 +7146,12 @@ def build_fragment(
                   .filter(Boolean)
                   .sort()
                   .slice(-1)[0] || "";
+              }
+
+              function getDatasetFreshnessIso() {
+                return String(
+                  state.datasetFreshnessAt || state.meta?.fetchedAt || state.meta?.dataThroughAt || ""
+                ).trim();
               }
 
               function formatAmount(value) {
@@ -8028,7 +8040,6 @@ def build_fragment(
               function renderPublicHeroBadges(prizeRows) {
                 const leaderboard = buildLeaderboard(prizeRows);
                 const topLeader = leaderboard[0];
-                const latestCreated = getLatestCreatedIso(prizeRows);
                 const total = sumAmount(prizeRows);
                 const resetState = isResetDataState();
                 const campaignStatus = resetState ? "מאופס" : (prizeRows.length ? "פעיל על בסיס הקובץ הנוכחי" : "ממתין לנתונים");
@@ -8037,7 +8048,8 @@ def build_fragment(
                 const leaderMeta = topLeader
                   ? `הוביל/ה עד כה עם ${escapeHtml(formatAmount(topLeader.total))}`
                   : (resetState ? "כל נתוני התרומות נוקו. אפשר להתחיל להזרים נתוני בדיקה חדשים." : "ברגע שייקלטו נתונים יופיע כאן מוביל/ה נוכחי/ת");
-                const updatedText = latestCreated ? escapeHtml(formatDateTime(latestCreated)) : "אין עדכון";
+                const datasetFreshnessAt = getDatasetFreshnessIso();
+                const updatedText = datasetFreshnessAt ? escapeHtml(formatDateTime(datasetFreshnessAt)) : "אין עדכון";
                 const publicBadges = [
                   `
                     <article class="public-snapshot-card public-snapshot-card--primary">
@@ -8076,9 +8088,9 @@ def build_fragment(
                   `,
                   `
                     <article class="public-snapshot-card">
-                      <div class="public-snapshot-label">עדכון אחרון</div>
+                      <div class="public-snapshot-label">עדכון נתונים אחרון</div>
                       <div class="public-snapshot-value">${updatedText}</div>
-                      <div class="public-snapshot-meta">זמן הרשומה האחרונה שנקלטה למסך התקציר.</div>
+                      <div class="public-snapshot-meta">זמן הקריאה האחרון ממקור הנתונים.</div>
                     </article>
                   `,
                 ];
@@ -8089,7 +8101,7 @@ def build_fragment(
                 const filteredTotal = sumAmount(filteredRows);
                 const prizeTotal = sumAmount(prizeRows);
                 const ambassadorCount = new Set(prizeRows.map((row) => row.ambassador).filter((value) => value && value !== "ללא שיוך")).size;
-                const latestCreated = getLatestCreatedIso(filteredRows);
+                const datasetFreshnessAt = getDatasetFreshnessIso();
                 const resetState = isResetDataState();
                 renderBrandAssets();
                 const badges = [
@@ -8102,11 +8114,13 @@ def build_fragment(
                 if (state.compare.rows.length) {
                   badges.push(`<span class="hero-badge">השוואה: ${escapeHtml(state.compare.label)} | ${escapeHtml(formatAmount(sumAmount(compareRows)))}</span>`);
                 }
-                if (latestCreated) {
-                  badges.push(`<span class="hero-badge">עודכן לאחרונה: ${escapeHtml(formatDateTime(latestCreated))}</span>`);
+                if (datasetFreshnessAt) {
+                  badges.push(`<span class="hero-badge">עדכון נתונים: ${escapeHtml(formatDateTime(datasetFreshnessAt))}</span>`);
                 }
                 elements.adminWindowLabel.textContent = state.meta.projectWindowLabel || "לא זוהה";
-                elements.adminLastUpdated.textContent = latestCreated ? formatDateTime(latestCreated) : (resetState ? "מאופס" : "אין נתונים");
+                elements.adminLastUpdated.textContent = datasetFreshnessAt
+                  ? formatDateTime(datasetFreshnessAt)
+                  : (resetState ? "מאופס" : "אין נתונים");
                 elements.adminSourceFile.textContent = state.sourceLabel || "קובץ בסיס";
                 elements.adminRecordCount.textContent = resetState ? "מאופס" : formatNumber(filteredRows.length);
                 elements.heroBadges.innerHTML = badges.join("");
@@ -11568,6 +11582,7 @@ def build_fragment(
                     state.meta = ingested.meta;
                     state.rows = enrichRows(ingested.normalized, ingested.meta);
                     state.sourceLabel = file.name;
+                    state.datasetFreshnessAt = new Date().toISOString();
                     state.filters = getDefaultFilters(ingested.meta);
                     resetFilterOptions();
                     setImportMessage(

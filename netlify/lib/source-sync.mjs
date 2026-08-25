@@ -38,6 +38,19 @@ function isGoogleSheetsSyncEnabled(config) {
   return config?.mode === "google_sheets" && config?.googleSheets?.syncEnabled !== false;
 }
 
+export function buildResolvedGoogleSheetsConfigPatch(config, fetched = {}) {
+  if (config?.mode !== "google_sheets") {
+    return {};
+  }
+  const current = config.googleSheets || {};
+  const sheetName = String(fetched.resolvedSheetName || current.sheetName || "").trim();
+  const range = String(fetched.resolvedRange || current.range || (sheetName ? `${sheetName}!A:ZZ` : "")).trim();
+  return {
+    ...(sheetName ? { sheetName } : {}),
+    ...(range ? { range } : {}),
+  };
+}
+
 function getDetectedSourceColumns(rows) {
   const columnNames = new Set();
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -71,6 +84,7 @@ export async function syncCampaignSourceOnce({
 
   const fetched = await fetchConfiguredSource(normalized);
   const detectedColumns = getDetectedSourceColumns(fetched.rawRows);
+  const resolvedGoogleSheetsConfig = buildResolvedGoogleSheetsConfigPatch(normalized, fetched);
 
   if (
     normalized.mode === "google_sheets" &&
@@ -92,6 +106,7 @@ export async function syncCampaignSourceOnce({
       campaignId,
       normalized,
       {
+        ...resolvedGoogleSheetsConfig,
         lastSyncedAt: fetched.fetchedAt,
         lastStatus: "unchanged",
         lastMessage: "לא זוהה שינוי חדש ב-Google Sheets.",
@@ -158,6 +173,7 @@ export async function syncCampaignSourceOnce({
       campaignId,
       normalized,
       {
+        ...resolvedGoogleSheetsConfig,
         lastSyncedAt: fetched.fetchedAt,
         lastSuccessfulSyncAt: fetched.fetchedAt,
         lastChecksum: fetched.contentHash,
