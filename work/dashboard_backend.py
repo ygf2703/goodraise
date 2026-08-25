@@ -3633,7 +3633,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.respond_json(HTTPStatus.SERVICE_UNAVAILABLE, {"message": "הוספת הכפלה דורשת חיבור PostgreSQL פעיל."})
             return
 
-        reference = f"manual-match-{uuid.uuid4()}"
+        client_request_id = "".join(str(payload.get("requestId") or "").strip().split())
+        reference = f"manual-match-{client_request_id or uuid.uuid4()}"
         record = {
             "id": reference,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -3660,7 +3661,17 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self.respond_json(HTTPStatus.BAD_REQUEST, {"message": str(exc)})
             return
-        except Exception:
+        except Exception as exc:
+            print(
+                "manual_contribution_write_failed",
+                {
+                    "organizationId": auth_context["organizationId"],
+                    "campaignId": auth_context["campaignId"],
+                    "errorType": type(exc).__name__,
+                    "message": str(exc),
+                },
+                flush=True,
+            )
             self.audit("manual_contribution_create", auth_context["email"], role=auth_context["role"], organizationId=auth_context["organizationId"], campaignId=auth_context["campaignId"], outcome="error")
             self.respond_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"message": "שמירת ההכפלה נכשלה."})
             return

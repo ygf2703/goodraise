@@ -156,6 +156,7 @@ async function addCampaignManualContribution(request, payload, scope) {
       campaignIdentifier: access.campaign.id,
       enteredBy: payload.enteredBy,
       amount: payload.amount,
+      requestId: payload.requestId,
     });
     await appendAuditEventSafely({
       user: access.auth.email,
@@ -175,6 +176,11 @@ async function addCampaignManualContribution(request, payload, scope) {
       message: result.created === false ? "ההכפלה כבר קיימת ברשומות." : "ההכפלה נוספה לסכום הקמפיין.",
     });
   } catch (error) {
+    console.error("manual_contribution_write_failed", {
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+      message: error instanceof Error ? error.message : "Unknown ingestion error",
+    });
     const status = error instanceof IngestHttpError ? error.status : 500;
     const message = error instanceof IngestHttpError ? error.message : "שמירת ההכפלה נכשלה.";
     await appendAuditEventSafely({

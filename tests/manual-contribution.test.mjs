@@ -38,4 +38,18 @@ test("saves manual matches through the same relational batch ingestion path as G
   assert.match(manualContribution, /ingestCampaignRecords\(/);
   assert.match(manualContribution, /sourceLabel: "manual-match"/);
   assert.match(manualContribution, /records: \[record\]/);
+  assert.match(manualContribution, /requestId = ""/);
+  assert.match(manualContribution, /id: requestId \|\| randomUUID\(\)/);
+});
+
+test("commits a new ledger row and its dataset snapshot atomically", async () => {
+  const source = await readFile(new URL("../netlify/lib/postgres-ingest.mjs", import.meta.url), "utf8");
+  const ingestion = source.slice(source.indexOf("export async function ingestCampaignRecords"));
+  const upsertAt = ingestion.indexOf("await bulkUpsertCampaignRecords");
+  const snapshotAt = ingestion.indexOf("await rebuildCampaignDatasetSnapshotWithClient", upsertAt);
+  const commitAt = ingestion.indexOf('await client.query("COMMIT")', snapshotAt);
+
+  assert.ok(upsertAt >= 0);
+  assert.ok(snapshotAt > upsertAt);
+  assert.ok(commitAt > snapshotAt);
 });

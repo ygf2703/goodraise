@@ -798,35 +798,39 @@ async function saveDatasetSnapshot(client, scope, rows, sourceLabel, timestamp) 
   return { rowCount: rows.length, sourceLabel: payload.sourceLabel, fetchedAt: timestamp };
 }
 
+async function rebuildCampaignDatasetSnapshotWithClient(client, scope, sourceLabel = "", options = {}) {
+  const result = await client.query(
+    `
+      SELECT
+        t.source_id,
+        t.occurred_at,
+        t.occurred_at_raw,
+        t.total_amount,
+        t.charged_success,
+        t.charge_result_code,
+        COALESCE(d.email_normalized, d.email, '') AS donor_email,
+        COALESCE(d.full_name, '') AS donor_name,
+        COALESCE(d.city, '') AS city,
+        COALESCE(a.full_name, '') AS ambassador_name
+      FROM goodraise.transactions t
+      LEFT JOIN goodraise.donors d ON d.id = t.donor_id
+      LEFT JOIN goodraise.ambassadors a ON a.id = t.ambassador_id
+      WHERE t.campaign_id = $1::uuid
+      ORDER BY t.occurred_at DESC NULLS LAST, t.created_at DESC
+    `,
+    [scope.campaign_id],
+  );
+  const rows = result.rows.map(buildDatasetRowFromDatabaseRow);
+  const nextTimestamp = String(options.fetchedAt || "").trim() || new Date().toISOString();
+  return saveDatasetSnapshot(client, scope, rows, sourceLabel, nextTimestamp);
+}
+
 export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "", options = {}) {
   const pool = await getPostgresPool();
   const client = await pool.connect();
   try {
     await ensureSchema(client);
-    const result = await client.query(
-      `
-        SELECT
-          t.source_id,
-          t.occurred_at,
-          t.occurred_at_raw,
-          t.total_amount,
-          t.charged_success,
-          t.charge_result_code,
-          COALESCE(d.email_normalized, d.email, '') AS donor_email,
-          COALESCE(d.full_name, '') AS donor_name,
-          COALESCE(d.city, '') AS city,
-          COALESCE(a.full_name, '') AS ambassador_name
-        FROM goodraise.transactions t
-        LEFT JOIN goodraise.donors d ON d.id = t.donor_id
-        LEFT JOIN goodraise.ambassadors a ON a.id = t.ambassador_id
-        WHERE t.campaign_id = $1::uuid
-        ORDER BY t.occurred_at DESC NULLS LAST, t.created_at DESC
-      `,
-      [scope.campaign_id],
-    );
-    const rows = result.rows.map(buildDatasetRowFromDatabaseRow);
-    const nextTimestamp = String(options.fetchedAt || "").trim() || new Date().toISOString();
-    return saveDatasetSnapshot(client, scope, rows, sourceLabel, nextTimestamp);
+    return rebuildCampaignDatasetSnapshotWithClient(client, scope, sourceLabel, options);
   } finally {
     client.release();
   }
@@ -1707,8 +1711,8 @@ export function buildManualContributionRecord({ enteredBy, amount, createdAt = n
   };
 }
 
-export async function ingestManualContribution({ organizationIdentifier, campaignIdentifier, enteredBy, amount } = {}) {
-  const record = buildManualContributionRecord({ enteredBy, amount });
+export async function ingestManualContribution({ organizationIdentifier, campaignIdentifier, enteredBy, amount, requestId = "" } = {}) {
+  const record = buildManualContributionRecord({ enteredBy, amount, id: requestId || randomUUID() });
   // Keep manual matches on the same bulk ingestion path as Google Sheets.
   // That path is exercised continuously in production and keeps the ledger,
   // raw record and campaign dataset snapshot in one consistent flow.
@@ -1768,6 +1772,7 @@ export async function ingestCampaignRecords({
   const pool = await getPostgresPool();
   const client = await pool.connect();
   let scope = null;
+  let dataset = null;
   const importBatchId = randomUUID();
   try {
     await client.query("BEGIN");
@@ -1891,7 +1896,10 @@ export async function ingestCampaignRecords({
     );
 
     await bulkUpsertCampaignRecords(client, scope, importBatchId, recordsToWrite);
-
+    // The ledger and the dashboard snapshot are one unit of work. A previous
+    // implementation committed the ledger first and could then show an error
+    // while rebuilding the snapshot, causing managers to retry a saved match.
+    dataset = await rebuildCampaignDatasetSnapshotWithClient(client, scope, sourceLabel, { fetchedAt });
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -1903,7 +1911,6 @@ export async function ingestCampaignRecords({
     client.release();
   }
 
-  const dataset = scope ? await rebuildCampaignDatasetSnapshot(scope, sourceLabel, { fetchedAt }) : { rowCount: 0, sourceLabel };
   return {
     ok: true,
     organization: {
@@ -1925,7 +1932,7 @@ export async function ingestCampaignRecords({
       skippedBlankRows,
       skippedInvalidRows,
     },
-    dataset,
+    dataset: dataset || { rowCount: 0, sourceLabel },
     processedCount: recordsToWrite.length,
     unchangedRows,
     skippedBlankRows,

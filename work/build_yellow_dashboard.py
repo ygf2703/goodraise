@@ -4158,6 +4158,7 @@ def build_fragment(
                   },
                 },
               };
+              let manualContributionRequestId = "";
 
               if (state.ambassadorDirectory.length) {
                 setAmbassadorDirectoryStatus(`${state.ambassadorDirectory.length} שגרירים נטענו מהאחסון המקומי עם לינקים אישיים פעילים.`, "success");
@@ -6799,6 +6800,9 @@ def build_fragment(
                   throw new Error("לא ניתן לפתוח את חלונית ההכפלה בדפדפן זה.");
                 }
                 elements.manualContributionForm?.reset();
+                manualContributionRequestId = typeof globalThis.crypto?.randomUUID === "function"
+                  ? globalThis.crypto.randomUUID()
+                  : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
                 setManualContributionStatus("");
                 elements.manualContributionDialog.showModal();
                 window.setTimeout(() => elements.manualContributionEnteredBy?.focus(), 0);
@@ -6820,7 +6824,7 @@ def build_fragment(
                 }
                 const { response, payload } = await authRequest(endpoint, {
                   method: "POST",
-                  body: { enteredBy, amount },
+                  body: { enteredBy, amount, requestId: manualContributionRequestId },
                 });
                 if (!response.ok) {
                   throw new Error(payload?.message || "שמירת ההכפלה נכשלה.");
