@@ -134,6 +134,38 @@ function scoreGoogleSheetValues(values) {
   return score;
 }
 
+function getGoogleSheetLatestTimestamp(values) {
+  const headers = Array.isArray(values?.[0]) ? values[0].map((value) => String(value || "").trim()) : [];
+  const dateColumn = headers.findIndex((header) => {
+    const normalized = normalizeGoogleHeader(header);
+    return normalized.includes("date") || normalized.includes("created") || normalized.includes("תאריך") || normalized.includes("מועד");
+  });
+  if (dateColumn < 0) {
+    return 0;
+  }
+  return values.slice(1).reduce((latest, row) => {
+    const parsed = parseCreatedAt(row?.[dateColumn]);
+    const timestamp = parsed ? Date.parse(parsed) : 0;
+    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+  }, 0);
+}
+
+export function selectGoogleSheetCandidate(candidates = []) {
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      score: scoreGoogleSheetValues(candidate.values),
+      latestTimestamp: getGoogleSheetLatestTimestamp(candidate.values),
+      rowCount: Array.isArray(candidate.values) ? Math.max(0, candidate.values.length - 1) : 0,
+    }))
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        right.latestTimestamp - left.latestTimestamp ||
+        right.rowCount - left.rowCount,
+    )[0] || null;
+}
+
 function getValueByPath(record, path) {
   return String(path || "")
     .split(".")
@@ -432,23 +464,29 @@ async function fetchGoogleSheetsByServiceAccount(config) {
         const candidate = await fetchValues(`${sheetName}!A:ZZ`);
         candidates.push({ values: candidate.payload?.values || [], finalUrl: candidate.finalUrl, sheetName });
       }
-      const best = candidates
-        .map((candidate) => ({ ...candidate, score: scoreGoogleSheetValues(candidate.values) }))
-        .sort((left, right) => right.score - left.score || right.values.length - left.values.length)[0];
+      const best = selectGoogleSheetCandidate(candidates);
       const defaultScore = scoreGoogleSheetValues(payload?.values || []);
-      const defaultRowCount = Array.isArray(payload?.values) ? payload.values.length : 0;
+      const defaultLatestTimestamp = getGoogleSheetLatestTimestamp(payload?.values || []);
+      const defaultRowCount = Array.isArray(payload?.values) ? Math.max(0, payload.values.length - 1) : 0;
       if (
         best &&
         best.sheetName &&
-        (best.score > defaultScore || (best.score === defaultScore && best.values.length > defaultRowCount))
+        (best.score > defaultScore ||
+          (best.score === defaultScore &&
+            (best.latestTimestamp > defaultLatestTimestamp ||
+              (best.latestTimestamp === defaultLatestTimestamp && best.rowCount > defaultRowCount))))
       ) {
         payload = { values: best.values };
         finalUrl = best.finalUrl;
         resolvedSheetName = best.sheetName;
         selectedRange = `${best.sheetName}!A:ZZ`;
       }
-    } catch {
-      // The normal default-tab request above remains a safe fallback.
+    } catch (error) {
+      // The normal default-tab request above remains a safe fallback, but the
+      // scheduler log must show why automatic tab discovery was unavailable.
+      console.warn("[goodraise][google-sheets-sync] tab discovery failed", {
+        message: error instanceof Error ? error.message : "tab_discovery_failed",
+      });
     }
   }
   const rawRows = parseGoogleValues(payload?.values || []);
