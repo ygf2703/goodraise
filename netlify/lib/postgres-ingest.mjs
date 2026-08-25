@@ -1168,6 +1168,49 @@ function uniqueRecordsBy(records, getKey) {
   return [...unique.values()];
 }
 
+function getRecordPayloadFingerprint(record) {
+  return sha256(stableStringify(normalizeExternalRecord(record || {})));
+}
+
+// Keep scheduled imports fast, while still accepting corrections to an existing
+// source transaction. A stable source id prevents duplicate rows, but it must
+// not prevent a corrected amount from replacing the earlier value.
+export function selectCampaignRecordsForUpsert(records = [], existingRows = []) {
+  const deduplicatedRecords = uniqueRecordsBy(records, buildCanonicalEventKey);
+  const existingFingerprintByKey = new Map();
+  for (const row of Array.isArray(existingRows) ? existingRows : []) {
+    const payload = row?.raw_payload && typeof row.raw_payload === "object" ? row.raw_payload : row;
+    const record = normalizeExternalRecord(payload || {});
+    const key = String(row?.canonical_event_key || buildCanonicalEventKey(record) || "").trim();
+    if (key) {
+      existingFingerprintByKey.set(key, getRecordPayloadFingerprint(record));
+    }
+  }
+
+  let newRows = 0;
+  let updatedRows = 0;
+  const recordsToWrite = deduplicatedRecords.filter((record) => {
+    const key = buildCanonicalEventKey(record);
+    const existingFingerprint = existingFingerprintByKey.get(key);
+    if (!existingFingerprint) {
+      newRows += 1;
+      return true;
+    }
+    if (existingFingerprint !== getRecordPayloadFingerprint(record)) {
+      updatedRows += 1;
+      return true;
+    }
+    return false;
+  });
+
+  return {
+    recordsToWrite,
+    newRows,
+    updatedRows,
+    unchangedRows: records.length - recordsToWrite.length,
+  };
+}
+
 async function bulkUpsertCampaignRecords(client, scope, importBatchId, records) {
   // Google Sheets imports can contain hundreds of historic records. Keep the
   // transaction open, but use a few set-based queries instead of thousands of
@@ -1773,6 +1816,10 @@ export async function ingestCampaignRecords({
   const client = await pool.connect();
   let scope = null;
   let dataset = null;
+  let recordsToWrite = [];
+  let newRows = 0;
+  let updatedRows = 0;
+  let unchangedRows = 0;
   const importBatchId = randomUUID();
   try {
     await client.query("BEGIN");
@@ -1806,9 +1853,9 @@ export async function ingestCampaignRecords({
     // A Sheets refresh normally appends a handful of donations to a dataset
     // that has already been imported. Avoid re-upserting every historic row:
     // it makes scheduled syncs slow enough to hit serverless time limits.
-    const knownKeysResult = await client.query(
+    const knownRowsResult = await client.query(
       `
-        SELECT canonical_event_key
+        SELECT canonical_event_key, raw_payload
         FROM goodraise.transactions
         WHERE campaign_id = $1::uuid
           AND canonical_event_key = ANY($2::text[])
@@ -1818,13 +1865,13 @@ export async function ingestCampaignRecords({
         normalizedRecords.map((record) => buildCanonicalEventKey(record)),
       ],
     );
-    const knownEventKeys = new Set(knownKeysResult.rows.map((row) => String(row.canonical_event_key || "")));
     // A sheet can contain a duplicate row while its owner edits it. Keep the
     // newest occurrence per event key so bulk upserts never touch one target
     // row twice in the same SQL statement.
-    const deduplicatedRecords = uniqueRecordsBy(normalizedRecords, buildCanonicalEventKey);
-    const recordsToWrite = deduplicatedRecords.filter((record) => !knownEventKeys.has(buildCanonicalEventKey(record)));
-    const unchangedRows = normalizedRecords.length - recordsToWrite.length;
+    ({ recordsToWrite, newRows, updatedRows, unchangedRows } = selectCampaignRecordsForUpsert(
+      normalizedRecords,
+      knownRowsResult.rows,
+    ));
 
     if (!recordsToWrite.length) {
       await client.query("COMMIT");
@@ -1845,6 +1892,8 @@ export async function ingestCampaignRecords({
         importBatch: null,
         dataset,
         processedCount: 0,
+        newRows,
+        updatedRows,
         unchangedRows,
         skippedBlankRows,
         skippedInvalidRows,
@@ -1934,6 +1983,8 @@ export async function ingestCampaignRecords({
     },
     dataset: dataset || { rowCount: 0, sourceLabel },
     processedCount: recordsToWrite.length,
+    newRows,
+    updatedRows,
     unchangedRows,
     skippedBlankRows,
     skippedInvalidRows,

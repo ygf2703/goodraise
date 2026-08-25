@@ -13,7 +13,7 @@ import { hasConfiguredRelationalIngest, ingestCampaignRecords, markCampaignDatas
 
 // Bump this only when accepted source formats change. It makes a previously
 // rejected but unchanged sheet eligible for one safe re-processing pass.
-const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-23-google-transaction-columns-v2";
+const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-25-google-transaction-upserts-v3";
 
 function normalizeGoogleSheetsSyncState(config, patch = {}) {
   return normalizeSourceConfig(
@@ -178,7 +178,9 @@ export async function syncCampaignSourceOnce({
         lastSuccessfulSyncAt: fetched.fetchedAt,
         lastChecksum: fetched.contentHash,
         lastNormalizerVersion: GOOGLE_SHEETS_NORMALIZER_VERSION,
-        lastRowCount: syncResult?.dataset?.rowCount ?? fetched.rows.length,
+        // This is the source row count. The dashboard snapshot can also include
+        // manual matches, so it must not be presented as a Sheets row count.
+        lastRowCount: fetched.rows.length,
         lastStatus: "success",
         lastMessage: syncResult?.skippedInvalidRows
           ? `סונכרנו ${syncResult.processedCount} תרומות מ-Google Sheets. ${syncResult.skippedInvalidRows} שורות ללא תאריך או סכום נדחו.${detectedColumns.length ? ` עמודות שזוהו: ${detectedColumns.join(", ")}.` : ""}`

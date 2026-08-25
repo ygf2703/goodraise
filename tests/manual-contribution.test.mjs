@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { IngestHttpError, buildManualContributionRecord } from "../netlify/lib/postgres-ingest.mjs";
+import {
+  IngestHttpError,
+  buildManualContributionRecord,
+  selectCampaignRecordsForUpsert,
+} from "../netlify/lib/postgres-ingest.mjs";
 
 test("builds a clean manual match donation row", () => {
   const record = buildManualContributionRecord({
@@ -52,4 +56,25 @@ test("commits a new ledger row and its dataset snapshot atomically", async () =>
   assert.ok(upsertAt >= 0);
   assert.ok(snapshotAt > upsertAt);
   assert.ok(commitAt > snapshotAt);
+});
+
+test("updates an existing Sheets transaction when its amount is corrected", () => {
+  const existingRecord = {
+    id: "transaction-100",
+    created_at: "2026-08-25T09:00:00.000Z",
+    full_name: "תורם בדיקה",
+    total: "100",
+    currencyname: "ILS",
+  };
+  const correctedRecord = { ...existingRecord, total: "10100" };
+
+  const selection = selectCampaignRecordsForUpsert(
+    [correctedRecord],
+    [{ raw_payload: existingRecord }],
+  );
+
+  assert.equal(selection.recordsToWrite.length, 1);
+  assert.equal(selection.newRows, 0);
+  assert.equal(selection.updatedRows, 1);
+  assert.equal(selection.unchangedRows, 0);
 });
