@@ -866,6 +866,43 @@ export async function markCampaignDatasetSnapshotFresh({
   }
 }
 
+export async function getCampaignLedgerSummary({ organizationIdentifier, campaignIdentifier } = {}) {
+  const pool = await getPostgresPool();
+  const client = await pool.connect();
+  try {
+    await ensureSchema(client);
+    const scope = await resolveScope(client, organizationIdentifier, campaignIdentifier);
+    if (!scope) {
+      throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
+    }
+    const result = await client.query(
+      `
+        SELECT
+          COUNT(*) FILTER (WHERE COALESCE(charge_result_code, '') <> 'manual_match')::int AS source_row_count,
+          COALESCE(SUM(total_amount) FILTER (WHERE COALESCE(charge_result_code, '') <> 'manual_match'), 0) AS source_total,
+          COUNT(*) FILTER (WHERE COALESCE(charge_result_code, '') = 'manual_match')::int AS manual_row_count,
+          COALESCE(SUM(total_amount) FILTER (WHERE COALESCE(charge_result_code, '') = 'manual_match'), 0) AS manual_total,
+          COUNT(*)::int AS dashboard_row_count,
+          COALESCE(SUM(total_amount), 0) AS dashboard_total
+        FROM goodraise.transactions
+        WHERE campaign_id = $1::uuid
+      `,
+      [scope.campaign_id],
+    );
+    const row = result.rows[0] || {};
+    return {
+      sourceRowCount: Number(row.source_row_count || 0),
+      sourceTotal: Number(row.source_total || 0),
+      manualRowCount: Number(row.manual_row_count || 0),
+      manualTotal: Number(row.manual_total || 0),
+      dashboardRowCount: Number(row.dashboard_row_count || 0),
+      dashboardTotal: Number(row.dashboard_total || 0),
+    };
+  } finally {
+    client.release();
+  }
+}
+
 function getConfiguredApiKeys() {
   const singular = String(process.env.GOODRAISE_INGEST_API_KEY || "").trim();
   const plural = String(process.env.GOODRAISE_INGEST_API_KEYS || "").trim();

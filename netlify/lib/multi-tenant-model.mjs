@@ -165,6 +165,16 @@ function normalizePositiveInteger(value, fallback) {
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : fallback;
 }
 
+function normalizeFiniteNumber(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function normalizeNonNegativeNumber(value, fallback) {
+  const numeric = normalizeFiniteNumber(value, fallback);
+  return numeric >= 0 ? numeric : fallback;
+}
+
 function normalizeBoolean(value, fallback = false) {
   if (typeof value === "boolean") {
     return value;
@@ -192,7 +202,8 @@ function normalizeFieldMapText(value) {
   try {
     const parsed = JSON.parse(text);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return JSON.stringify(parsed, null, 2);
+      // An empty map makes a canonical Google Sheets export appear empty.
+      return JSON.stringify(Object.keys(parsed).length ? parsed : getDefaultSourceFieldMap(), null, 2);
     }
   } catch {}
 
@@ -230,6 +241,9 @@ export function defaultSourceConfig() {
       lastChecksum: "",
       lastNormalizerVersion: "",
       lastRowCount: 0,
+      lastSourceTotal: 0,
+      lastLedgerTotal: 0,
+      lastReconciliationDelta: 0,
       lastStatus: "idle",
       lastMessage: "",
       lastSourceLabel: "",
@@ -303,6 +317,18 @@ export function normalizeSourceConfig(rawConfig, existingConfig = null) {
       lastRowCount: normalizePositiveInteger(
         googleSheetsCandidate.lastRowCount,
         normalizePositiveInteger(existingGoogleSheets.lastRowCount, defaults.googleSheets.lastRowCount),
+      ),
+      lastSourceTotal: normalizeNonNegativeNumber(
+        googleSheetsCandidate.lastSourceTotal,
+        normalizeNonNegativeNumber(existingGoogleSheets.lastSourceTotal, defaults.googleSheets.lastSourceTotal),
+      ),
+      lastLedgerTotal: normalizeNonNegativeNumber(
+        googleSheetsCandidate.lastLedgerTotal,
+        normalizeNonNegativeNumber(existingGoogleSheets.lastLedgerTotal, defaults.googleSheets.lastLedgerTotal),
+      ),
+      lastReconciliationDelta: normalizeFiniteNumber(
+        googleSheetsCandidate.lastReconciliationDelta,
+        normalizeFiniteNumber(existingGoogleSheets.lastReconciliationDelta, defaults.googleSheets.lastReconciliationDelta),
       ),
       lastStatus: String(googleSheetsCandidate.lastStatus || existingGoogleSheets.lastStatus || "idle").trim().toLowerCase() || "idle",
       lastMessage: String(googleSheetsCandidate.lastMessage || existingGoogleSheets.lastMessage || "").trim(),

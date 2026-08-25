@@ -9,11 +9,18 @@ import {
   saveCampaignSource,
 } from "./campaign-repositories.mjs";
 import { fetchConfiguredSource } from "./source-store.mjs";
-import { hasConfiguredRelationalIngest, ingestCampaignRecords, markCampaignDatasetSnapshotFresh } from "./postgres-ingest.mjs";
+import {
+  getCampaignLedgerSummary,
+  getDonationRecordValidationError,
+  hasConfiguredRelationalIngest,
+  ingestCampaignRecords,
+  markCampaignDatasetSnapshotFresh,
+  normalizeExternalRecord,
+} from "./postgres-ingest.mjs";
 
 // Bump this only when accepted source formats change. It makes a previously
 // rejected but unchanged sheet eligible for one safe re-processing pass.
-const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-25-google-transaction-upserts-v3";
+const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-25-google-ledger-reconciliation-v4";
 
 function normalizeGoogleSheetsSyncState(config, patch = {}) {
   return normalizeSourceConfig(
@@ -63,6 +70,46 @@ function getDetectedSourceColumns(rows) {
   return [...columnNames];
 }
 
+function parseSourceAmount(value) {
+  const raw = String(value ?? "")
+    .trim()
+    .replace(/[\s\u00A0]/g, "")
+    .replace(/[^0-9,.-]/g, "")
+    .replace(/,/g, "");
+  const amount = Number(raw);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+export function summarizeGoogleSheetsRecords(rawRows = []) {
+  const keys = new Set();
+  let total = 0;
+  let invalidRows = 0;
+  for (const rawRow of Array.isArray(rawRows) ? rawRows : []) {
+    const record = normalizeExternalRecord(rawRow || {});
+    if (getDonationRecordValidationError(record)) {
+      invalidRows += 1;
+      continue;
+    }
+    const key = String(record.id || `${record.created_at}|${record.total}|${record.email}|${record.full_name}`).trim();
+    if (keys.has(key)) continue;
+    keys.add(key);
+    total += parseSourceAmount(record.total);
+  }
+  return { rowCount: keys.size, total: Number(total.toFixed(2)), invalidRows };
+}
+
+function buildLedgerReconciliation(source, ledger) {
+  const delta = Number((source.total - ledger.sourceTotal).toFixed(2));
+  return {
+    sourceRowCount: source.rowCount,
+    sourceTotal: source.total,
+    ledgerRowCount: ledger.sourceRowCount,
+    ledgerTotal: Number(ledger.sourceTotal.toFixed(2)),
+    delta,
+    matches: source.rowCount === ledger.sourceRowCount && Math.abs(delta) < 0.01,
+  };
+}
+
 export async function syncCampaignSourceOnce({
   organizationId,
   campaignId,
@@ -85,13 +132,20 @@ export async function syncCampaignSourceOnce({
   const fetched = await fetchConfiguredSource(normalized);
   const detectedColumns = getDetectedSourceColumns(fetched.rawRows);
   const resolvedGoogleSheetsConfig = buildResolvedGoogleSheetsConfigPatch(normalized, fetched);
+  const sourceSummary = normalized.mode === "google_sheets" ? summarizeGoogleSheetsRecords(fetched.rawRows) : null;
+  const existingLedger =
+    normalized.mode === "google_sheets" && hasConfiguredRelationalIngest()
+      ? await getCampaignLedgerSummary({ organizationIdentifier: organizationId, campaignIdentifier: campaignId })
+      : null;
+  const existingReconciliation = sourceSummary && existingLedger ? buildLedgerReconciliation(sourceSummary, existingLedger) : null;
 
   if (
     normalized.mode === "google_sheets" &&
     !force &&
     String(normalized.googleSheets.lastChecksum || "").trim() &&
     String(normalized.googleSheets.lastChecksum || "").trim() === String(fetched.contentHash || "").trim() &&
-    String(normalized.googleSheets.lastNormalizerVersion || "").trim() === GOOGLE_SHEETS_NORMALIZER_VERSION
+    String(normalized.googleSheets.lastNormalizerVersion || "").trim() === GOOGLE_SHEETS_NORMALIZER_VERSION &&
+    existingReconciliation?.matches
   ) {
     if (hasConfiguredRelationalIngest()) {
       await markCampaignDatasetSnapshotFresh({
@@ -109,8 +163,12 @@ export async function syncCampaignSourceOnce({
         ...resolvedGoogleSheetsConfig,
         lastSyncedAt: fetched.fetchedAt,
         lastStatus: "unchanged",
-        lastMessage: "לא זוהה שינוי חדש ב-Google Sheets.",
+        lastMessage: `לא זוהה שינוי חדש ב-Google Sheets. ${existingReconciliation.sourceRowCount} רשומות, ₪${existingReconciliation.sourceTotal.toLocaleString("he-IL")}.`,
         lastSourceLabel: fetched.sourceLabel,
+        lastRowCount: existingReconciliation.sourceRowCount,
+        lastSourceTotal: existingReconciliation.sourceTotal,
+        lastLedgerTotal: existingReconciliation.ledgerTotal,
+        lastReconciliationDelta: existingReconciliation.delta,
       },
       updatedBy,
     );
@@ -167,6 +225,17 @@ export async function syncCampaignSourceOnce({
     };
   }
 
+  const ledger =
+    normalized.mode === "google_sheets" && hasConfiguredRelationalIngest()
+      ? await getCampaignLedgerSummary({ organizationIdentifier: organizationId, campaignIdentifier: campaignId })
+      : null;
+  const reconciliation = sourceSummary && ledger ? buildLedgerReconciliation(sourceSummary, ledger) : null;
+  if (reconciliation && !reconciliation.matches) {
+    throw new Error(
+      `פער התאמה מול Google Sheets: מקור ${reconciliation.sourceRowCount} רשומות / ₪${reconciliation.sourceTotal.toLocaleString("he-IL")}, לדג'ר ${reconciliation.ledgerRowCount} רשומות / ₪${reconciliation.ledgerTotal.toLocaleString("he-IL")}.`,
+    );
+  }
+
   if (normalized.mode === "google_sheets") {
     await persistGoogleSheetsSyncState(
       organizationId,
@@ -180,11 +249,14 @@ export async function syncCampaignSourceOnce({
         lastNormalizerVersion: GOOGLE_SHEETS_NORMALIZER_VERSION,
         // This is the source row count. The dashboard snapshot can also include
         // manual matches, so it must not be presented as a Sheets row count.
-        lastRowCount: fetched.rows.length,
+        lastRowCount: reconciliation?.sourceRowCount ?? fetched.rows.length,
+        lastSourceTotal: reconciliation?.sourceTotal ?? 0,
+        lastLedgerTotal: reconciliation?.ledgerTotal ?? 0,
+        lastReconciliationDelta: reconciliation?.delta ?? 0,
         lastStatus: "success",
         lastMessage: syncResult?.skippedInvalidRows
           ? `סונכרנו ${syncResult.processedCount} תרומות מ-Google Sheets. ${syncResult.skippedInvalidRows} שורות ללא תאריך או סכום נדחו.${detectedColumns.length ? ` עמודות שזוהו: ${detectedColumns.join(", ")}.` : ""}`
-          : `סונכרנו ${syncResult?.processedCount ?? fetched.rows.length} רשומות מ-Google Sheets.`,
+          : `הסנכרון אומת: ${reconciliation?.sourceRowCount ?? fetched.rows.length} רשומות Google Sheets, ₪${(reconciliation?.sourceTotal ?? 0).toLocaleString("he-IL")}.`,
         lastSourceLabel: fetched.sourceLabel,
       },
       updatedBy,
@@ -201,6 +273,7 @@ export async function syncCampaignSourceOnce({
     rowCount: syncResult?.dataset?.rowCount ?? fetched.rows.length,
     processedCount: syncResult?.processedCount ?? fetched.rawRows.length,
     skippedInvalidRows: syncResult?.skippedInvalidRows ?? 0,
+    reconciliation,
     detectedColumns,
     dataset: syncResult?.dataset || {
       rowCount: fetched.rows.length,
