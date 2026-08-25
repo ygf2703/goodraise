@@ -6538,6 +6538,7 @@ def build_fragment(
                   if (!response.ok) {
                     throw new Error(payload?.message || "משיכת הנתונים ממערכת המקור נכשלה.");
                   }
+                  const syncWasSkipped = Boolean(payload?.skipped || payload?.reason === "sync_in_progress");
                   applyServerScope(payload, scope);
                   // Source sync persists Google Sheets rows server-side and returns an
                   // empty compatibility array. Only parse an inline payload when one
@@ -6558,11 +6559,18 @@ def build_fragment(
                     await loadAdminDataset(scope);
                   }
                   setSourceConfigStatus(
-                    `הנתונים סונכרנו בהצלחה${payload?.fetchedAt ? ` · עדכון אחרון ${formatDateTime(payload.fetchedAt)}` : ""}.`,
-                    "success"
+                    syncWasSkipped
+                      ? (payload?.message || "סנכרון אחר עדיין מתבצע. הנתונים הקיימים נשארו מוצגים.")
+                      : (payload?.message || `הנתונים סונכרנו בהצלחה${payload?.fetchedAt ? ` · עדכון אחרון ${formatDateTime(payload.fetchedAt)}` : ""}.`),
+                    syncWasSkipped ? "warning" : "success"
                   );
                   if (!options.silent) {
-                    setImportMessage("הנתונים נמשכו בהצלחה ממערכת המקור במקום טעינת קובץ ידנית.", "success");
+                    setImportMessage(
+                      syncWasSkipped
+                        ? (payload?.message || "סנכרון אחר עדיין מתבצע; לא הוצגו נתונים חדשים עדיין.")
+                        : "הנתונים נמשכו בהצלחה ממערכת המקור במקום טעינת קובץ ידנית.",
+                      syncWasSkipped ? "warning" : "success"
+                    );
                   }
                   if (options.render !== false) {
                     renderAll();

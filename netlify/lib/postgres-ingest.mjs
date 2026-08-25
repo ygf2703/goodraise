@@ -1154,6 +1154,249 @@ async function upsertReward(client, organizationId, campaignId, record) {
   return { id: result.rows[0].id, rewardKey };
 }
 
+function uniqueRecordsBy(records, getKey) {
+  const unique = new Map();
+  for (const record of records) {
+    const key = String(getKey(record) || "").trim();
+    if (key) {
+      unique.set(key, record);
+    }
+  }
+  return [...unique.values()];
+}
+
+async function bulkUpsertCampaignRecords(client, scope, importBatchId, records) {
+  // Google Sheets imports can contain hundreds of historic records. Keep the
+  // transaction open, but use a few set-based queries instead of thousands of
+  // round trips that exceed the Netlify function timeout.
+  const donorRows = uniqueRecordsBy(records, buildDonorKey).map((record) => ({
+    id: randomUUID(),
+    donor_key: buildDonorKey(record),
+    full_name: record.full_name,
+    phone: record.phone,
+    email: record.email,
+    email_normalized: normalizeEmail(record.email),
+    shipping_name: record.shipping_name,
+    delivery_comment: record.delivery_comment,
+    google_address_line: record.google_address_line,
+    city: record.city,
+    zip: record.zip,
+  }));
+  await client.query(
+    `
+      INSERT INTO goodraise.donors (
+        id, donor_key, full_name, phone, email, email_normalized, shipping_name,
+        delivery_comment, google_address_line, city, zip
+      )
+      SELECT id, donor_key, full_name, phone, email, email_normalized, shipping_name,
+        delivery_comment, google_address_line, city, zip
+      FROM jsonb_to_recordset($1::jsonb) AS input(
+        id uuid, donor_key text, full_name text, phone text, email text,
+        email_normalized text, shipping_name text, delivery_comment text,
+        google_address_line text, city text, zip text
+      )
+      ON CONFLICT (donor_key) DO UPDATE
+      SET full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), goodraise.donors.full_name),
+          phone = COALESCE(NULLIF(EXCLUDED.phone, ''), goodraise.donors.phone),
+          email = COALESCE(NULLIF(EXCLUDED.email, ''), goodraise.donors.email),
+          email_normalized = COALESCE(NULLIF(EXCLUDED.email_normalized, ''), goodraise.donors.email_normalized),
+          shipping_name = COALESCE(NULLIF(EXCLUDED.shipping_name, ''), goodraise.donors.shipping_name),
+          delivery_comment = COALESCE(NULLIF(EXCLUDED.delivery_comment, ''), goodraise.donors.delivery_comment),
+          google_address_line = COALESCE(NULLIF(EXCLUDED.google_address_line, ''), goodraise.donors.google_address_line),
+          city = COALESCE(NULLIF(EXCLUDED.city, ''), goodraise.donors.city),
+          zip = COALESCE(NULLIF(EXCLUDED.zip, ''), goodraise.donors.zip),
+          updated_at = NOW()
+    `,
+    [JSON.stringify(donorRows)],
+  );
+
+  const ambassadorRows = uniqueRecordsBy(records.filter((record) => buildAmbassadorKey(record)), buildAmbassadorKey).map((record) => ({
+    id: randomUUID(),
+    ambassador_key: buildAmbassadorKey(record),
+    full_name: record["Ambassador name"],
+    email: record["Ambassador email"],
+    email_normalized: normalizeEmail(record["Ambassador email"]),
+  }));
+  if (ambassadorRows.length) {
+    await client.query(
+      `
+        INSERT INTO goodraise.ambassadors (
+          id, organization_id, campaign_id, ambassador_key, full_name, email, email_normalized
+        )
+        SELECT id, $1::uuid, $2::uuid, ambassador_key, full_name, email, email_normalized
+        FROM jsonb_to_recordset($3::jsonb) AS input(
+          id uuid, ambassador_key text, full_name text, email text, email_normalized text
+        )
+        ON CONFLICT (campaign_id, ambassador_key) DO UPDATE
+        SET full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), goodraise.ambassadors.full_name),
+            email = COALESCE(NULLIF(EXCLUDED.email, ''), goodraise.ambassadors.email),
+            email_normalized = COALESCE(NULLIF(EXCLUDED.email_normalized, ''), goodraise.ambassadors.email_normalized),
+            updated_at = NOW()
+      `,
+      [scope.organization_id, scope.campaign_id, JSON.stringify(ambassadorRows)],
+    );
+  }
+
+  const rewardRows = uniqueRecordsBy(records.filter((record) => buildRewardKey(record)), buildRewardKey).map((record) => ({
+    id: randomUUID(),
+    reward_key: buildRewardKey(record),
+    reward_name: record.reward,
+    unit_price: parseDecimal(record.price),
+    quantity: parseInteger(record.quantity),
+  }));
+  if (rewardRows.length) {
+    await client.query(
+      `
+        INSERT INTO goodraise.rewards (
+          id, organization_id, campaign_id, reward_key, reward_name, unit_price, quantity
+        )
+        SELECT id, $1::uuid, $2::uuid, reward_key, reward_name, unit_price, quantity
+        FROM jsonb_to_recordset($3::jsonb) AS input(
+          id uuid, reward_key text, reward_name text, unit_price numeric, quantity integer
+        )
+        ON CONFLICT (campaign_id, reward_key) DO UPDATE
+        SET reward_name = COALESCE(NULLIF(EXCLUDED.reward_name, ''), goodraise.rewards.reward_name),
+            unit_price = COALESCE(EXCLUDED.unit_price, goodraise.rewards.unit_price),
+            quantity = COALESCE(EXCLUDED.quantity, goodraise.rewards.quantity),
+            updated_at = NOW()
+      `,
+      [scope.organization_id, scope.campaign_id, JSON.stringify(rewardRows)],
+    );
+  }
+
+  const currencies = [...new Set(records.map((record) => normalizeText(record.currencyname || scope.currency_code || "ILS").toUpperCase()).filter(Boolean))];
+  if (currencies.length) {
+    await client.query(
+      `INSERT INTO goodraise.currencies (code, name) SELECT code, code FROM unnest($1::text[]) AS input(code) ON CONFLICT (code) DO NOTHING`,
+      [currencies],
+    );
+  }
+
+  const transactionRows = records.map((record, index) => ({
+    id: randomUUID(),
+    source_row_number: index + 1,
+    source_id: normalizeText(record.id) || null,
+    source_transaction_key: buildSourceTransactionKey(record),
+    canonical_event_key: buildCanonicalEventKey(record),
+    donor_key: buildDonorKey(record),
+    ambassador_key: buildAmbassadorKey(record),
+    reward_key: buildRewardKey(record),
+    occurred_at: parseTimestamp(record.created_at),
+    occurred_at_raw: record.created_at,
+    total_amount: parseDecimal(record.total),
+    currency_code: normalizeText(record.currencyname || scope.currency_code || "ILS").toUpperCase() || null,
+    charged_success: parseBoolean(record.charged_success),
+    charge_result_code: normalizeText(record.charge_result) || null,
+    direct_debit: parseBoolean(record.direct_debit),
+    direct_debit_active: parseBoolean(record["direct debit active"]),
+    raw_payload: record,
+  }));
+  await client.query(
+    `
+      WITH input AS (
+        SELECT *
+        FROM jsonb_to_recordset($1::jsonb) AS item(
+          id uuid, source_row_number integer, source_id text, source_transaction_key text,
+          canonical_event_key text, donor_key text, ambassador_key text, reward_key text,
+          occurred_at timestamptz, occurred_at_raw text, total_amount numeric,
+          currency_code text, charged_success boolean, charge_result_code text,
+          direct_debit boolean, direct_debit_active boolean, raw_payload jsonb
+        )
+      )
+      INSERT INTO goodraise.transactions (
+        id, organization_id, campaign_id, import_batch_id, source_row_number, source_id,
+        source_transaction_key, canonical_event_key, donor_id, ambassador_id, reward_id,
+        occurred_at, occurred_at_raw, total_amount, currency_code, charged_success,
+        charge_result_code, direct_debit, direct_debit_active, raw_payload
+      )
+      SELECT input.id, $2::uuid, $3::uuid, $4::uuid, input.source_row_number, input.source_id,
+        input.source_transaction_key, input.canonical_event_key, donor.id, ambassador.id, reward.id,
+        input.occurred_at, input.occurred_at_raw, input.total_amount, input.currency_code,
+        input.charged_success, input.charge_result_code, input.direct_debit,
+        input.direct_debit_active, input.raw_payload
+      FROM input
+      JOIN goodraise.donors donor ON donor.donor_key = input.donor_key
+      LEFT JOIN goodraise.ambassadors ambassador
+        ON ambassador.campaign_id = $3::uuid AND ambassador.ambassador_key = input.ambassador_key
+      LEFT JOIN goodraise.rewards reward
+        ON reward.campaign_id = $3::uuid AND reward.reward_key = input.reward_key
+      ON CONFLICT (campaign_id, canonical_event_key) DO UPDATE
+      SET donor_id = EXCLUDED.donor_id,
+          ambassador_id = EXCLUDED.ambassador_id,
+          reward_id = EXCLUDED.reward_id,
+          occurred_at = EXCLUDED.occurred_at,
+          occurred_at_raw = EXCLUDED.occurred_at_raw,
+          total_amount = EXCLUDED.total_amount,
+          currency_code = EXCLUDED.currency_code,
+          charged_success = EXCLUDED.charged_success,
+          charge_result_code = EXCLUDED.charge_result_code,
+          direct_debit = EXCLUDED.direct_debit,
+          direct_debit_active = EXCLUDED.direct_debit_active,
+          raw_payload = EXCLUDED.raw_payload,
+          import_batch_id = EXCLUDED.import_batch_id
+    `,
+    [JSON.stringify(transactionRows), scope.organization_id, scope.campaign_id, importBatchId],
+  );
+
+  const rawRows = records.map((record, index) => ({
+    source_row_number: index + 1,
+    id: record.id,
+    created_at: record.created_at,
+    full_name: record.full_name,
+    reward: record.reward,
+    price: record.price,
+    quantity: record.quantity,
+    total: record.total,
+    currencyname: record.currencyname,
+    phone: record.phone,
+    email: record.email,
+    ambassador_name: record["Ambassador name"],
+    ambassador_email: record["Ambassador email"],
+    shipping_name: record.shipping_name,
+    delivery_comment: record.delivery_comment,
+    google_address_line: record.google_address_line,
+    city: record.city,
+    zip: record.zip,
+    charged_success: record.charged_success,
+    charge_result: record.charge_result,
+    direct_debit: record.direct_debit,
+    direct_debit_active: record["direct debit active"],
+  }));
+  await client.query(
+    `
+      INSERT INTO goodraise.transactions_csv_raw (
+        import_batch_id, organization_id, campaign_id, transaction_id, source_row_number,
+        "id", "created_at", "full_name", "reward", "price", "quantity", "total",
+        "currencyname", "phone", "email", "Ambassador name", "Ambassador email",
+        "shipping_name", "delivery_comment", "google_address_line", "city", "zip",
+        "charged_success", "charge_result", "direct_debit", "direct debit active"
+      )
+      SELECT $1::uuid, $2::uuid, $3::uuid, NULL, source_row_number,
+        id, created_at, full_name, reward, price, quantity, total, currencyname, phone, email,
+        ambassador_name, ambassador_email, shipping_name, delivery_comment, google_address_line,
+        city, zip, charged_success, charge_result, direct_debit, direct_debit_active
+      FROM jsonb_to_recordset($4::jsonb) AS item(
+        source_row_number integer, id text, created_at text, full_name text, reward text,
+        price text, quantity text, total text, currencyname text, phone text, email text,
+        ambassador_name text, ambassador_email text, shipping_name text, delivery_comment text,
+        google_address_line text, city text, zip text, charged_success text, charge_result text,
+        direct_debit text, direct_debit_active text
+      )
+      ON CONFLICT (import_batch_id, source_row_number) DO UPDATE
+      SET "id" = EXCLUDED."id", "created_at" = EXCLUDED."created_at",
+          "full_name" = EXCLUDED."full_name", "reward" = EXCLUDED."reward",
+          "price" = EXCLUDED."price", "quantity" = EXCLUDED."quantity", "total" = EXCLUDED."total",
+          "currencyname" = EXCLUDED."currencyname", "phone" = EXCLUDED."phone", "email" = EXCLUDED."email",
+          "Ambassador name" = EXCLUDED."Ambassador name", "Ambassador email" = EXCLUDED."Ambassador email",
+          "shipping_name" = EXCLUDED."shipping_name", "delivery_comment" = EXCLUDED."delivery_comment",
+          "google_address_line" = EXCLUDED."google_address_line", "city" = EXCLUDED."city", "zip" = EXCLUDED."zip",
+          "charged_success" = EXCLUDED."charged_success", "charge_result" = EXCLUDED."charge_result",
+          "direct_debit" = EXCLUDED."direct_debit", "direct debit active" = EXCLUDED."direct debit active"
+    `,
+    [importBatchId, scope.organization_id, scope.campaign_id, JSON.stringify(rawRows)],
+  );
+}
+
 export async function ingestCampaignRecord({ organizationIdentifier, campaignIdentifier, payload = {} }) {
   const record = normalizeExternalRecord(payload);
   validateExternalRecordEncoding(record);
@@ -1515,7 +1758,11 @@ export async function ingestCampaignRecords({
       ],
     );
     const knownEventKeys = new Set(knownKeysResult.rows.map((row) => String(row.canonical_event_key || "")));
-    const recordsToWrite = normalizedRecords.filter((record) => !knownEventKeys.has(buildCanonicalEventKey(record)));
+    // A sheet can contain a duplicate row while its owner edits it. Keep the
+    // newest occurrence per event key so bulk upserts never touch one target
+    // row twice in the same SQL statement.
+    const deduplicatedRecords = uniqueRecordsBy(normalizedRecords, buildCanonicalEventKey);
+    const recordsToWrite = deduplicatedRecords.filter((record) => !knownEventKeys.has(buildCanonicalEventKey(record)));
     const unchangedRows = normalizedRecords.length - recordsToWrite.length;
 
     if (!recordsToWrite.length) {
@@ -1587,164 +1834,7 @@ export async function ingestCampaignRecords({
       ],
     );
 
-    for (const [index, record] of recordsToWrite.entries()) {
-      const occurredAt = parseTimestamp(record.created_at);
-      const donor = await upsertDonor(client, record);
-      const ambassador = await upsertAmbassador(client, scope.organization_id, scope.campaign_id, record);
-      const reward = await upsertReward(client, scope.organization_id, scope.campaign_id, record);
-      const currencyCode = await ensureCurrency(client, record.currencyname || scope.currency_code || "ILS");
-
-      await client.query(
-        `
-          INSERT INTO goodraise.transactions (
-            id,
-            organization_id,
-            campaign_id,
-            import_batch_id,
-            source_row_number,
-            source_id,
-            source_transaction_key,
-            canonical_event_key,
-            donor_id,
-            ambassador_id,
-            reward_id,
-            occurred_at,
-            occurred_at_raw,
-            total_amount,
-            currency_code,
-            charged_success,
-            charge_result_code,
-            direct_debit,
-            direct_debit_active,
-            raw_payload
-          )
-          VALUES (
-            $1, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9::uuid, $10::uuid, $11::uuid, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb
-          )
-          ON CONFLICT (campaign_id, canonical_event_key) DO UPDATE
-          SET donor_id = EXCLUDED.donor_id,
-              ambassador_id = EXCLUDED.ambassador_id,
-              reward_id = EXCLUDED.reward_id,
-              occurred_at = EXCLUDED.occurred_at,
-              occurred_at_raw = EXCLUDED.occurred_at_raw,
-              total_amount = EXCLUDED.total_amount,
-              currency_code = EXCLUDED.currency_code,
-              charged_success = EXCLUDED.charged_success,
-              charge_result_code = EXCLUDED.charge_result_code,
-              direct_debit = EXCLUDED.direct_debit,
-              direct_debit_active = EXCLUDED.direct_debit_active,
-              raw_payload = EXCLUDED.raw_payload,
-              import_batch_id = EXCLUDED.import_batch_id
-        `,
-        [
-          randomUUID(),
-          scope.organization_id,
-          scope.campaign_id,
-          importBatchId,
-          index + 1,
-          normalizeText(record.id) || null,
-          buildSourceTransactionKey(record),
-          buildCanonicalEventKey(record),
-          donor.id,
-          ambassador.id,
-          reward.id,
-          occurredAt,
-          record.created_at,
-          parseDecimal(record.total),
-          currencyCode,
-          parseBoolean(record.charged_success),
-          normalizeText(record.charge_result) || null,
-          parseBoolean(record.direct_debit),
-          parseBoolean(record["direct debit active"]),
-          JSON.stringify(record),
-        ],
-      );
-
-      await client.query(
-        `
-          INSERT INTO goodraise.transactions_csv_raw (
-            import_batch_id,
-            organization_id,
-            campaign_id,
-            transaction_id,
-            source_row_number,
-            "id",
-            "created_at",
-            "full_name",
-            "reward",
-            "price",
-            "quantity",
-            "total",
-            "currencyname",
-            "phone",
-            "email",
-            "Ambassador name",
-            "Ambassador email",
-            "shipping_name",
-            "delivery_comment",
-            "google_address_line",
-            "city",
-            "zip",
-            "charged_success",
-            "charge_result",
-            "direct_debit",
-            "direct debit active"
-          )
-          VALUES (
-            $1::uuid, $2::uuid, $3::uuid, NULL, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25
-          )
-          ON CONFLICT (import_batch_id, source_row_number) DO UPDATE
-          SET "id" = EXCLUDED."id",
-              "created_at" = EXCLUDED."created_at",
-              "full_name" = EXCLUDED."full_name",
-              "reward" = EXCLUDED."reward",
-              "price" = EXCLUDED."price",
-              "quantity" = EXCLUDED."quantity",
-              "total" = EXCLUDED."total",
-              "currencyname" = EXCLUDED."currencyname",
-              "phone" = EXCLUDED."phone",
-              "email" = EXCLUDED."email",
-              "Ambassador name" = EXCLUDED."Ambassador name",
-              "Ambassador email" = EXCLUDED."Ambassador email",
-              "shipping_name" = EXCLUDED."shipping_name",
-              "delivery_comment" = EXCLUDED."delivery_comment",
-              "google_address_line" = EXCLUDED."google_address_line",
-              "city" = EXCLUDED."city",
-              "zip" = EXCLUDED."zip",
-              "charged_success" = EXCLUDED."charged_success",
-              "charge_result" = EXCLUDED."charge_result",
-              "direct_debit" = EXCLUDED."direct_debit",
-              "direct debit active" = EXCLUDED."direct debit active"
-        `,
-        [
-          importBatchId,
-          scope.organization_id,
-          scope.campaign_id,
-          index + 1,
-          record.id,
-          record.created_at,
-          record.full_name,
-          record.reward,
-          record.price,
-          record.quantity,
-          record.total,
-          record.currencyname,
-          record.phone,
-          record.email,
-          record["Ambassador name"],
-          record["Ambassador email"],
-          record.shipping_name,
-          record.delivery_comment,
-          record.google_address_line,
-          record.city,
-          record.zip,
-          record.charged_success,
-          record.charge_result,
-          record.direct_debit,
-          record["direct debit active"],
-        ],
-      );
-    }
+    await bulkUpsertCampaignRecords(client, scope, importBatchId, recordsToWrite);
 
     await client.query("COMMIT");
   } catch (error) {
