@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { IngestHttpError, buildManualContributionRecord } from "../netlify/lib/postgres-ingest.mjs";
@@ -29,4 +30,12 @@ test("rejects a manual match without a name or positive amount", () => {
     () => buildManualContributionRecord({ enteredBy: "מנהל", amount: "0" }),
     (error) => error instanceof IngestHttpError && error.status === 400,
   );
+});
+
+test("saves manual matches through the same relational batch ingestion path as Google Sheets", async () => {
+  const source = await readFile(new URL("../netlify/lib/postgres-ingest.mjs", import.meta.url), "utf8");
+  const manualContribution = source.slice(source.indexOf("export async function ingestManualContribution"));
+  assert.match(manualContribution, /ingestCampaignRecords\(/);
+  assert.match(manualContribution, /sourceLabel: "manual-match"/);
+  assert.match(manualContribution, /records: \[record\]/);
 });

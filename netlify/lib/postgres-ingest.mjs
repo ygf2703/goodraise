@@ -1709,15 +1709,33 @@ export function buildManualContributionRecord({ enteredBy, amount, createdAt = n
 
 export async function ingestManualContribution({ organizationIdentifier, campaignIdentifier, enteredBy, amount } = {}) {
   const record = buildManualContributionRecord({ enteredBy, amount });
-  return ingestCampaignRecord({
+  // Keep manual matches on the same bulk ingestion path as Google Sheets.
+  // That path is exercised continuously in production and keeps the ledger,
+  // raw record and campaign dataset snapshot in one consistent flow.
+  const result = await ingestCampaignRecords({
     organizationIdentifier,
     campaignIdentifier,
-    payload: {
-      ...record,
-      sourceLabel: "manual-match",
-      requestId: record.requestId,
-    },
+    sourceLabel: "manual-match",
+    importedBy: "manual-match",
+    requestReference: record.requestId,
+    fetchedAt: record.created_at,
+    records: [record],
   });
+  const created = Number(result.processedCount || 0) > 0;
+  return {
+    ...result,
+    created,
+    duplicate: !created,
+    transaction: {
+      id: record.id,
+      sourceId: record.id,
+      totalAmount: parseDecimal(record.total),
+      currencyCode: record.currencyname,
+      donorId: "",
+      ambassadorId: "",
+      rewardId: "",
+    },
+  };
 }
 
 export async function ingestCampaignRecords({
