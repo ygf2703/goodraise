@@ -86,7 +86,7 @@ test("keeps the configured campaign date window when donations currently exist o
   assert.equal(meta.defaultTo, "2026-09-01");
 });
 
-test("limits a live campaign window to the exact Google Sheets fetch date", () => {
+test("keeps a live campaign filter window through its configured end date", () => {
   const meta = buildDatasetMeta(
     [{ date: "2026-08-23" }],
     {
@@ -96,6 +96,17 @@ test("limits a live campaign window to the exact Google Sheets fetch date", () =
     { fetchedAt: "2026-08-24T10:11:12.000Z" },
   );
 
-  assert.deepEqual(meta.projectDates, ["2026-08-23", "2026-08-24"]);
+  assert.deepEqual(meta.projectDates, [
+    "2026-08-23",
+    "2026-08-24",
+    "2026-08-25",
+    "2026-08-26",
+    "2026-08-27",
+    "2026-08-28",
+    "2026-08-29",
+    "2026-08-30",
+    "2026-08-31",
+    "2026-09-01",
+  ]);
   assert.equal(meta.dataThroughAt, "2026-08-24T10:11:12.000Z");
 });

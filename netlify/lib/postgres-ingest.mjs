@@ -576,10 +576,9 @@ export function buildDatasetMeta(rows, campaignScope = {}, snapshot = {}) {
   const fetchedAt = String(snapshot.fetchedAt || snapshot.updatedAt || "").trim();
   const campaignStart = toDateKey(campaignScope.campaign_starts_at);
   const campaignEnd = toDateKey(campaignScope.campaign_ends_at);
-  const fetchedDate = toDateKey(fetchedAt);
-  // A live dashboard must not present future campaign dates as already covered.
-  const effectiveEnd = fetchedDate && campaignEnd && fetchedDate < campaignEnd ? fetchedDate : campaignEnd;
-  const configuredDates = buildCampaignDateRange(campaignStart, effectiveEnd);
+  // The configured campaign window defines the project-day filters. It must not
+  // shrink to the fetch date, otherwise days disappear while a live campaign runs.
+  const configuredDates = buildCampaignDateRange(campaignStart, campaignEnd);
   const projectDates = configuredDates.length ? configuredDates : uniqueDates;
   const defaultFrom = projectDates[0] || "";
   const defaultTo = projectDates[projectDates.length - 1] || "";

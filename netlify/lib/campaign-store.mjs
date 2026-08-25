@@ -49,8 +49,10 @@ function normalizeSnapshotScope(snapshot = {}, fallback = {}) {
     campaignName: String(basics.campaignName || "").trim(),
     campaignSlug: String(basics.slug || "").trim(),
     status: String(basics.status || "draft").trim().toLowerCase() || "draft",
-    startAt: String(basics.startAt || "").trim() || (basics.startDate ? `${basics.startDate}T${String(basics.startTime || "00:00").trim()}:00` : ""),
-    endAt: String(basics.endAt || "").trim() || (basics.endDate ? `${basics.endDate}T${String(basics.endTime || "23:59").trim()}:00` : ""),
+    // The builder edits startDate/endDate independently. Prefer those explicit
+    // values so an older serialized startAt/endAt cannot resurrect a stale window.
+    startAt: basics.startDate ? `${basics.startDate}T${String(basics.startTime || "00:00").trim()}:00` : String(basics.startAt || "").trim(),
+    endAt: basics.endDate ? `${basics.endDate}T${String(basics.endTime || "23:59").trim()}:00` : String(basics.endAt || "").trim(),
     target: Number(snapshot?.goals?.campaignGoal || basics.target || 0) || 0,
     currency: String(basics.currency || "ILS").trim().toUpperCase() || "ILS",
   };

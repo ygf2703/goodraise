@@ -1956,8 +1956,9 @@ def save_platform_campaign_snapshot(snapshot: dict[str, Any], updated_by: str, o
         "createdAt": str((get_platform_organization(organization_id) or {}).get("createdAt") or timestamp).strip() or timestamp,
         "updatedAt": timestamp,
     }
-    start_at = str(basics.get("startAt") or "").strip() or (f"{str(basics.get('startDate') or '').strip()}T{str(basics.get('startTime') or '00:00').strip()}:00" if basics.get("startDate") else "")
-    end_at = str(basics.get("endAt") or "").strip() or (f"{str(basics.get('endDate') or '').strip()}T{str(basics.get('endTime') or '23:59').strip()}:00" if basics.get("endDate") else "")
+    # Prefer explicit editor dates over stale serialized timestamps from an older campaign snapshot.
+    start_at = (f"{str(basics.get('startDate') or '').strip()}T{str(basics.get('startTime') or '00:00').strip()}:00" if basics.get("startDate") else str(basics.get("startAt") or "").strip())
+    end_at = (f"{str(basics.get('endDate') or '').strip()}T{str(basics.get('endTime') or '23:59').strip()}:00" if basics.get("endDate") else str(basics.get("endAt") or "").strip())
     campaign_record = {
         "id": campaign_id,
         "organizationId": organization_id,

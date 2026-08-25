@@ -1048,6 +1048,49 @@ export async function ensureMultiTenantMigration() {
   return marker;
 }
 
+function projectDateRange(startAt = "", endAt = "") {
+  const startDate = String(startAt || "").slice(0, 10);
+  const endDate = String(endAt || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate) {
+    return [];
+  }
+  const dates = [];
+  const cursor = new Date(`${startDate}T12:00:00.000Z`);
+  const last = new Date(`${endDate}T12:00:00.000Z`);
+  while (cursor <= last && dates.length < 730) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+export function applyConfiguredProjectWindow(dataset, config = {}, campaign = {}) {
+  const basics = config?.basics && typeof config.basics === "object" ? config.basics : {};
+  const startAt = basics.startDate
+    ? buildDateTimeIso(basics.startDate, basics.startTime, "")
+    : String(campaign.startAt || "");
+  const endAt = basics.endDate
+    ? buildDateTimeIso(basics.endDate, basics.endTime, "")
+    : String(campaign.endAt || "");
+  const projectDates = projectDateRange(startAt, endAt);
+  if (!projectDates.length) {
+    return dataset;
+  }
+  const baseDataset = dataset && typeof dataset === "object" ? dataset : {};
+  return {
+    ...baseDataset,
+    meta: {
+      ...(baseDataset.meta || {}),
+      projectDates,
+      defaultFrom: projectDates[0],
+      defaultTo: projectDates[projectDates.length - 1],
+      minDate: projectDates[0],
+      maxDate: projectDates[projectDates.length - 1],
+      projectWindowLabel: `${projectDates[0]} עד ${projectDates[projectDates.length - 1]}`,
+    },
+  };
+}
+
 export async function buildCampaignContext(organizationId, campaignId) {
   const organization = await getOrganization(organizationId);
   const campaign = await getCampaign(organizationId, campaignId);
@@ -1074,7 +1117,7 @@ export async function buildCampaignContext(organizationId, campaignId) {
       tierPrizes: config?.goals?.tierPrizes || [],
       tierRuleNote: config?.goals?.tierRuleNote || "",
     },
-    dataset: dataset || createCampaignDatasetRecord({}, { organizationId, campaignId }),
+    dataset: applyConfiguredProjectWindow(dataset || createCampaignDatasetRecord({}, { organizationId, campaignId }), config, campaign),
     meta: config?.meta || {},
   };
 }

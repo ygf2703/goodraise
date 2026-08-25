@@ -3454,6 +3454,9 @@ def build_fragment(
                               <div class="text-small text-muted">מרכז שליטה לקבצים, למסננים וליעדים. כל היכולות הקיימות נשמרות, רק מוצגות בצורה מדויקת ונוחה יותר.</div>
                             </div>
                           </div>
+                          <div class="control-actions control-actions--inline">
+                            <button id="add-manual-contribution" class="button-secondary action-button secondary" type="button">הוספת הכפלה ידנית</button>
+                          </div>
                           <div class="control-groups">
                             <section class="control-group">
                               <div class="control-group-header">
@@ -3610,7 +3613,6 @@ def build_fragment(
                               <div class="control-actions control-actions--inline">
                                 <button id="save-source-config" class="button-secondary action-button secondary" type="button">שמירת חיבור מקור</button>
                                 <button id="refresh-source-api" class="button-primary action-button" type="button">משיכת נתונים מהמערכת</button>
-                                <button id="add-manual-contribution" class="button-secondary action-button secondary" type="button">הוספת הכפלה ידנית</button>
                               </div>
                               <div id="source-config-status" class="status-note text-small" aria-live="polite">כרגע המערכת עובדת על בסיס קובץ. כשה-API יהיה מוכן, אפשר יהיה לעבור למצב משיכה ישירה.</div>
                             </section>
