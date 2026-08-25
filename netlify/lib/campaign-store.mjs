@@ -56,6 +56,49 @@ function normalizeSnapshotScope(snapshot = {}, fallback = {}) {
   };
 }
 
+export function buildCampaignProjectDates(startAt = "", endAt = "") {
+  const startDate = String(startAt || "").slice(0, 10);
+  const endDate = String(endAt || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate) {
+    return [];
+  }
+  const cursor = new Date(`${startDate}T12:00:00.000Z`);
+  const last = new Date(`${endDate}T12:00:00.000Z`);
+  const dates = [];
+  while (cursor <= last && dates.length < 730) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return dates;
+}
+
+async function syncCampaignDatasetProjectWindow(organizationId, campaign, updatedAt) {
+  const context = await buildCampaignContext(organizationId, campaign.id);
+  const dataset = context?.dataset;
+  if (!dataset || typeof dataset !== "object") {
+    return;
+  }
+  const projectDates = buildCampaignProjectDates(campaign.startAt, campaign.endAt);
+  if (!projectDates.length) {
+    return;
+  }
+  const rows = Array.isArray(dataset.rows) ? dataset.rows : [];
+  await saveCampaignDataset(organizationId, campaign.id, {
+    ...dataset,
+    organizationId,
+    campaignId: campaign.id,
+    meta: {
+      ...(dataset.meta || {}),
+      projectDates,
+      defaultFrom: projectDates[0],
+      defaultTo: projectDates[projectDates.length - 1],
+      projectWindowLabel: `${projectDates[0]} עד ${projectDates[projectDates.length - 1]}`,
+      rowCount: Number(dataset.meta?.rowCount ?? rows.length) || rows.length,
+    },
+    updatedAt,
+  });
+}
+
 function extractActiveSnapshot(rawConfig, fallback = {}) {
   const candidate = rawConfig && typeof rawConfig === "object" ? rawConfig : {};
   const campaigns = Array.isArray(candidate.campaigns) ? candidate.campaigns : [];
@@ -255,6 +298,7 @@ async function createOrUpdateScopedCampaign({ auth, organization, campaignId, sn
       updatedAt: now,
     });
   }
+  await syncCampaignDatasetProjectWindow(organization.id, savedCampaign, now);
 
   return {
     campaign: savedCampaign,

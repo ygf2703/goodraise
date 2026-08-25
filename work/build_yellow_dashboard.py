@@ -3457,6 +3457,27 @@ def build_fragment(
                           <div class="control-groups">
                             <section class="control-group">
                               <div class="control-group-header">
+                                <h4>תאריכי הפרויקט לניתוח</h4>
+                                <p>הגדרה זו קובעת את ימי הפרויקט, טווח ברירת המחדל והפילוחים. היא אינה מסננת את הנתונים בלבד.</p>
+                              </div>
+                              <div class="filters-grid">
+                                <label class="form-label">
+                                  תחילת הפרויקט
+                                  <input id="analysis-project-start" class="form-control" type="date" />
+                                </label>
+                                <label class="form-label">
+                                  סיום הפרויקט
+                                  <input id="analysis-project-end" class="form-control" type="date" />
+                                </label>
+                              </div>
+                              <div class="control-actions control-actions--inline">
+                                <button id="save-analysis-project-dates" class="button-secondary action-button secondary" type="button">שמירת תאריכי הפרויקט</button>
+                              </div>
+                              <div id="analysis-project-dates-status" class="status-note text-small" aria-live="polite"></div>
+                            </section>
+
+                            <section class="control-group">
+                              <div class="control-group-header">
                                 <h4>נתונים</h4>
                                 <p>קבצי הבסיס, ההשוואה והפרסים</p>
                               </div>
@@ -3977,6 +3998,10 @@ def build_fragment(
                 manualContributionStatus: root.querySelector("#manual-contribution-status"),
                 manualContributionCancel: root.querySelector("#manual-contribution-cancel"),
                 sourceConfigStatus: root.querySelector("#source-config-status"),
+                analysisProjectStart: root.querySelector("#analysis-project-start"),
+                analysisProjectEnd: root.querySelector("#analysis-project-end"),
+                saveAnalysisProjectDates: root.querySelector("#save-analysis-project-dates"),
+                analysisProjectDatesStatus: root.querySelector("#analysis-project-dates-status"),
                 goalTotal: root.querySelector("#goal-total"),
                 goalDaily: root.querySelector("#goal-daily"),
                 dailyMetric: root.querySelector("#daily-metric-select"),
@@ -4801,6 +4826,101 @@ def build_fragment(
                 }
               }
 
+              function setAnalysisProjectDatesStatus(message = "", tone = "neutral") {
+                if (!elements.analysisProjectDatesStatus) {
+                  return;
+                }
+                elements.analysisProjectDatesStatus.textContent = String(message || "");
+                if (!message || tone === "neutral") {
+                  elements.analysisProjectDatesStatus.removeAttribute("data-tone");
+                } else {
+                  elements.analysisProjectDatesStatus.dataset.tone = tone;
+                }
+              }
+
+              function getCampaignAnalysisDateValues() {
+                const basics = state.campaignBuilder?.basics || {};
+                return {
+                  startDate: String(basics.startDate || basics.startAt || "").slice(0, 10),
+                  endDate: String(basics.endDate || basics.endAt || "").slice(0, 10),
+                };
+              }
+
+              function syncAnalysisProjectDateControls() {
+                const { startDate, endDate } = getCampaignAnalysisDateValues();
+                if (elements.analysisProjectStart) {
+                  elements.analysisProjectStart.value = startDate;
+                }
+                if (elements.analysisProjectEnd) {
+                  elements.analysisProjectEnd.value = endDate;
+                }
+              }
+
+              function buildCampaignDateTime(date, time, fallbackTime) {
+                const normalizedDate = String(date || "").trim();
+                const normalizedTime = String(time || fallbackTime || "").trim().slice(0, 5);
+                return /^\\d{4}-\\d{2}-\\d{2}$/.test(normalizedDate) && /^\\d{2}:\\d{2}$/.test(normalizedTime)
+                  ? `${normalizedDate}T${normalizedTime}:00`
+                  : "";
+              }
+
+              function applyAnalysisProjectWindowToMeta() {
+                const { startDate, endDate } = getCampaignAnalysisDateValues();
+                if (!startDate || !endDate || startDate > endDate) {
+                  return;
+                }
+                const projectDates = [];
+                const cursor = new Date(`${startDate}T12:00:00.000Z`);
+                const last = new Date(`${endDate}T12:00:00.000Z`);
+                while (cursor <= last && projectDates.length < 730) {
+                  projectDates.push(cursor.toISOString().slice(0, 10));
+                  cursor.setUTCDate(cursor.getUTCDate() + 1);
+                }
+                state.meta = {
+                  ...state.meta,
+                  projectDates,
+                  defaultFrom: projectDates[0],
+                  defaultTo: projectDates[projectDates.length - 1],
+                  projectWindowLabel: `${projectDates[0]} עד ${projectDates[projectDates.length - 1]}`,
+                };
+                state.rows = enrichRows(state.rows, state.meta);
+              }
+
+              async function saveAnalysisProjectDates() {
+                const startDate = String(elements.analysisProjectStart?.value || "").trim();
+                const endDate = String(elements.analysisProjectEnd?.value || "").trim();
+                if (!startDate || !endDate) {
+                  throw new Error("יש לבחור תאריך התחלה ותאריך סיום לפרויקט.");
+                }
+                if (startDate > endDate) {
+                  throw new Error("תאריך סיום הפרויקט חייב להיות אחרי תאריך ההתחלה.");
+                }
+
+                const basics = state.campaignBuilder?.basics || {};
+                state.campaignBuilder = normalizeCampaignBuilderConfig({
+                  ...state.campaignBuilder,
+                  basics: {
+                    ...basics,
+                    startDate,
+                    endDate,
+                    startAt: buildCampaignDateTime(startDate, basics.startTime, "00:00"),
+                    endAt: buildCampaignDateTime(endDate, basics.endTime, "23:59"),
+                  },
+                });
+                state.campaignPage = normalizeCampaignPageSettings({
+                  ...state.campaignPage,
+                  projectDatesLabel: buildProjectWindowLabelFromBasics(state.campaignBuilder.basics),
+                });
+                applyAnalysisProjectWindowToMeta();
+                setAnalysisProjectDatesStatus("שומר את תאריכי הפרויקט...", "neutral");
+                await saveCampaignBuilderConfig();
+                await loadAdminDataset(getActiveCampaignIdentity());
+                state.filters = getDefaultFilters(state.meta);
+                resetFilterOptions();
+                renderAll();
+                setAnalysisProjectDatesStatus("תאריכי הפרויקט נשמרו והפילוחים עודכנו.", "success");
+              }
+
               function persistCampaignPageSettings(
                 settings,
                 successMessage = "ההגדרות נשמרו מקומית בדפדפן זה.",
@@ -5246,6 +5366,8 @@ def build_fragment(
                     startTime: String(basics.startTime || defaults.basics.startTime || "00:00").trim(),
                     endDate: String(basics.endDate || defaults.basics.endDate || "").trim(),
                     endTime: String(basics.endTime || defaults.basics.endTime || "23:59").trim(),
+                    startAt: String(basics.startAt || "").trim(),
+                    endAt: String(basics.endAt || "").trim(),
                     timeZone: String(basics.timeZone || defaults.basics.timeZone || "Asia/Jerusalem").trim(),
                     status: ["draft", "scheduled", "live", "paused", "completed", "archived"].includes(String(basics.status || "").trim().toLowerCase())
                       ? String(basics.status).trim().toLowerCase()
@@ -5707,7 +5829,7 @@ def build_fragment(
                     updatedAt: state.campaignBuilder.meta.lastSavedAt,
                     updatedBy: state.campaignBuilder.meta.lastSavedBy,
                   });
-                  setCampaignBuilderStatus(`טיוטת קמפיין נשמרה מקומית Â· ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                  setCampaignBuilderStatus(`טיוטת קמפיין נשמרה מקומית | ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                   return snapshot;
                 }
                 const { response, payload } = await authRequest(endpoint, {
@@ -5726,7 +5848,7 @@ def build_fragment(
                   updatedAt: state.campaignBuilder.meta.lastSavedAt,
                   updatedBy: state.campaignBuilder.meta.lastSavedBy,
                 });
-                setCampaignBuilderStatus(`נשמר בשרת Â· ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                setCampaignBuilderStatus(`נשמר בשרת | ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                 return getCampaignRegistryActiveEntry(state.campaignRegistry)?.config || snapshot;
               }
 
@@ -5766,7 +5888,7 @@ def build_fragment(
                       updatedAt: state.campaignBuilder.meta.lastSavedAt,
                       updatedBy: state.campaignBuilder.meta.lastSavedBy,
                     });
-                    setCampaignBuilderStatus(`נטען מהשרת Â· ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
+                    setCampaignBuilderStatus(`נטען מהשרת | ${formatCampaignSavedAt(state.campaignBuilder.meta.lastSavedAt)}`, "success");
                     return state.campaignBuilder;
                   }
                 } catch (_error) {
@@ -7421,7 +7543,7 @@ def build_fragment(
                   { value: "all", label: "כל הימים" },
                   ...filterMeta.projectDates.map((date, index) => ({
                     value: String(index + 1),
-                    label: `יום ${index + 1} Â· ${formatShortDate(date)}`,
+                    label: `יום ${index + 1} | ${formatShortDate(date)}`,
                   })),
                 ];
 
@@ -7476,6 +7598,7 @@ def build_fragment(
                 elements.dailyMetric.value = state.view.dailyMetric;
                 elements.heatmapMetric.value = state.view.heatmapMetric;
                 elements.movementMetric.value = state.view.movementMetric;
+                syncAnalysisProjectDateControls();
               }
 
               function syncFiltersFromInputs() {
@@ -7975,7 +8098,7 @@ def build_fragment(
                   `<span class="hero-badge">בסיס פרסים: ${escapeHtml(formatAmount(prizeTotal))}</span>`,
                 ];
                 if (state.compare.rows.length) {
-                  badges.push(`<span class="hero-badge">השוואה: ${escapeHtml(state.compare.label)} Â· ${escapeHtml(formatAmount(sumAmount(compareRows)))}</span>`);
+                  badges.push(`<span class="hero-badge">השוואה: ${escapeHtml(state.compare.label)} | ${escapeHtml(formatAmount(sumAmount(compareRows)))}</span>`);
                 }
                 if (latestCreated) {
                   badges.push(`<span class="hero-badge">עודכן לאחרונה: ${escapeHtml(formatDateTime(latestCreated))}</span>`);
@@ -8001,7 +8124,7 @@ def build_fragment(
                 const timeRemainingHours = Math.max(0, Math.round(velocity.bounds.remainingHours));
                 const stats = [
                   { label: "סכום שגויס", value: totalGoal ? `${formatAmount(total)} / ${formatAmount(totalGoal)}` : formatAmount(total), detail: totalGoal ? `${formatPercent(targetPct)} מהיעד` : "עדיין לא הוגדר יעד" },
-                  { label: "תחזית סיום", value: formatAmount(forecast.projectedFinal), detail: totalGoal ? `${formatPercent(forecast.projectedTargetPct)} מהיעד Â· ${forecast.confidence}` : forecast.confidenceReason },
+                  { label: "תחזית סיום", value: formatAmount(forecast.projectedFinal), detail: totalGoal ? `${formatPercent(forecast.projectedTargetPct)} מהיעד | ${forecast.confidence}` : forecast.confidenceReason },
                   { label: "זמן שנותר", value: `${formatNumber(timeRemainingHours)} שעות`, detail: `חלון קמפיין: ${formatPercent(velocity.bounds.elapsedRatio)} הושלם` },
                   { label: "תרומות", value: formatNumber(rows.length), detail: `ממוצע לתרומה ${formatAmount(average)}` },
                   { label: "שגרירים פעילים", value: formatNumber(activeAmbassadors), detail: `${formatNumber(ambassadors.length)} שגרירים מזוהים` },
@@ -8128,7 +8251,7 @@ def build_fragment(
                 const forecast = intelligenceEngine.buildForecastModel(rows, context);
                 const attentionItems = intelligenceEngine.buildAttentionNow(rows, context);
                 const model = buildExecutiveModel(rows);
-                elements.executiveSummary.textContent = `${health.label} Â· תחזית ${formatAmount(forecast.projectedFinal)} Â· ${attentionItems.length} נקודות טיפול פתוחות`;
+                elements.executiveSummary.textContent = `${health.label} | תחזית ${formatAmount(forecast.projectedFinal)} | ${attentionItems.length} נקודות טיפול פתוחות`;
 
                 const cards = [
                   {
@@ -8324,7 +8447,7 @@ def build_fragment(
                         ${priorities.length
                           ? priorities
                               .slice(0, 6)
-                              .map((item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> Â· ${escapeHtml(item.reason)} Â· ${escapeHtml(item.action)}</li>`)
+                              .map((item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> | ${escapeHtml(item.reason)} | ${escapeHtml(item.action)}</li>`)
                               .join("")
                           : `<li>לא זוהו כרגע הזדמנויות פעולה ממוקדות.</li>`}
                       </ul>
@@ -8338,7 +8461,7 @@ def build_fragment(
                               .sort((left, right) => right.total - left.total)
                               .slice(0, 6)
                               .map(
-                                (item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> Â· ${escapeHtml(item.status)} Â· ${escapeHtml(formatAmount(item.total))} Â· ${escapeHtml(item.target ? formatPercent(item.targetProgress) : "ללא יעד")} Â· ${escapeHtml(item.hoursSinceActivity ? `${Math.round(item.hoursSinceActivity)} שעות ללא פעילות` : "פעיל כעת")}</li>`
+                                (item) => `<li><strong>${escapeHtml(item.ambassador)}</strong> | ${escapeHtml(item.status)} | ${escapeHtml(formatAmount(item.total))} | ${escapeHtml(item.target ? formatPercent(item.targetProgress) : "ללא יעד")} | ${escapeHtml(item.hoursSinceActivity ? `${Math.round(item.hoursSinceActivity)} שעות ללא פעילות` : "פעיל כעת")}</li>`
                               )
                               .join("")
                           : `<li>אין שגרירים להצגה בטווח המסונן.</li>`}
@@ -8353,7 +8476,7 @@ def build_fragment(
                               <div class="bucket-item">
                                 <div class="bucket-head">
                                   <span>${escapeHtml(bucket.label)}</span>
-                                  <span class="text-small text-muted">${escapeHtml(formatNumber(bucket.count))} עסקאות Â· ${escapeHtml(formatAmount(bucket.total))}</span>
+                                  <span class="text-small text-muted">${escapeHtml(formatNumber(bucket.count))} עסקאות | ${escapeHtml(formatAmount(bucket.total))}</span>
                                 </div>
                                 <div class="bucket-bar"><div class="bucket-fill" style="width:${(bucket.count / model.maxBucketCount) * 100}%"></div></div>
                               </div>
@@ -9042,10 +9165,10 @@ def build_fragment(
                 elements.dailyChart.appendChild(svgNode);
                 setInsightSummary(elements.dailySummary, [
                   bestDay
-                    ? { label: "יום שיא", value: `${formatShortDate(bestDay.date)} Â· ${formatMetricValue(getValue(bestDay))}`, tone: "accent" }
+                    ? { label: "יום שיא", value: `${formatShortDate(bestDay.date)} | ${formatMetricValue(getValue(bestDay))}`, tone: "accent" }
                     : null,
                   { label: "ממוצע יומי", value: formatMetricValue(averageValue) },
-                  latestDay ? { label: "יום אחרון בטווח", value: `${formatShortDate(latestDay.date)} Â· ${formatMetricValue(getValue(latestDay))}`, tone: "dark" } : null,
+                  latestDay ? { label: "יום אחרון בטווח", value: `${formatShortDate(latestDay.date)} | ${formatMetricValue(getValue(latestDay))}`, tone: "dark" } : null,
                 ]);
               }
 
@@ -9170,12 +9293,12 @@ def build_fragment(
                   bestCell
                     ? {
                         label: "חלון שיא",
-                        value: `${formatShortDate(peakParts[0])} ${formatHourLabel(Number(peakParts[1]))} Â· ${formatMetricValue(bestCell[1])}`,
+                        value: `${formatShortDate(peakParts[0])} ${formatHourLabel(Number(peakParts[1]))} | ${formatMetricValue(bestCell[1])}`,
                         tone: "accent",
                       }
                     : null,
-                  bestDay ? { label: "יום מוביל", value: `${formatShortDate(bestDay[0])} Â· ${formatMetricValue(bestDay[1])}` } : null,
-                  bestHour ? { label: "שעה חזקה", value: `${formatHourLabel(Number(bestHour[0]))} Â· ${formatMetricValue(bestHour[1])}`, tone: "dark" } : null,
+                  bestDay ? { label: "יום מוביל", value: `${formatShortDate(bestDay[0])} | ${formatMetricValue(bestDay[1])}` } : null,
+                  bestHour ? { label: "שעה חזקה", value: `${formatHourLabel(Number(bestHour[0]))} | ${formatMetricValue(bestHour[1])}`, tone: "dark" } : null,
                 ]);
               }
 
@@ -9313,8 +9436,8 @@ def build_fragment(
                 elements.movementChart.appendChild(svgNode);
                 const bestParts = bestCell ? bestCell[0].split("|") : [];
                 setInsightSummary(elements.movementSummary, [
-                  leader ? { label: "מוביל נוכחי", value: `${leader[0]} Â· ${formatMetricValue(leader[1])}`, tone: "accent" } : null,
-                  bestCell ? { label: "פיק פעילות", value: `${bestParts[0]} Â· ${formatShortDate(bestParts[1])} Â· ${formatMetricValue(bestCell[1])}` } : null,
+                  leader ? { label: "מוביל נוכחי", value: `${leader[0]} | ${formatMetricValue(leader[1])}`, tone: "accent" } : null,
+                  bestCell ? { label: "פיק פעילות", value: `${bestParts[0]} | ${formatShortDate(bestParts[1])} | ${formatMetricValue(bestCell[1])}` } : null,
                   state.filters.ambassador === "all"
                     ? { label: "מוצגים כעת", value: `${formatNumber(selectedAmbassadors.length)} שגרירים`, tone: "dark" }
                     : { label: "פילוח פעיל", value: state.filters.ambassador, tone: "dark" },
@@ -9350,7 +9473,7 @@ def build_fragment(
                           (row) => `
                             <tr>
                               <td>${escapeHtml(formatDateTime(row.createdIso))}</td>
-                              <td>${escapeHtml(`${row.projectDayLabel} Â· ${getWeekdayLabel(row.date)}`)}</td>
+                              <td>${escapeHtml(`${row.projectDayLabel} | ${getWeekdayLabel(row.date)}`)}</td>
                               <td>${escapeHtml(row.ambassador)}</td>
                               <td>${escapeHtml(row.donor)}</td>
                               <td class="amount-cell">${escapeHtml(formatAmount(row.amount))}</td>
@@ -9661,7 +9784,7 @@ def build_fragment(
                   .map((item) => {
                     const label = item.id === state.activeCampaignId ? snapshot.basics.campaignName || item.name : item.name;
                     const slug = item.id === state.activeCampaignId ? snapshot.basics.slug || item.slug : item.slug;
-                    return `<option value="${escapeAttribute(item.id)}"${item.id === state.activeCampaignId ? " selected" : ""}>${escapeHtml(label || "ללא שם")} Â· /${escapeHtml(slug || "campaign")}</option>`;
+                    return `<option value="${escapeAttribute(item.id)}"${item.id === state.activeCampaignId ? " selected" : ""}>${escapeHtml(label || "ללא שם")} | /${escapeHtml(slug || "campaign")}</option>`;
                   })
                   .join("");
                 const steps = [
@@ -9907,7 +10030,7 @@ def build_fragment(
                     <div class="settings-media-preview">
                       <div class="settings-media-preview-head">
                         <div class="settings-media-preview-label">תצוגה מקדימה</div>
-                        <div class="settings-media-preview-meta">${builder.ui.previewMode === "mobile" ? "Mobile" : "Desktop"} Â· ${escapeHtml(settings.mediaType === "video" ? "וידאו" : "תמונה")}</div>
+                        <div class="settings-media-preview-meta">${builder.ui.previewMode === "mobile" ? "Mobile" : "Desktop"} | ${escapeHtml(settings.mediaType === "video" ? "וידאו" : "תמונה")}</div>
                       </div>
                       <div class="settings-media-preview-frame">
                         ${mediaPreviewMarkup}
@@ -10088,11 +10211,11 @@ def build_fragment(
                     <div class="signal-grid">
                       <article class="analysis-card">
                         <h4>פרסי מיקומים</h4>
-                        <ul>${(state.prizeModel.placePrizes || []).length ? state.prizeModel.placePrizes.map((item) => `<li>${escapeHtml(item.label || `מקום ${item.place}`)} Â· ${escapeHtml(item.prize || "ללא פרס")}</li>`).join("") : "<li>אין פרסי מיקומים מוגדרים.</li>"}</ul>
+                        <ul>${(state.prizeModel.placePrizes || []).length ? state.prizeModel.placePrizes.map((item) => `<li>${escapeHtml(item.label || `מקום ${item.place}`)} | ${escapeHtml(item.prize || "ללא פרס")}</li>`).join("") : "<li>אין פרסי מיקומים מוגדרים.</li>"}</ul>
                       </article>
                       <article class="analysis-card">
                         <h4>מדרגות פרס</h4>
-                        <ul>${(state.prizeModel.tierPrizes || []).length ? state.prizeModel.tierPrizes.map((item) => `<li>${escapeHtml(item.prize || "מדרגה")} Â· ${escapeHtml(formatAmount(item.threshold || 0))}</li>`).join("") : "<li>אין מדרגות פרס מוגדרות.</li>"}</ul>
+                        <ul>${(state.prizeModel.tierPrizes || []).length ? state.prizeModel.tierPrizes.map((item) => `<li>${escapeHtml(item.prize || "מדרגה")} | ${escapeHtml(formatAmount(item.threshold || 0))}</li>`).join("") : "<li>אין מדרגות פרס מוגדרות.</li>"}</ul>
                       </article>
                     </div>
                   `;
@@ -11290,6 +11413,16 @@ def build_fragment(
                       await refreshSourceDataFromApi();
                     } catch (error) {
                       setSourceConfigStatus(error?.message || "משיכת הנתונים מהמערכת החיצונית נכשלה.", "error");
+                    }
+                  });
+                }
+
+                if (elements.saveAnalysisProjectDates) {
+                  elements.saveAnalysisProjectDates.addEventListener("click", async () => {
+                    try {
+                      await saveAnalysisProjectDates();
+                    } catch (error) {
+                      setAnalysisProjectDatesStatus(error?.message || "שמירת תאריכי הפרויקט נכשלה.", "error");
                     }
                   });
                 }

@@ -1922,6 +1922,24 @@ def build_campaign_registry_for_accessible(auth_context: dict[str, Any], active_
     }
 
 
+def build_campaign_project_dates(start_at: str, end_at: str) -> list[str]:
+    start_text = str(start_at or "").strip()[:10]
+    end_text = str(end_at or "").strip()[:10]
+    try:
+        start_date = datetime.strptime(start_text, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_text, "%Y-%m-%d").date()
+    except ValueError:
+        return []
+    if start_date > end_date:
+        return []
+    dates: list[str] = []
+    current = start_date
+    while current <= end_date and len(dates) < 730:
+        dates.append(current.isoformat())
+        current += timedelta(days=1)
+    return dates
+
+
 def save_platform_campaign_snapshot(snapshot: dict[str, Any], updated_by: str, organization_id: str, campaign_id: str) -> dict[str, Any]:
     timestamp = isoformat_utc(utc_now())
     basics = snapshot.get("basics") if isinstance(snapshot.get("basics"), dict) else {}
@@ -1938,14 +1956,16 @@ def save_platform_campaign_snapshot(snapshot: dict[str, Any], updated_by: str, o
         "createdAt": str((get_platform_organization(organization_id) or {}).get("createdAt") or timestamp).strip() or timestamp,
         "updatedAt": timestamp,
     }
+    start_at = str(basics.get("startAt") or "").strip() or (f"{str(basics.get('startDate') or '').strip()}T{str(basics.get('startTime') or '00:00').strip()}:00" if basics.get("startDate") else "")
+    end_at = str(basics.get("endAt") or "").strip() or (f"{str(basics.get('endDate') or '').strip()}T{str(basics.get('endTime') or '23:59').strip()}:00" if basics.get("endDate") else "")
     campaign_record = {
         "id": campaign_id,
         "organizationId": organization_id,
         "slug": normalize_slug(basics.get("slug") or campaign_id, campaign_id),
         "name": str(basics.get("campaignName") or campaign_id).strip() or campaign_id,
         "status": str(basics.get("status") or "draft").strip().lower() or "draft",
-        "startAt": str(basics.get("startAt") or "").strip(),
-        "endAt": str(basics.get("endAt") or "").strip(),
+        "startAt": start_at,
+        "endAt": end_at,
         "target": int(snapshot.get("goals", {}).get("campaignGoal") or basics.get("target") or 0),
         "currency": str(basics.get("currency") or "ILS").strip().upper() or "ILS",
         "createdAt": str((get_platform_campaign(organization_id, campaign_id) or {}).get("createdAt") or timestamp).strip() or timestamp,
@@ -1982,19 +2002,32 @@ def save_platform_campaign_snapshot(snapshot: dict[str, Any], updated_by: str, o
     platform_set(campaign_config_key(organization_id, campaign_id), normalized_snapshot)
     platform_set(campaign_source_key(organization_id, campaign_id), normalized_source)
     existing_dataset = get_platform_campaign_dataset(organization_id, campaign_id)
-    if not existing_dataset:
-        platform_set(
-            campaign_dataset_key(organization_id, campaign_id),
-            {
-                "organizationId": organization_id,
-                "campaignId": campaign_id,
-                "rows": [],
-                "meta": {},
-                "sourceLabel": "",
-                "generatedAt": timestamp,
-                "updatedAt": timestamp,
+    project_dates = build_campaign_project_dates(campaign_record["startAt"], campaign_record["endAt"])
+    dataset_payload = existing_dataset if isinstance(existing_dataset, dict) else {}
+    dataset_meta = dataset_payload.get("meta") if isinstance(dataset_payload.get("meta"), dict) else {}
+    rows = dataset_payload.get("rows") if isinstance(dataset_payload.get("rows"), list) else []
+    platform_set(
+        campaign_dataset_key(organization_id, campaign_id),
+        {
+            **dataset_payload,
+            "organizationId": organization_id,
+            "campaignId": campaign_id,
+            "rows": rows,
+            "meta": {
+                **dataset_meta,
+                **({
+                    "projectDates": project_dates,
+                    "defaultFrom": project_dates[0],
+                    "defaultTo": project_dates[-1],
+                    "projectWindowLabel": f"{project_dates[0]} עד {project_dates[-1]}",
+                } if project_dates else {}),
+                "rowCount": int(dataset_meta.get("rowCount") or len(rows)),
             },
-        )
+            "sourceLabel": str(dataset_payload.get("sourceLabel") or ""),
+            "generatedAt": str(dataset_payload.get("generatedAt") or timestamp),
+            "updatedAt": timestamp,
+        },
+    )
     return {
         "organization": org_record,
         "campaign": campaign_record,
