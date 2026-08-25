@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { getCampaignDataset, saveCampaignDataset } from "./campaign-repositories.mjs";
 import { normalizeEmail } from "./multi-tenant-model.mjs";
 import { normalizePostgresConnectionString, shouldRunRuntimeSchemaMigrations } from "./postgres-connection.mjs";
 
@@ -772,6 +771,34 @@ async function syncCampaignDatasetSnapshot(scope, record, sourceLabel) {
   };
 }
 
+async function saveDatasetSnapshot(client, scope, rows, sourceLabel, timestamp) {
+  const payload = {
+    organizationId: scope.organization_slug,
+    campaignId: scope.campaign_slug,
+    rows,
+    meta: buildDatasetMeta(rows, scope, { fetchedAt: timestamp }),
+    sourceLabel: String(sourceLabel || "google-sheets").trim(),
+    generatedAt: timestamp,
+    updatedAt: timestamp,
+    recordCount: rows.length,
+  };
+  await client.query(
+    `
+      INSERT INTO goodraise.campaign_datasets (
+        id, organization_id, campaign_id, payload, row_count, generated_at, updated_at
+      )
+      VALUES ($1::uuid, $2::uuid, $3::uuid, $4::jsonb, $5, $6::timestamptz, $6::timestamptz)
+      ON CONFLICT (campaign_id) DO UPDATE SET
+        payload = EXCLUDED.payload,
+        row_count = EXCLUDED.row_count,
+        generated_at = EXCLUDED.generated_at,
+        updated_at = EXCLUDED.updated_at
+    `,
+    [randomUUID(), scope.organization_id, scope.campaign_id, JSON.stringify(payload), rows.length, timestamp],
+  );
+  return { rowCount: rows.length, sourceLabel: payload.sourceLabel, fetchedAt: timestamp };
+}
+
 export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "", options = {}) {
   const pool = await getPostgresPool();
   const client = await pool.connect();
@@ -799,25 +826,8 @@ export async function rebuildCampaignDatasetSnapshot(scope, sourceLabel = "", op
       [scope.campaign_id],
     );
     const rows = result.rows.map(buildDatasetRowFromDatabaseRow);
-    const currentDataset = (await getCampaignDataset(scope.organization_slug, scope.campaign_slug)) || {};
     const nextTimestamp = String(options.fetchedAt || "").trim() || new Date().toISOString();
-    const nextSourceLabel =
-      String(sourceLabel || "").trim() ||
-      String(currentDataset.sourceLabel || "").trim() ||
-      "google-sheets";
-    await saveCampaignDataset(scope.organization_slug, scope.campaign_slug, {
-      organizationId: scope.organization_slug,
-      campaignId: scope.campaign_slug,
-      rows,
-      meta: buildDatasetMeta(rows, scope, { fetchedAt: nextTimestamp }),
-      sourceLabel: nextSourceLabel,
-      generatedAt: nextTimestamp,
-      updatedAt: nextTimestamp,
-    });
-    return {
-      rowCount: rows.length,
-      sourceLabel: nextSourceLabel,
-    };
+    return saveDatasetSnapshot(client, scope, rows, sourceLabel, nextTimestamp);
   } finally {
     client.release();
   }
@@ -839,21 +849,15 @@ export async function markCampaignDatasetSnapshotFresh({
     if (!scope) {
       throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
     }
-    const currentDataset = (await getCampaignDataset(scope.organization_slug, scope.campaign_slug)) || { rows: [], meta: {}, sourceLabel: "" };
+    const existing = await client.query(
+      "SELECT payload FROM goodraise.campaign_datasets WHERE campaign_id = $1::uuid LIMIT 1",
+      [scope.campaign_id],
+    );
+    const currentDataset = existing.rows[0]?.payload || { rows: [], sourceLabel: "" };
     const rows = Array.isArray(currentDataset.rows) ? currentDataset.rows : [];
     const timestamp = String(fetchedAt || "").trim() || new Date().toISOString();
     const nextSourceLabel = String(sourceLabel || currentDataset.sourceLabel || "google-sheets").trim();
-    await saveCampaignDataset(scope.organization_slug, scope.campaign_slug, {
-      ...currentDataset,
-      organizationId: scope.organization_slug,
-      campaignId: scope.campaign_slug,
-      rows,
-      meta: buildDatasetMeta(rows, scope, { fetchedAt: timestamp }),
-      sourceLabel: nextSourceLabel,
-      generatedAt: timestamp,
-      updatedAt: timestamp,
-    });
-    return { rowCount: rows.length, sourceLabel: nextSourceLabel, fetchedAt: timestamp };
+    return saveDatasetSnapshot(client, scope, rows, nextSourceLabel, timestamp);
   } finally {
     client.release();
   }
