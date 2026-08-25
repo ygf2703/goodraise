@@ -4116,6 +4116,8 @@ def build_fragment(
                   backendAvailable: false,
                   setupMode: false,
                   adminDatasetLoaded: false,
+                  publicDatasetStatus: "pending",
+                  publicDatasetError: "",
                   campaignConfigLoaded: false,
                   accessibleCampaigns: [],
                   publicScope: {
@@ -6090,12 +6092,12 @@ def build_fragment(
                 return buildAuthUrl(`/api/organizations/${encodedOrganizationId}/campaigns/${encodedCampaignId}/public-dataset`);
               }
 
-              async function fetchPublicContext() {
+              async function fetchPublicContext(options = {}) {
                 const endpoint = String(AUTH_CONFIG?.publicContextEndpoint || "").trim();
                 if (!endpoint) {
                   return null;
                 }
-                if (state?.auth?.publicScope?.organizationId && state?.auth?.publicScope?.campaignId) {
+                if (!options.refresh && state?.auth?.publicScope?.organizationId && state?.auth?.publicScope?.campaignId) {
                   return {
                     organizationId: state.auth.publicScope.organizationId,
                     campaignId: state.auth.publicScope.campaignId,
@@ -6467,7 +6469,9 @@ def build_fragment(
                 return true;
               }
 
-              async function loadPublicDataset(scope = getActiveCampaignIdentity()) {
+              async function loadPublicDataset(scope = getActiveCampaignIdentity(), options = {}) {
+                state.auth.publicDatasetStatus = "loading";
+                state.auth.publicDatasetError = "";
                 const fetchDataset = async (effectiveScope) => {
                   const endpoint = buildScopedPublicDatasetEndpoint(effectiveScope);
                   if (!endpoint) {
@@ -6487,14 +6491,22 @@ def build_fragment(
                   };
                 };
 
-                let datasetResult = await fetchDataset(scope);
-                if (!datasetResult.ok) {
-                  const discoveredScope = await fetchPublicContext();
-                  if (discoveredScope) {
-                    datasetResult = await fetchDataset(discoveredScope);
+                const requestedScope = scope && scope.organizationId && scope.campaignId ? scope : null;
+                const discoveredScope = options.preferRequestedScope
+                  ? null
+                  : await fetchPublicContext({ refresh: true });
+                const candidateScopes = [discoveredScope, requestedScope]
+                  .filter((candidate, index, list) => candidate?.organizationId && candidate?.campaignId && list.findIndex((item) => item.organizationId === candidate.organizationId && item.campaignId === candidate.campaignId) === index);
+                let datasetResult = { ok: false, payload: {}, scope: requestedScope || discoveredScope || {} };
+                for (const candidateScope of candidateScopes) {
+                  datasetResult = await fetchDataset(candidateScope);
+                  if (datasetResult.ok) {
+                    break;
                   }
                 }
                 if (!datasetResult.ok) {
+                  state.auth.publicDatasetStatus = "unavailable";
+                  state.auth.publicDatasetError = String(datasetResult.payload?.error || datasetResult.payload?.message || "מקור הנתונים הציבורי אינו זמין כרגע.").trim();
                   return false;
                 }
 
@@ -6505,9 +6517,13 @@ def build_fragment(
                 state.meta = payload.meta;
                 state.sourceLabel = payload.sourceLabel || "קובץ בסיס ציבורי";
                 state.datasetFreshnessAt = String(payload.generatedAt || payload.meta?.fetchedAt || payload.meta?.dataThroughAt || "").trim();
+                if (payload.campaignConfig && typeof payload.campaignConfig === "object") {
+                  applyCampaignBuilderConfig(payload.campaignConfig, { preserveSourceConfig: true });
+                }
                 state.validation.base = buildBaseValidationSnapshot(state.rows, state.sourceLabel);
                 state.filters = getDefaultFilters(state.meta);
                 resetFilterOptions();
+                state.auth.publicDatasetStatus = "live";
                 return true;
               }
 
@@ -7084,6 +7100,15 @@ def build_fragment(
                   button.classList.toggle("is-active", button.dataset.pageTarget === nextPage);
                 });
                 refreshAccessUi();
+              }
+
+              async function navigateToPage(page) {
+                setPage(page);
+                const publicPage = page === "project" || page === "prizes";
+                if (publicPage && !state.auth.adminDatasetLoaded && state.auth.publicDatasetStatus !== "live") {
+                  await loadPublicDataset().catch(() => false);
+                }
+                renderAll();
               }
 
               function setAdminTab(tab) {
@@ -7691,6 +7716,9 @@ def build_fragment(
               }
 
               function getPrizeScopeRows() {
+                if (!state.auth.adminDatasetLoaded && state.auth.publicDatasetStatus === "unavailable") {
+                  return [];
+                }
                 return filterRows(state.rows, { includeAmbassador: false });
               }
 
@@ -8738,7 +8766,9 @@ def build_fragment(
 
                 renderPrizeAmbassadorDirectory(standings.leaderboard);
 
-                elements.prizeSummary.textContent = selectedFocus
+                elements.prizeSummary.textContent = state.auth.publicDatasetStatus === "unavailable"
+                  ? `נתוני אמת אינם זמינים כרגע: ${state.auth.publicDatasetError || "יש לנסות שוב בעוד רגע."}`
+                  : selectedFocus
                   ? `${selectedFocus.ambassador}: ${formatAmount(selectedFocus.total)} | פרס פעיל: ${selectedFocus.currentPrize}${selectedFocus.nextPrize ? ` | חסרים ${formatAmount(selectedFocus.gap)} ל-${selectedFocus.nextPrize}` : " | נמצא במדרגה העליונה"}`
                   : `${formatNumber(standings.leaderboard.length)} שגרירים מדורגים בטווח הזמן הנבחר`;
 
@@ -10642,9 +10672,9 @@ def build_fragment(
 
               function bindEvents() {
                 elements.navButtons.forEach((button) => {
-                  button.addEventListener("click", () => {
+                  button.addEventListener("click", async () => {
                     const targetPage = button.dataset.pageTarget || "prizes";
-                    setPage(targetPage);
+                    await navigateToPage(targetPage);
                     if (targetPage === "admin" && !isManagerAuthenticated()) {
                       elements.loginEmail.focus();
                     }
@@ -11660,7 +11690,7 @@ def build_fragment(
                 // Public data is always loaded from the live campaign endpoint. The
                 // embedded file is only a startup shell and must never remain visible.
                 if (!state.auth.adminDatasetLoaded) {
-                  await loadPublicDataset(getActiveCampaignIdentity()).catch(() => false);
+                  await loadPublicDataset().catch(() => false);
                 }
                 setPage(state.session ? "admin" : "project");
                 setAdminTab(state.ui.adminTab);

@@ -969,6 +969,60 @@ function buildPublicDatasetRows(rows = []) {
   }));
 }
 
+function buildPublicCampaignConfig(config = {}) {
+  const source = config && typeof config === "object" ? config : {};
+  const basics = source.basics && typeof source.basics === "object" ? source.basics : {};
+  const branding = source.branding && typeof source.branding === "object" ? source.branding : {};
+  const donation = source.donation && typeof source.donation === "object" ? source.donation : {};
+  const goals = source.goals && typeof source.goals === "object" ? source.goals : {};
+
+  // The public prize page needs campaign presentation and prize rules, never source secrets or ambassador PII.
+  return {
+    basics: {
+      id: basics.id || "",
+      organizationId: basics.organizationId || "",
+      slug: basics.slug || "",
+      campaignName: basics.campaignName || "",
+      status: basics.status || "",
+      target: Number(basics.target || 0),
+      currency: basics.currency || "ILS",
+      startDate: basics.startDate || "",
+      startTime: basics.startTime || "",
+      endDate: basics.endDate || "",
+      endTime: basics.endTime || "",
+    },
+    branding: {
+      eyebrow: branding.eyebrow || "",
+      title: branding.title || "",
+      subtitle: branding.subtitle || "",
+      storyMarkdown: branding.storyMarkdown || "",
+      primaryCtaLabel: branding.primaryCtaLabel || "",
+      secondaryCtaLabel: branding.secondaryCtaLabel || "",
+      mediaType: branding.mediaType || "",
+      mediaUrl: branding.mediaUrl || "",
+      mediaAlt: branding.mediaAlt || "",
+      campaignLogoUrl: branding.campaignLogoUrl || "",
+      organizationLogoUrl: branding.organizationLogoUrl || "",
+      fontFamily: branding.fontFamily || "",
+      theme: branding.theme && typeof branding.theme === "object" ? branding.theme : {},
+    },
+    donation: {
+      presets: Array.isArray(donation.presets) ? donation.presets : [],
+      showRecurring: donation.showRecurring !== false,
+      externalDonationUrl: donation.externalDonationUrl || "",
+      trustNote: donation.trustNote || "",
+      successHint: donation.successHint || "",
+    },
+    goals: {
+      campaignGoal: Number(goals.campaignGoal || basics.target || 0),
+      dailyGoal: Number(goals.dailyGoal || 0),
+      placePrizes: Array.isArray(goals.placePrizes) ? goals.placePrizes : [],
+      tierPrizes: Array.isArray(goals.tierPrizes) ? goals.tierPrizes : [],
+      tierRuleNote: goals.tierRuleNote || "",
+    },
+  };
+}
+
 export async function getPublicDataset(scope = {}) {
   const organizationId = normalizeStableId(scope.organizationId || "");
   const campaignId = normalizeStableId(scope.campaignId || "");
@@ -990,6 +1044,7 @@ export async function getPublicDataset(scope = {}) {
     meta: context.dataset.meta && typeof context.dataset.meta === "object" ? context.dataset.meta : {},
     sourceLabel: context.dataset.sourceLabel || "קובץ בסיס ציבורי",
     generatedAt: context.dataset.generatedAt || context.dataset.updatedAt || "",
+    campaignConfig: buildPublicCampaignConfig(context.config),
   });
 }
 
