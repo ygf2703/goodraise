@@ -22,3 +22,12 @@ test("public prize navigation resolves the live campaign instead of keeping embe
   assert.match(authStore, /campaignConfig: buildPublicCampaignConfig\(context\.config\)/);
   assert.match(template, /state\.auth\.publicDatasetStatus === "unavailable"/);
 });
+
+test("prize rankings exclude campaign ambassadors who do not participate in the competition", async () => {
+  const template = await readFile(new URL("../work/build_yellow_dashboard.py", import.meta.url), "utf8");
+  assert.match(template, /מועדון הכדורגל מכבי תל אביב/);
+  assert.match(template, /לזכרו של כליל קמחי/);
+  assert.match(template, /function buildPrizeCompetitionLeaderboard\(rows\)/);
+  assert.match(template, /const leaderboard = buildPrizeCompetitionLeaderboard\(referenceRows\);/);
+  assert.match(template, /!isPrizeCompetitionEligibleAmbassador\(ambassador\)/);
+});

@@ -38,6 +38,12 @@ FRONTEND_INTELLIGENCE_PATH = Path(
     os.getenv("YELLOW_DASHBOARD_FRONTEND_INTELLIGENCE_PATH", str(FRONTEND_DIR / "goodraise-intelligence.js"))
 ).resolve()
 LEGACY_LOGO_PATH = WORK_DIR / "brand-logo.png"
+PRIZE_COMPETITION_EXCLUDED_AMBASSADORS = frozenset(
+    {
+        "מועדון הכדורגל מכבי תל אביב",
+        "לזכרו של כליל קמחי",
+    }
+)
 OUTPUTS_DIR = Path(os.getenv("YELLOW_DASHBOARD_OUTPUT_DIR", str(ROOT_DIR / "outputs"))).resolve()
 NETLIFY_DATA_DIR = Path(os.getenv("YELLOW_DASHBOARD_NETLIFY_DATA_DIR", str(ROOT_DIR / "netlify" / "data"))).resolve()
 ADMIN_DATASET_OUTPUT_PATH = Path(
@@ -167,8 +173,21 @@ def build_leaderboard(rows: list[dict]) -> list[dict]:
     return sorted(grouped.values(), key=lambda item: item["total"], reverse=True)
 
 
+def normalize_prize_competition_ambassador(value: object) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[\"'׳״`.,;:!?\-–—_()[\]{}]+", " ", str(value or "").strip().lower())).strip()
+
+
+def build_prize_competition_leaderboard(rows: list[dict]) -> list[dict]:
+    excluded = {normalize_prize_competition_ambassador(name) for name in PRIZE_COMPETITION_EXCLUDED_AMBASSADORS}
+    return [
+        entry
+        for entry in build_leaderboard(rows)
+        if normalize_prize_competition_ambassador(entry.get("ambassador")) not in excluded
+    ]
+
+
 def compute_public_snapshot(rows: list[dict], meta: dict, prize_model: dict) -> dict:
-    leaderboard = build_leaderboard(rows)
+    leaderboard = build_prize_competition_leaderboard(rows)
     total_raised = sum(float(row.get("amount") or 0) for row in rows)
     latest_created = max((row.get("createdIso") or "" for row in rows), default="")
     active_ambassadors = len(leaderboard)
@@ -7751,6 +7770,30 @@ def build_fragment(
                 return [...grouped.values()].sort((left, right) => right.total - left.total);
               }
 
+              // These campaign ambassadors' donations remain in every financial total, but they
+              // are excluded from the prizes and competition rankings by campaign policy.
+              const PRIZE_COMPETITION_EXCLUDED_AMBASSADORS = new Set(
+                ["מועדון הכדורגל מכבי תל אביב", "לזכרו של כליל קמחי"].map(normalizePrizeCompetitionAmbassador)
+              );
+
+              function normalizePrizeCompetitionAmbassador(value) {
+                return normalizeSearchToken(value)
+                  .replace(/[-"'׳״`.,;:!?–—_(){}]+/g, " ")
+                  .replaceAll("[", " ")
+                  .replaceAll("]", " ")
+                  .replace(new RegExp("\\\\s+", "g"), " ")
+                  .trim();
+              }
+
+              function isPrizeCompetitionEligibleAmbassador(ambassador) {
+                const normalized = normalizePrizeCompetitionAmbassador(ambassador);
+                return Boolean(normalized) && normalized !== "ללא שיוך" && !PRIZE_COMPETITION_EXCLUDED_AMBASSADORS.has(normalized);
+              }
+
+              function buildPrizeCompetitionLeaderboard(rows) {
+                return buildLeaderboard(rows).filter((entry) => isPrizeCompetitionEligibleAmbassador(entry.ambassador));
+              }
+
               function formatSignedNumber(value) {
                 if (!Number.isFinite(value)) {
                   return "0";
@@ -7901,7 +7944,7 @@ def build_fragment(
 
               function computePrizeStandings(referenceRows) {
                 const prizeModel = normalizePrizeModel(state.prizeModel);
-                const leaderboard = buildLeaderboard(referenceRows);
+                const leaderboard = buildPrizeCompetitionLeaderboard(referenceRows);
                 const placeWinners = prizeModel.placePrizes.map((item) => ({
                   ...item,
                   winner: leaderboard[item.place - 1] || null,
@@ -7970,7 +8013,7 @@ def build_fragment(
                   }
                   const byAmbassador = groupedByDate.get(dateKey);
                   const ambassador = row.ambassador || "ללא שיוך";
-                  if (ambassador === "ללא שיוך") {
+                  if (!isPrizeCompetitionEligibleAmbassador(ambassador)) {
                     return;
                   }
                   const current = byAmbassador.get(ambassador) || { ambassador, total: 0, deals: 0 };
@@ -8070,7 +8113,7 @@ def build_fragment(
               }
 
               function renderPublicHeroBadges(prizeRows) {
-                const leaderboard = buildLeaderboard(prizeRows);
+                const leaderboard = buildPrizeCompetitionLeaderboard(prizeRows);
                 const topLeader = leaderboard[0];
                 const total = sumAmount(prizeRows);
                 const resetState = isResetDataState();
