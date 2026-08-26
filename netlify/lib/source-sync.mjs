@@ -200,6 +200,7 @@ export async function syncCampaignSourceOnce({
       requestReference: `${triggeredBy}:${fetched.fetchedAt}`,
       fetchedAt: fetched.fetchedAt,
       records: mappedSourceRows,
+      replaceExternalSnapshot: true,
     });
   } else {
     await saveCampaignDataset(organizationId, campaignId, {

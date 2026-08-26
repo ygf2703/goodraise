@@ -72,6 +72,28 @@ test("normalizes the Redash charge_success payment column", () => {
   assert.equal(getDonationRecordValidationError(record), "");
 });
 
+test("accepts the current donor-report Google Sheets columns", () => {
+  const record = normalizeExternalRecord({
+    id: "5419274",
+    created_at: "23/08/26 09:02",
+    full_name: "תורם/ת בדיקה",
+    total: "500",
+    currencyname: "ILS",
+    phone: "0501234567",
+    email: "donor@example.test",
+    "Ambassador name": "שגריר/ה בדיקה",
+    "Ambassador email": "ambassador@example.test",
+    charged_success: "TRUE",
+    charge_result: "0",
+  });
+
+  assert.equal(record.id, "5419274");
+  assert.equal(record.created_at, "23/08/26 09:02");
+  assert.equal(record.total, "500");
+  assert.equal(record.charged_success, "TRUE");
+  assert.equal(getDonationRecordValidationError(record), "");
+});
+
 test("keeps the configured campaign date window when donations currently exist on one day", () => {
   const meta = buildDatasetMeta(
     [{ date: "2026-08-23" }],

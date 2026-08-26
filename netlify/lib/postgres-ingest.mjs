@@ -1839,6 +1839,7 @@ export async function ingestCampaignRecords({
   requestReference = "",
   fetchedAt = "",
   records = [],
+  replaceExternalSnapshot = false,
 }) {
   const sourceRecords = Array.isArray(records) ? records : [];
   const normalizedRecords = [];
@@ -1866,6 +1867,7 @@ export async function ingestCampaignRecords({
   let newRows = 0;
   let updatedRows = 0;
   let unchangedRows = 0;
+  let removedRows = 0;
   const importBatchId = randomUUID();
   try {
     await client.query("BEGIN");
@@ -1919,9 +1921,25 @@ export async function ingestCampaignRecords({
       knownRowsResult.rows,
     ));
 
+    // A Google Sheet is a complete source snapshot. Remove source rows that
+    // no longer exist there, while never touching manager-entered matches.
+    if (replaceExternalSnapshot && normalizedRecords.length) {
+      const sourceEventKeys = [...new Set(normalizedRecords.map((record) => buildCanonicalEventKey(record)))];
+      const removed = await client.query(
+        `
+          DELETE FROM goodraise.transactions
+          WHERE campaign_id = $1::uuid
+            AND COALESCE(charge_result_code, '') <> 'manual_match'
+            AND COALESCE(canonical_event_key, '') <> ALL($2::text[])
+        `,
+        [scope.campaign_id, sourceEventKeys],
+      );
+      removedRows = Number(removed.rowCount || 0);
+    }
+
     if (!recordsToWrite.length) {
+      dataset = await rebuildCampaignDatasetSnapshotWithClient(client, scope, sourceLabel, { fetchedAt });
       await client.query("COMMIT");
-      const dataset = await rebuildCampaignDatasetSnapshot(scope, sourceLabel, { fetchedAt });
       return {
         ok: true,
         organization: {
@@ -1941,6 +1959,7 @@ export async function ingestCampaignRecords({
         newRows,
         updatedRows,
         unchangedRows,
+        removedRows,
         skippedBlankRows,
         skippedInvalidRows,
       };
@@ -2032,6 +2051,7 @@ export async function ingestCampaignRecords({
     newRows,
     updatedRows,
     unchangedRows,
+    removedRows,
     skippedBlankRows,
     skippedInvalidRows,
   };
