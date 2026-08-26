@@ -31,3 +31,12 @@ test("prize rankings exclude campaign ambassadors who do not participate in the 
   assert.match(template, /const leaderboard = buildPrizeCompetitionLeaderboard\(referenceRows\);/);
   assert.match(template, /!isPrizeCompetitionEligibleAmbassador\(ambassador\)/);
 });
+
+test("manager dashboard provides filtered ambassador fundraising reports and CSV export", async () => {
+  const template = await readFile(new URL("../work/build_yellow_dashboard.py", import.meta.url), "utf8");
+  assert.match(template, /function buildAmbassadorFundraisingReport\(\)/);
+  assert.match(template, /data-project-action="export-ambassador-report"/);
+  assert.match(template, /data-project-action="export-zero-fundraising-ambassadors"/);
+  assert.match(template, /ambassadors-zero-fundraising\.csv/);
+  assert.match(template, /מייל<\/th><th>טלפון/);
+});

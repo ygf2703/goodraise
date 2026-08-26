@@ -4159,6 +4159,12 @@ def build_fragment(
                   page: "project",
                   tableExpanded: false,
                   prizeAmbassadorSearch: "",
+                  ambassadorReportFilters: {
+                    search: "",
+                    fundraisingState: "zero",
+                    minimumAmount: "",
+                    maximumAmount: "",
+                  },
                   adminTab: "insights",
                   campaignBuilderStep: 1,
                   campaignSettingsStatus: {
@@ -4760,6 +4766,74 @@ def build_fragment(
                 const link = document.createElement("a");
                 link.href = url;
                 link.download = `${getCampaignProjectSlug()}-ambassador-links.csv`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+              }
+
+              function buildAmbassadorFundraisingReport() {
+                const raisedByAmbassador = new Map();
+                state.rows.forEach((row) => {
+                  if (row?.status !== "success") return;
+                  const ambassador = normalizeSearchToken(row?.ambassador);
+                  const amount = Number(row?.amount || 0);
+                  if (!ambassador || !Number.isFinite(amount) || amount <= 0) return;
+                  raisedByAmbassador.set(ambassador, (raisedByAmbassador.get(ambassador) || 0) + amount);
+                });
+                return state.ambassadorDirectory
+                  .map((record) => {
+                    const ambassador = normalizeSearchToken(record.fullName);
+                    return {
+                      ...record,
+                      raisedAmount: Number((raisedByAmbassador.get(ambassador) || 0).toFixed(2)),
+                    };
+                  })
+                  .sort((left, right) => right.raisedAmount - left.raisedAmount || String(left.fullName || "").localeCompare(String(right.fullName || ""), "he"));
+              }
+
+              function getFilteredAmbassadorFundraisingReport() {
+                const filters = state.ui.ambassadorReportFilters || {};
+                const search = normalizeSearchToken(filters.search);
+                const minimumAmount = Number(filters.minimumAmount || 0);
+                const maximumAmount = filters.maximumAmount === "" ? null : Number(filters.maximumAmount);
+                return buildAmbassadorFundraisingReport().filter((record) => {
+                  const searchable = normalizeSearchToken(`${record.fullName} ${record.email} ${record.phone} ${record.nickname}`);
+                  if (search && !searchable.includes(search)) return false;
+                  if (filters.fundraisingState === "zero" && record.raisedAmount !== 0) return false;
+                  if (filters.fundraisingState === "positive" && record.raisedAmount <= 0) return false;
+                  if (Number.isFinite(minimumAmount) && record.raisedAmount < minimumAmount) return false;
+                  if (maximumAmount !== null && Number.isFinite(maximumAmount) && record.raisedAmount > maximumAmount) return false;
+                  return true;
+                });
+              }
+
+              function getAmbassadorsWithNoFundraising() {
+                return buildAmbassadorFundraisingReport().filter((record) => {
+                  const ambassador = normalizeSearchToken(record.fullName);
+                  return ambassador && record.raisedAmount === 0;
+                });
+              }
+
+              function exportAmbassadorFundraisingReport(records, fileName = "ambassador-fundraising-report.csv") {
+                const headers = ["שם מלא", "מייל", "טלפון", "כינוי", "לינק אישי", "סכום גיוס"];
+                const lines = [headers.join(",")];
+                records.forEach((record) => {
+                  const values = [
+                    record.fullName,
+                    record.email,
+                    record.phone,
+                    record.nickname,
+                    buildAmbassadorPersonalUrl(record),
+                    0,
+                  ].map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`);
+                  lines.push(values.join(","));
+                });
+                const blob = new Blob(["\\uFEFF" + lines.join("\\n")], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = `${getCampaignProjectSlug()}-${fileName}`;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -9930,6 +10004,67 @@ def build_fragment(
                       </div>
                     `
                   : `<div class="empty-state">עדיין אין שגרירים מוגדרים. אפשר להעלות CSV או להוסיף ידנית.</div>`;
+                const ambassadorReportFilters = state.ui.ambassadorReportFilters || {};
+                const ambassadorFundraisingRows = directoryRows.length ? getFilteredAmbassadorFundraisingReport() : [];
+                const ambassadorReportMarkup = directoryRows.length
+                  ? `
+                      <section class="control-group">
+                        <div class="control-group-header">
+                          <h4>דוח גיוס שגרירים</h4>
+                          <p>סינון לפי שם ומצב גיוס, הצגת סכום מצטבר לכל שגריר/ה וייצוא רשימה שמית עם פרטי קשר.</p>
+                        </div>
+                        <div class="campaign-settings-grid">
+                          <label class="form-label">
+                            חיפוש
+                            <input class="form-control" type="search" value="${escapeAttribute(ambassadorReportFilters.search || "")}" data-ambassador-report-filter="search" placeholder="שם, מייל, טלפון או כינוי" />
+                          </label>
+                          <label class="form-label">
+                            מצב גיוס
+                            <select class="form-select" data-ambassador-report-filter="fundraisingState">
+                              <option value="all"${ambassadorReportFilters.fundraisingState === "all" ? " selected" : ""}>כל השגרירים</option>
+                              <option value="zero"${ambassadorReportFilters.fundraisingState === "zero" ? " selected" : ""}>ללא גיוס</option>
+                              <option value="positive"${ambassadorReportFilters.fundraisingState === "positive" ? " selected" : ""}>עם גיוס</option>
+                            </select>
+                          </label>
+                          <label class="form-label">
+                            סכום גיוס מינימלי
+                            <input class="form-control" type="number" min="0" step="1" value="${escapeAttribute(ambassadorReportFilters.minimumAmount || "")}" data-ambassador-report-filter="minimumAmount" />
+                          </label>
+                          <label class="form-label">
+                            סכום גיוס מקסימלי
+                            <input class="form-control" type="number" min="0" step="1" value="${escapeAttribute(ambassadorReportFilters.maximumAmount || "")}" data-ambassador-report-filter="maximumAmount" />
+                          </label>
+                        </div>
+                        <div class="control-actions control-actions--inline">
+                          <button class="button-secondary" type="button" data-project-action="apply-ambassador-report">הצגת דוח</button>
+                          <button class="button-primary" type="button" data-project-action="export-ambassador-report">ייצוא הדוח</button>
+                        </div>
+                        <p class="text-small text-muted">${formatNumber(ambassadorFundraisingRows.length)} שגרירים תואמים לסינון.</p>
+                        <div class="table-wrap ambassador-links-table-wrap">
+                          <table class="records-table ambassador-links-table">
+                            <thead><tr><th>שגריר/ה</th><th>מייל</th><th>טלפון</th><th>כינוי</th><th>סכום גיוס</th></tr></thead>
+                            <tbody>
+                              ${ambassadorFundraisingRows.length
+                                ? ambassadorFundraisingRows
+                                    .map(
+                                      (record) => `
+                                        <tr>
+                                          <td>${escapeHtml(record.fullName)}</td>
+                                          <td dir="ltr">${escapeHtml(record.email || "-")}</td>
+                                          <td dir="ltr">${escapeHtml(record.phone || "-")}</td>
+                                          <td dir="ltr">${escapeHtml(record.nickname || "-")}</td>
+                                          <td>${escapeHtml(formatAmount(record.raisedAmount))}</td>
+                                        </tr>
+                                      `,
+                                    )
+                                    .join("")
+                                : `<tr><td colspan="5" class="text-muted">אין שגרירים התואמים לסינון.</td></tr>`}
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    `
+                  : "";
                 const teamsMarkup = builder.teams.groups.length
                   ? builder.teams.groups
                       .map(
@@ -10198,10 +10333,12 @@ def build_fragment(
                         <div class="settings-status" data-ambassador-status${directoryStatus.tone !== "neutral" ? ` data-tone="${escapeAttribute(directoryStatus.tone)}"` : ""}>${escapeHtml(directoryStatus.message)}</div>
                         <div class="project-hero-actions">
                           <button class="button-secondary" type="button" data-project-action="export-ambassador-links">ייצוא לינקים</button>
+                          <button class="button-secondary" type="button" data-project-action="export-zero-fundraising-ambassadors">ייצוא שגרירים ללא גיוס</button>
                           <button class="button-ghost" type="button" data-project-action="clear-ambassador-directory">ניקוי רשימת שגרירים</button>
                         </div>
                       </div>
                     </section>
+                    ${ambassadorReportMarkup}
                     <section class="control-group">
                       <div class="control-group-header">
                         <h4>הוספה ידנית</h4>
@@ -11097,6 +11234,49 @@ def build_fragment(
                       }
                       exportAmbassadorLinks(state.ambassadorDirectory);
                       setAmbassadorDirectoryStatus("קובץ הלינקים האישיים יוצא בהצלחה.", "success");
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+                    if (action === "export-zero-fundraising-ambassadors") {
+                      if (!state.ambassadorDirectory.length) {
+                        setAmbassadorDirectoryStatus("אין עדיין רשימת שגרירים להשוואה. יש להעלות קודם קובץ CSV.", "warning");
+                        renderCampaignDesigner(true);
+                        return;
+                      }
+                      const zeroFundraisingAmbassadors = getAmbassadorsWithNoFundraising();
+                      if (!zeroFundraisingAmbassadors.length) {
+                        setAmbassadorDirectoryStatus("כל השגרירים ברשימה גייסו סכום חיובי. אין קובץ לייצוא.", "success");
+                        renderCampaignDesigner(true);
+                        return;
+                      }
+                      exportAmbassadorFundraisingReport(zeroFundraisingAmbassadors, "ambassadors-zero-fundraising.csv");
+                      setAmbassadorDirectoryStatus(`יוצא קובץ עם ${formatNumber(zeroFundraisingAmbassadors.length)} שגרירים ללא גיוס.`, "success");
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+                    if (action === "apply-ambassador-report") {
+                      const nextFilters = { ...state.ui.ambassadorReportFilters };
+                      elements.campaignDesignerPanel.querySelectorAll("[data-ambassador-report-filter]").forEach((field) => {
+                        nextFilters[field.dataset.ambassadorReportFilter] = field.value;
+                      });
+                      state.ui.ambassadorReportFilters = nextFilters;
+                      renderCampaignDesigner(true);
+                      return;
+                    }
+                    if (action === "export-ambassador-report") {
+                      const nextFilters = { ...state.ui.ambassadorReportFilters };
+                      elements.campaignDesignerPanel.querySelectorAll("[data-ambassador-report-filter]").forEach((field) => {
+                        nextFilters[field.dataset.ambassadorReportFilter] = field.value;
+                      });
+                      state.ui.ambassadorReportFilters = nextFilters;
+                      const reportRows = getFilteredAmbassadorFundraisingReport();
+                      if (!reportRows.length) {
+                        setAmbassadorDirectoryStatus("אין שגרירים התואמים לסינון הנוכחי.", "warning");
+                        renderCampaignDesigner(true);
+                        return;
+                      }
+                      exportAmbassadorFundraisingReport(reportRows);
+                      setAmbassadorDirectoryStatus(`יוצא דוח שגרירים עם ${formatNumber(reportRows.length)} רשומות.`, "success");
                       renderCampaignDesigner(true);
                       return;
                     }
