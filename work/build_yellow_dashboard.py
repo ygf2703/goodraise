@@ -5108,6 +5108,7 @@ def build_fragment(
                     ambassadorGoal: 0,
                     teamGoal: 0,
                     tierRuleNote: String(INITIAL_PRIZES?.tierRuleNote || "").trim(),
+                    sprintPrize: String(INITIAL_PRIZES?.sprintPrize || "").trim(),
                   },
                   templates: {
                     type: "annual-recurring",
@@ -5179,6 +5180,7 @@ def build_fragment(
                     placePrizes: cloneSerializable(prizeModel.placePrizes || []),
                     tierPrizes: cloneSerializable(prizeModel.tierPrizes || []),
                     tierRuleNote: String(prizeModel.tierRuleNote || builder.goals?.tierRuleNote || "").trim(),
+                    sprintPrize: String(prizeModel.sprintPrize || builder.goals?.sprintPrize || "").trim(),
                   },
                   dataSource: cloneSerializable(sourceConfig),
                   permissions: cloneSerializable(builder.permissions),
@@ -5255,6 +5257,7 @@ def build_fragment(
                   placePrizes: cloneSerializable(goals.placePrizes || base.placePrizes || []),
                   tierPrizes: cloneSerializable(goals.tierPrizes || base.tierPrizes || []),
                   tierRuleNote: String(goals.tierRuleNote || base.tierRuleNote || "").trim(),
+                  sprintPrize: String(goals.sprintPrize || base.sprintPrize || "").trim(),
                 });
               }
 
@@ -5527,6 +5530,7 @@ def build_fragment(
                     ambassadorGoal: Number(goals.ambassadorGoal || 0),
                     teamGoal: Number(goals.teamGoal || 0),
                     tierRuleNote: String(goals.tierRuleNote || defaults.goals.tierRuleNote || "").trim(),
+                    sprintPrize: String(goals.sprintPrize || defaults.goals.sprintPrize || "").trim(),
                   },
                   templates: {
                     type: ["ambassador", "community", "emergency", "annual-recurring", "short", "long-running"].includes(String(templates.type || "").trim())
@@ -5612,6 +5616,7 @@ def build_fragment(
                   placePrizes: cloneSerializable(goals.placePrizes || state.prizeModel?.placePrizes || []),
                   tierPrizes: cloneSerializable(goals.tierPrizes || state.prizeModel?.tierPrizes || []),
                   tierRuleNote: String(goals.tierRuleNote || state.prizeModel?.tierRuleNote || "").trim(),
+                  sprintPrize: String(goals.sprintPrize || state.prizeModel?.sprintPrize || "").trim(),
                 });
                 if (!options.preserveSourceConfig && raw.dataSource) {
                   state.sourceConfig = normalizeSourceConfig(raw.dataSource);
@@ -7600,6 +7605,7 @@ def build_fragment(
                   placePrizes,
                   tierPrizes,
                   tierRuleNote: String(model.tierRuleNote || "").trim(),
+                  sprintPrize: String(model.sprintPrize || "").trim(),
                 };
               }
 
@@ -8984,6 +8990,11 @@ def build_fragment(
                             <p>${escapeHtml(sprint.winner ? `${formatAmount(sprint.winner.total)} | ${formatNumber(sprint.winner.deals)} עסקאות` : "אין תרומות זכאיות בחלון זה.")}</p>
                           </article>
                           <article class="analysis-card">
+                            <h4>פרס הספרינט</h4>
+                            <strong>${escapeHtml(prizeModel.sprintPrize || "טרם הוגדר")}</strong>
+                            <p>${escapeHtml(prizeModel.sprintPrize ? "הפרס מיועד למוביל/ת בחלון הספרינט הפעיל." : "ניתן להגדיר אותו בהגדרות הפרסים של הקמפיין.")}</p>
+                          </article>
+                          <article class="analysis-card">
                             <h4>פער מהמקום השני</h4>
                             <strong>${escapeHtml(sprint.runnerUp ? formatAmount(sprint.leadGap) : "אין עדיין מקום שני")}</strong>
                             <p>${escapeHtml(sprint.runnerUp ? `${sprint.runnerUp.ambassador} עם ${formatAmount(sprint.runnerUp.total)}` : "נדרש לפחות שגריר נוסף עם גיוס בחלון.")}</p>
@@ -9946,8 +9957,13 @@ def build_fragment(
                     renderAll();
                     return false;
                   }
-                  state.prizeModel = validation.normalized;
-                  storePrizeModel(validation.normalized);
+                  // The uploaded table does not carry the campaign's sprint prize.
+                  // Keep that campaign-level setting when positions/tiers are replaced.
+                  state.prizeModel = normalizePrizeModel({
+                    ...validation.normalized,
+                    sprintPrize: state.prizeModel?.sprintPrize || "",
+                  });
+                  storePrizeModel(state.prizeModel);
                   const message = validation.warnings.length
                     ? `טבלת הפרסים הוחלפה מתוך ${file.name}, אך נטענה עם אזהרות. מומלץ לבדוק שלא חסרים פרסים או מדרגות.`
                     : `טבלת הפרסים הוחלפה מתוך ${file.name}. היא נשמרת לקמפיין הפעיל ואין צורך להעלות אותה שוב בכל התחברות.`;
@@ -10564,6 +10580,11 @@ def build_fragment(
                       <h4>רשימת פרסים לקמפיין</h4>
                       <p>כאן מגדירים את הפרסים והמדרגות של הקמפיין הפעיל. אפשר להחליף את הטבלה הקיימת באמצעות קובץ Excel או CSV; ההחלפה אינה משפיעה על קמפיינים אחרים.</p>
                       <label class="form-label">
+                        פרס לזוכה/ת הספרינט
+                        <input id="sprint-prize-input" class="form-control" type="text" value="${escapeAttribute(state.prizeModel.sprintPrize || "")}" placeholder="למשל: חולצת משחק חתומה" maxlength="160" />
+                      </label>
+                      <div class="text-small text-muted">הפרס נשמר עבור הקמפיין הפעיל בלבד ומוצג בכרטיס תוצאת הספרינט. העלאת קובץ פרסים אינה מוחקת אותו.</div>
+                      <label class="form-label">
                         העלאת קובץ פרסים
                         <input id="campaign-prize-upload" class="form-control" type="file" accept=".xlsx,.xls,.csv,text/csv" aria-describedby="campaign-prize-upload-help" />
                       </label>
@@ -11097,6 +11118,18 @@ def build_fragment(
 
                 if (elements.campaignDesignerPanel) {
                   elements.campaignDesignerPanel.addEventListener("input", (event) => {
+                    if (event.target?.id === "sprint-prize-input") {
+                      const sprintPrize = String(event.target.value || "").trim();
+                      state.prizeModel = normalizePrizeModel({ ...state.prizeModel, sprintPrize });
+                      state.campaignBuilder = normalizeCampaignBuilderConfig({
+                        ...state.campaignBuilder,
+                        goals: { ...state.campaignBuilder.goals, sprintPrize },
+                      });
+                      storePrizeModel(state.prizeModel);
+                      queueCampaignBuilderAutosave("פרס הספרינט נשמר בטיוטת הקמפיין.");
+                      return;
+                    }
+
                     const builderSettingPath = event.target?.dataset?.builderSetting;
                     if (builderSettingPath) {
                       let value = event.target.value;

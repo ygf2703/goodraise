@@ -51,3 +51,11 @@ test("prize dashboard calculates a sprint winner from a precise selected time wi
   assert.match(template, /תמונת מצב ספרינט/);
   assert.match(template, /חלון ספרינט:/);
 });
+
+test("campaign prize settings persist and display a sprint prize separately from uploaded prize tables", async () => {
+  const template = await readFile(new URL("../work/build_yellow_dashboard.py", import.meta.url), "utf8");
+  assert.match(template, /id="sprint-prize-input"/);
+  assert.match(template, /sprintPrize: String\(model\.sprintPrize \|\| ""\)\.trim\(\)/);
+  assert.match(template, /פרס הספרינט/);
+  assert.match(template, /העלאת קובץ פרסים אינה מוחקת אותו/);
+});
