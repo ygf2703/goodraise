@@ -2,7 +2,59 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { mapSourceRecordsToCanonicalFields, selectGoogleSheetCandidate } from "../netlify/lib/source-store.mjs";
+import { mapSourceRecordsToCanonicalFields, parseGoogleValues, selectGoogleSheetCandidate } from "../netlify/lib/source-store.mjs";
+import { summarizeGoogleSheetsRecords } from "../netlify/lib/source-sync.mjs";
+
+test("keeps Redash transaction fields aligned when an empty header is absent from a data row", () => {
+  const [row] = parseGoogleValues([
+    [
+      "זמן עדכון",
+      "proidd",
+      "ambassador_name",
+      "ambassador_email",
+      "ambassador_phone",
+      "ambassador_target_amount",
+      "ambassador_total_funded",
+      "ambassador_total_remaining",
+      "ambassador_funding_pct",
+      "ambassador_total_unique_donors",
+      "",
+      "transaction_datetime",
+      "transaction_id",
+      "transaction_amount",
+      "is_first_donation_to_ambassador",
+    ],
+    [
+      "2026-08-26 09:20:00",
+      "91745",
+      "שגריר בדיקה",
+      "ambassador@example.test",
+      "",
+      "800000",
+      "1000",
+      "799000",
+      "0.12",
+      "4",
+      "26/08/26 09:20",
+      "5423858",
+      "51.77",
+      "TRUE",
+      "",
+    ],
+  ]);
+
+  assert.equal(row.transaction_datetime, "26/08/26 09:20");
+  assert.equal(row.transaction_id, "5423858");
+  assert.equal(row.transaction_amount, "51.77");
+  assert.equal(row.is_first_donation_to_ambassador, "TRUE");
+
+  const [mapped] = mapSourceRecordsToCanonicalFields([row], {
+    mode: "google_sheets",
+    googleSheets: { fieldMapText: "{}" },
+  });
+  assert.equal(mapped.charged_success, "TRUE");
+  assert.deepEqual(summarizeGoogleSheetsRecords([mapped]), { rowCount: 1, total: 51.77, invalidRows: 0, unchargedRows: 0 });
+});
 
 test("applies configured Google Sheets columns before relational import", () => {
   const [record] = mapSourceRecordsToCanonicalFields(

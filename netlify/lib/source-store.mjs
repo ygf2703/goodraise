@@ -88,29 +88,49 @@ function parseCsv(text) {
   if (!lines.length) {
     return [];
   }
-  const headers = parseCsvLine(lines[0]).map((value) => String(value || "").trim());
-  return lines.slice(1).map((line) => {
-    const cells = parseCsvLine(line);
-    const record = {};
-    headers.forEach((header, index) => {
-      record[header] = String(cells[index] || "").trim();
-    });
-    return record;
-  });
+  return parseTabularValues([parseCsvLine(lines[0]), ...lines.slice(1).map(parseCsvLine)]);
 }
 
-function parseGoogleValues(values) {
+function mapTabularRow(headers, row) {
+  const normalizedHeaders = headers.map((value) => String(value || "").trim());
+  const cells = Array.isArray(row) ? [...row] : [];
+  while (cells.length && !String(cells[cells.length - 1] || "").trim()) {
+    cells.pop();
+  }
+  const emptyHeaderState = { remaining: Math.max(0, normalizedHeaders.length - cells.length) };
+  // Redash exports occasionally contain an empty header column that is not
+  // present in every data row. Remove only the surplus empty headers so the
+  // transaction fields that follow remain aligned.
+  const surplusHeaders = normalizedHeaders.length - cells.length;
+  const alignedHeaders =
+    surplusHeaders > 0
+      ? normalizedHeaders.filter((header) => {
+          if (!header && emptyHeaderState.remaining > 0) {
+            emptyHeaderState.remaining -= 1;
+            return false;
+          }
+          return true;
+        })
+      : normalizedHeaders;
+  const record = {};
+  alignedHeaders.forEach((header, index) => {
+    if (header) {
+      record[header] = String(cells[index] || "").trim();
+    }
+  });
+  return record;
+}
+
+function parseTabularValues(values) {
   if (!Array.isArray(values) || !values.length || !Array.isArray(values[0])) {
     return [];
   }
-  const headers = values[0].map((value) => String(value || "").trim());
-  return values.slice(1).map((row) => {
-    const record = {};
-    headers.forEach((header, index) => {
-      record[header] = String(row?.[index] || "").trim();
-    });
-    return record;
-  });
+  const headers = values[0];
+  return values.slice(1).map((row) => mapTabularRow(headers, row));
+}
+
+export function parseGoogleValues(values) {
+  return parseTabularValues(values);
 }
 
 function normalizeGoogleHeader(value) {
