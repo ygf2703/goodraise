@@ -242,6 +242,43 @@ const CANONICAL_SOURCE_FIELDS = [
   "charge_result",
 ];
 
+function normalizeSourceColumnName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function isBooleanSourceValue(value) {
+  return ["true", "false", "1", "0", "yes", "no", "כן", "לא"].includes(String(value || "").trim().toLowerCase());
+}
+
+function findApprovedPaymentColumn(records) {
+  const candidates = new Map();
+  for (const record of records) {
+    for (const [columnName, value] of Object.entries(record || {})) {
+      const candidate = candidates.get(columnName) || { columnName, values: 0, booleanValues: 0 };
+      candidate.values += 1;
+      if (isBooleanSourceValue(value)) candidate.booleanValues += 1;
+      candidates.set(columnName, candidate);
+    }
+  }
+
+  return [...candidates.values()]
+    .map((candidate) => {
+      const label = normalizeSourceColumnName(candidate.columnName);
+      const isDirectDebit = /direct debit|הוראת קבע/.test(label);
+      const isPaymentStatus = /charged?|charge|payment|success|approved?|complete|status|חיוב|סליק|אושר|שולם/.test(label);
+      return {
+        ...candidate,
+        score: !isDirectDebit && isPaymentStatus && candidate.booleanValues > 0 ? candidate.booleanValues / candidate.values : 0,
+      };
+    })
+    .filter((candidate) => candidate.score >= 0.8)
+    .sort((left, right) => right.score - left.score || right.booleanValues - left.booleanValues)[0]?.columnName;
+}
+
 function parseConfiguredFieldMap(sourceConfig) {
   try {
     const parsed = JSON.parse(resolveFieldMapText(sourceConfig));
@@ -255,7 +292,7 @@ function parseConfiguredFieldMap(sourceConfig) {
 // This keeps relational imports and in-browser previews on the same fields.
 export function mapSourceRecordsToCanonicalFields(rawRows, sourceConfig) {
   const fieldMap = parseConfiguredFieldMap(sourceConfig);
-  return (Array.isArray(rawRows) ? rawRows : []).map((rawRecord) => {
+  const mappedRows = (Array.isArray(rawRows) ? rawRows : []).map((rawRecord) => {
     const record = rawRecord && typeof rawRecord === "object" ? rawRecord : {};
     const mapped = { ...record };
     for (const fieldName of CANONICAL_SOURCE_FIELDS) {
@@ -266,6 +303,16 @@ export function mapSourceRecordsToCanonicalFields(rawRows, sourceConfig) {
     }
     return mapped;
   });
+  // Older Redash exports sometimes expose a payment-status column under a
+  // human-readable name. Detect only a strongly boolean payment column when
+  // the configured mapping did not produce a status value.
+  if (!mappedRows.some((record) => String(record.charged_success || "").trim())) {
+    const detectedStatusColumn = findApprovedPaymentColumn(mappedRows);
+    if (detectedStatusColumn) {
+      return mappedRows.map((record) => ({ ...record, charged_success: record[detectedStatusColumn] }));
+    }
+  }
+  return mappedRows;
 }
 
 function normalizeDatasetRows(rawRows, sourceConfig) {

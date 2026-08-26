@@ -24,6 +24,21 @@ test("applies configured Google Sheets columns before relational import", () => 
   assert.equal(record.charged_success, "TRUE");
 });
 
+test("detects a boolean payment column when a legacy Google Sheet lacks a field map", () => {
+  const rows = mapSourceRecordsToCanonicalFields(
+    [
+      { "Payment approved": "TRUE", "Direct debit active": "TRUE" },
+      { "Payment approved": "FALSE", "Direct debit active": "TRUE" },
+    ],
+    { mode: "google_sheets", googleSheets: { fieldMapText: "{}" } },
+  );
+
+  assert.deepEqual(
+    rows.map((row) => row.charged_success),
+    ["TRUE", "FALSE"],
+  );
+});
+
 test("selects the newest valid Google Sheets transactions tab over a larger historic tab", () => {
   const headers = ["Transaction ID", "Created At", "Total", "Ambassador"];
   const selected = selectGoogleSheetCandidate([
