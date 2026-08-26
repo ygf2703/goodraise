@@ -4780,7 +4780,9 @@ def build_fragment(
 
               function buildAmbassadorFundraisingReport() {
                 const raisedByAmbassador = new Map();
-                state.rows.forEach((row) => {
+                // Apply the active time, donor, and amount filters to the ambassador report.
+                // The report has its own ambassador search, so it intentionally keeps all ambassadors here.
+                filterRows(state.rows, { includeAmbassador: false }).forEach((row) => {
                   if (row?.status !== "success") return;
                   const ambassador = normalizeSearchToken(row?.ambassador);
                   const amount = Number(row?.amount || 0);
@@ -4831,7 +4833,7 @@ def build_fragment(
                     record.phone,
                     record.nickname,
                     buildAmbassadorPersonalUrl(record),
-                    0,
+                    record.raisedAmount,
                   ].map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`);
                   lines.push(values.join(","));
                 });
