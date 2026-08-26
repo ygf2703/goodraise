@@ -14,13 +14,14 @@ import {
   getDonationRecordValidationError,
   hasConfiguredRelationalIngest,
   ingestCampaignRecords,
+  isChargedSuccess,
   markCampaignDatasetSnapshotFresh,
   normalizeExternalRecord,
 } from "./postgres-ingest.mjs";
 
 // Bump this only when accepted source formats change. It makes a previously
 // rejected but unchanged sheet eligible for one safe re-processing pass.
-const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-25-google-ledger-reconciliation-v4";
+const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-26-charged-success-v5";
 
 function normalizeGoogleSheetsSyncState(config, patch = {}) {
   return normalizeSourceConfig(
@@ -84,10 +85,15 @@ export function summarizeGoogleSheetsRecords(rawRows = []) {
   const keys = new Set();
   let total = 0;
   let invalidRows = 0;
+  let unchargedRows = 0;
   for (const rawRow of Array.isArray(rawRows) ? rawRows : []) {
     const record = normalizeExternalRecord(rawRow || {});
     if (getDonationRecordValidationError(record)) {
       invalidRows += 1;
+      continue;
+    }
+    if (!isChargedSuccess(record.charged_success)) {
+      unchargedRows += 1;
       continue;
     }
     const key = String(record.id || `${record.created_at}|${record.total}|${record.email}|${record.full_name}`).trim();
@@ -95,7 +101,7 @@ export function summarizeGoogleSheetsRecords(rawRows = []) {
     keys.add(key);
     total += parseSourceAmount(record.total);
   }
-  return { rowCount: keys.size, total: Number(total.toFixed(2)), invalidRows };
+  return { rowCount: keys.size, total: Number(total.toFixed(2)), invalidRows, unchargedRows };
 }
 
 function buildLedgerReconciliation(source, ledger) {

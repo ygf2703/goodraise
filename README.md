@@ -320,6 +320,7 @@ Important behavior:
 - the sync is campaign-scoped, not global
 - unchanged sheet content is skipped by checksum
 - duplicate donations are still blocked by the existing campaign-scoped dedupe logic in PostgreSQL
+- only rows whose `charged_success` value is explicitly `TRUE` are included in campaign totals, dashboards, prizes, and reconciliation; `FALSE` or missing values remain outside the visible campaign dataset
 - for the upcoming project, this flow replaces the current external live-ingest pull as the primary refresh source
 
 ## Prelaunch Reset

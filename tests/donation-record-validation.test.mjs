@@ -56,7 +56,7 @@ test("normalizes the active Google Sheets transaction column names", () => {
   assert.equal(record.created_at, "23/08/2026 09:10");
   assert.equal(record.total, "730");
   assert.equal(record["Ambassador name"], "שגריר בדיקה");
-  assert.equal(record.charged_success, "true");
+  assert.equal(record.charged_success, "");
   assert.equal(getDonationRecordValidationError(record), "");
 });
 

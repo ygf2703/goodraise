@@ -309,15 +309,16 @@ function parseInteger(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseBoolean(value) {
+export function isChargedSuccess(value) {
   const raw = normalizeText(value).toLowerCase();
   if (["true", "1", "yes", "y", "כן", "מסכים", "מסכימה", "יודע", "יודעת"].includes(raw) || /^(מסכימ|יודע)/.test(raw)) {
     return true;
   }
-  if (["false", "0", "no", "n", "לא"].includes(raw)) {
-    return false;
-  }
-  return null;
+  return false;
+}
+
+function parseBoolean(value) {
+  return isChargedSuccess(value);
 }
 
 function normalizeNickname(value) {
@@ -419,12 +420,6 @@ export function normalizeExternalRecord(payload = {}) {
     if (canonicalKey in normalized) {
       normalized[canonicalKey] = value == null ? "" : String(value).trim();
     }
-  }
-  // The active Google Sheets transaction feed contains completed transaction
-  // rows but no explicit payment-status column. Do not present those valid
-  // rows as failed; an explicit source status always takes precedence.
-  if (!normalizeText(normalized.charged_success) && normalized.id && normalized.created_at && normalized.total) {
-    normalized.charged_success = "true";
   }
   return normalized;
 }
@@ -816,6 +811,7 @@ async function rebuildCampaignDatasetSnapshotWithClient(client, scope, sourceLab
       LEFT JOIN goodraise.donors d ON d.id = t.donor_id
       LEFT JOIN goodraise.ambassadors a ON a.id = t.ambassador_id
       WHERE t.campaign_id = $1::uuid
+        AND t.charged_success = TRUE
       ORDER BY t.occurred_at DESC NULLS LAST, t.created_at DESC
     `,
     [scope.campaign_id],
@@ -878,12 +874,12 @@ export async function getCampaignLedgerSummary({ organizationIdentifier, campaig
     const result = await client.query(
       `
         SELECT
-          COUNT(*) FILTER (WHERE COALESCE(charge_result_code, '') <> 'manual_match')::int AS source_row_count,
-          COALESCE(SUM(total_amount) FILTER (WHERE COALESCE(charge_result_code, '') <> 'manual_match'), 0) AS source_total,
-          COUNT(*) FILTER (WHERE COALESCE(charge_result_code, '') = 'manual_match')::int AS manual_row_count,
-          COALESCE(SUM(total_amount) FILTER (WHERE COALESCE(charge_result_code, '') = 'manual_match'), 0) AS manual_total,
-          COUNT(*)::int AS dashboard_row_count,
-          COALESCE(SUM(total_amount), 0) AS dashboard_total
+          COUNT(*) FILTER (WHERE charged_success = TRUE AND COALESCE(charge_result_code, '') <> 'manual_match')::int AS source_row_count,
+          COALESCE(SUM(total_amount) FILTER (WHERE charged_success = TRUE AND COALESCE(charge_result_code, '') <> 'manual_match'), 0) AS source_total,
+          COUNT(*) FILTER (WHERE charged_success = TRUE AND COALESCE(charge_result_code, '') = 'manual_match')::int AS manual_row_count,
+          COALESCE(SUM(total_amount) FILTER (WHERE charged_success = TRUE AND COALESCE(charge_result_code, '') = 'manual_match'), 0) AS manual_total,
+          COUNT(*) FILTER (WHERE charged_success = TRUE)::int AS dashboard_row_count,
+          COALESCE(SUM(total_amount) FILTER (WHERE charged_success = TRUE), 0) AS dashboard_total
         FROM goodraise.transactions
         WHERE campaign_id = $1::uuid
       `,
