@@ -2,7 +2,27 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { selectGoogleSheetCandidate } from "../netlify/lib/source-store.mjs";
+import { mapSourceRecordsToCanonicalFields, selectGoogleSheetCandidate } from "../netlify/lib/source-store.mjs";
+
+test("applies configured Google Sheets columns before relational import", () => {
+  const [record] = mapSourceRecordsToCanonicalFields(
+    [{ "Transaction ID": "t-1", "Donation total": "225000", "Payment approved": "TRUE" }],
+    {
+      mode: "google_sheets",
+      googleSheets: {
+        fieldMapText: JSON.stringify({
+          id: "Transaction ID",
+          total: "Donation total",
+          charged_success: "Payment approved",
+        }),
+      },
+    },
+  );
+
+  assert.equal(record.id, "t-1");
+  assert.equal(record.total, "225000");
+  assert.equal(record.charged_success, "TRUE");
+});
 
 test("selects the newest valid Google Sheets transactions tab over a larger historic tab", () => {
   const headers = ["Transaction ID", "Created At", "Total", "Ambassador"];

@@ -8,7 +8,7 @@ import {
   saveCampaignDataset,
   saveCampaignSource,
 } from "./campaign-repositories.mjs";
-import { fetchConfiguredSource } from "./source-store.mjs";
+import { fetchConfiguredSource, mapSourceRecordsToCanonicalFields } from "./source-store.mjs";
 import {
   getCampaignLedgerSummary,
   getDonationRecordValidationError,
@@ -21,7 +21,7 @@ import {
 
 // Bump this only when accepted source formats change. It makes a previously
 // rejected but unchanged sheet eligible for one safe re-processing pass.
-const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-26-charged-success-v5";
+const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-26-source-field-map-v6";
 
 function normalizeGoogleSheetsSyncState(config, patch = {}) {
   return normalizeSourceConfig(
@@ -136,9 +136,10 @@ export async function syncCampaignSourceOnce({
   }
 
   const fetched = await fetchConfiguredSource(normalized);
+  const mappedSourceRows = mapSourceRecordsToCanonicalFields(fetched.rawRows, normalized);
   const detectedColumns = getDetectedSourceColumns(fetched.rawRows);
   const resolvedGoogleSheetsConfig = buildResolvedGoogleSheetsConfigPatch(normalized, fetched);
-  const sourceSummary = normalized.mode === "google_sheets" ? summarizeGoogleSheetsRecords(fetched.rawRows) : null;
+  const sourceSummary = normalized.mode === "google_sheets" ? summarizeGoogleSheetsRecords(mappedSourceRows) : null;
   const existingLedger =
     normalized.mode === "google_sheets" && hasConfiguredRelationalIngest()
       ? await getCampaignLedgerSummary({ organizationIdentifier: organizationId, campaignIdentifier: campaignId })
@@ -198,7 +199,7 @@ export async function syncCampaignSourceOnce({
       importedBy: triggeredBy,
       requestReference: `${triggeredBy}:${fetched.fetchedAt}`,
       fetchedAt: fetched.fetchedAt,
-      records: fetched.rawRows,
+      records: mappedSourceRows,
     });
   } else {
     await saveCampaignDataset(organizationId, campaignId, {

@@ -167,7 +167,11 @@ export function selectGoogleSheetCandidate(candidates = []) {
 }
 
 function getValueByPath(record, path) {
-  return String(path || "")
+  const rawPath = String(path || "").trim();
+  if (record && typeof record === "object" && Object.prototype.hasOwnProperty.call(record, rawPath)) {
+    return record[rawPath];
+  }
+  return rawPath
     .split(".")
     .filter(Boolean)
     .reduce((current, segment) => {
@@ -226,18 +230,49 @@ function resolveFieldMapText(sourceConfig) {
   return sourceConfig?.api?.fieldMapText || "{}";
 }
 
-function normalizeDatasetRows(rawRows, sourceConfig) {
-  const fieldMapText = resolveFieldMapText(sourceConfig);
-  let fieldMap = {};
+const CANONICAL_SOURCE_FIELDS = [
+  "id",
+  "created_at",
+  "full_name",
+  "email",
+  "Ambassador name",
+  "total",
+  "city",
+  "charged_success",
+  "charge_result",
+];
+
+function parseConfiguredFieldMap(sourceConfig) {
   try {
-    fieldMap = JSON.parse(fieldMapText);
+    const parsed = JSON.parse(resolveFieldMapText(sourceConfig));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
-    fieldMap = {};
+    return {};
   }
-  return rawRows
+}
+
+// Apply the manager-configured mapping before any consumer reads source rows.
+// This keeps relational imports and in-browser previews on the same fields.
+export function mapSourceRecordsToCanonicalFields(rawRows, sourceConfig) {
+  const fieldMap = parseConfiguredFieldMap(sourceConfig);
+  return (Array.isArray(rawRows) ? rawRows : []).map((rawRecord) => {
+    const record = rawRecord && typeof rawRecord === "object" ? rawRecord : {};
+    const mapped = { ...record };
+    for (const fieldName of CANONICAL_SOURCE_FIELDS) {
+      const value = getValueByPath(record, fieldMap[fieldName] || fieldName);
+      if (value !== undefined && value !== null) {
+        mapped[fieldName] = value;
+      }
+    }
+    return mapped;
+  });
+}
+
+function normalizeDatasetRows(rawRows, sourceConfig) {
+  return mapSourceRecordsToCanonicalFields(rawRows, sourceConfig)
     .map((record, index) => {
-      const id = getValueByPath(record, fieldMap.id || "id") || `row-${index + 1}`;
-      const createdAt = parseCreatedAt(getValueByPath(record, fieldMap.created_at || "created_at"));
+      const id = record.id || `row-${index + 1}`;
+      const createdAt = parseCreatedAt(record.created_at);
       if (!createdAt) {
         return null;
       }
@@ -247,13 +282,13 @@ function normalizeDatasetRows(rawRows, sourceConfig) {
         createdIso: createdAt.slice(0, 16),
         date: createdAt.slice(0, 10),
         hour: createdDate.getHours(),
-        email: String(getValueByPath(record, fieldMap.email || "email") || "").trim().toLowerCase(),
-        donor: String(getValueByPath(record, fieldMap.full_name || "full_name") || "").trim() || "ללא שם",
-        ambassador: String(getValueByPath(record, fieldMap["Ambassador name"] || "Ambassador name") || "").trim() || "ללא שיוך",
-        amount: parseAmount(getValueByPath(record, fieldMap.total || "total")),
-        city: String(getValueByPath(record, fieldMap.city || "city") || "").trim() || "ללא עיר",
-        status: parseBoolean(getValueByPath(record, fieldMap.charged_success || "charged_success")) ? "success" : "failed",
-        chargeResult: String(getValueByPath(record, fieldMap.charge_result || "charge_result") || "").trim(),
+        email: String(record.email || "").trim().toLowerCase(),
+        donor: String(record.full_name || "").trim() || "ללא שם",
+        ambassador: String(record["Ambassador name"] || "").trim() || "ללא שיוך",
+        amount: parseAmount(record.total),
+        city: String(record.city || "").trim() || "ללא עיר",
+        status: parseBoolean(record.charged_success) ? "success" : "failed",
+        chargeResult: String(record.charge_result || "").trim(),
       };
     })
     .filter(Boolean);
