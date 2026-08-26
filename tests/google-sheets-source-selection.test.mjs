@@ -39,6 +39,18 @@ test("detects a boolean payment column when a legacy Google Sheet lacks a field 
   );
 });
 
+test("uses a sole opaque boolean column as the legacy payment status", () => {
+  const rows = mapSourceRecordsToCanonicalFields(
+    [{ "Column N": "TRUE" }, { "Column N": "FALSE" }],
+    { mode: "google_sheets", googleSheets: { fieldMapText: "{}" } },
+  );
+
+  assert.deepEqual(
+    rows.map((row) => row.charged_success),
+    ["TRUE", "FALSE"],
+  );
+});
+
 test("selects the newest valid Google Sheets transactions tab over a larger historic tab", () => {
   const headers = ["Transaction ID", "Created At", "Total", "Ambassador"];
   const selected = selectGoogleSheetCandidate([

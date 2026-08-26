@@ -265,18 +265,28 @@ function findApprovedPaymentColumn(records) {
     }
   }
 
-  return [...candidates.values()]
+  const booleanCandidates = [...candidates.values()]
     .map((candidate) => {
       const label = normalizeSourceColumnName(candidate.columnName);
       const isDirectDebit = /direct debit|הוראת קבע/.test(label);
       const isPaymentStatus = /charged?|charge|payment|success|approved?|complete|status|חיוב|סליק|אושר|שולם/.test(label);
       return {
         ...candidate,
-        score: !isDirectDebit && isPaymentStatus && candidate.booleanValues > 0 ? candidate.booleanValues / candidate.values : 0,
+        isDirectDebit,
+        isPaymentStatus,
+        booleanRatio: candidate.booleanValues / candidate.values,
       };
     })
-    .filter((candidate) => candidate.score >= 0.8)
-    .sort((left, right) => right.score - left.score || right.booleanValues - left.booleanValues)[0]?.columnName;
+    .filter((candidate) => candidate.booleanRatio >= 0.8 && !candidate.isDirectDebit);
+  const semanticMatch = booleanCandidates
+    .filter((candidate) => candidate.isPaymentStatus)
+    .sort((left, right) => right.booleanRatio - left.booleanRatio || right.booleanValues - left.booleanValues)[0];
+  if (semanticMatch) {
+    return semanticMatch.columnName;
+  }
+  // A few legacy Redash sheets use opaque export headers. Only use a generic
+  // boolean column when it is the sole non-direct-debit candidate.
+  return booleanCandidates.length === 1 ? booleanCandidates[0].columnName : undefined;
 }
 
 function parseConfiguredFieldMap(sourceConfig) {

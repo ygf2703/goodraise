@@ -21,7 +21,7 @@ import {
 
 // Bump this only when accepted source formats change. It makes a previously
 // rejected but unchanged sheet eligible for one safe re-processing pass.
-const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-26-payment-status-discovery-v7";
+const GOOGLE_SHEETS_NORMALIZER_VERSION = "2026-08-26-payment-status-discovery-v8";
 
 function normalizeGoogleSheetsSyncState(config, patch = {}) {
   return normalizeSourceConfig(
