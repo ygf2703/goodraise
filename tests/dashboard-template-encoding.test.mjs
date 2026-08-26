@@ -42,3 +42,12 @@ test("manager dashboard provides filtered ambassador fundraising reports and CSV
   assert.match(template, /ambassadors-zero-fundraising\.csv/);
   assert.match(template, /מייל<\/th><th>טלפון/);
 });
+
+test("prize dashboard calculates a sprint winner from a precise selected time window", async () => {
+  const template = await readFile(new URL("../work/build_yellow_dashboard.py", import.meta.url), "utf8");
+  assert.match(template, /id="time-from-filter"/);
+  assert.match(template, /id="time-to-filter"/);
+  assert.match(template, /function computeSprintStandings\(referenceRows\)/);
+  assert.match(template, /תמונת מצב ספרינט/);
+  assert.match(template, /חלון ספרינט:/);
+});

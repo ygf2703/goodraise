@@ -3676,6 +3676,14 @@ def build_fragment(
                                   עד שעה
                                   <select id="hour-to-filter" class="form-select"></select>
                                 </label>
+                                <label class="form-label">
+                                  משעת התחלה לספרינט
+                                  <input id="time-from-filter" class="form-control" type="time" step="60" />
+                                </label>
+                                <label class="form-label">
+                                  עד שעת סיום לספרינט
+                                  <input id="time-to-filter" class="form-control" type="time" step="60" />
+                                </label>
                               </div>
                             </section>
 
@@ -4046,6 +4054,8 @@ def build_fragment(
                 hour: root.querySelector("#hour-filter"),
                 hourFrom: root.querySelector("#hour-from-filter"),
                 hourTo: root.querySelector("#hour-to-filter"),
+                timeFrom: root.querySelector("#time-from-filter"),
+                timeTo: root.querySelector("#time-to-filter"),
                 donor: root.querySelector("#donor-filter"),
                 amountMin: root.querySelector("#amount-min-filter"),
                 amountMax: root.querySelector("#amount-max-filter"),
@@ -4417,6 +4427,8 @@ def build_fragment(
                   hour: "all",
                   hourFrom: "all",
                   hourTo: "all",
+                  timeFrom: "",
+                  timeTo: "",
                   dateFrom: meta.defaultFrom || "",
                   dateTo: meta.defaultTo || "",
                   donor: "",
@@ -7736,6 +7748,8 @@ def build_fragment(
                 elements.hour.value = state.filters.hour;
                 elements.hourFrom.value = state.filters.hourFrom;
                 elements.hourTo.value = state.filters.hourTo;
+                elements.timeFrom.value = state.filters.timeFrom;
+                elements.timeTo.value = state.filters.timeTo;
                 elements.donor.value = state.filters.donor;
                 elements.amountMin.value = state.filters.amountMin;
                 elements.amountMax.value = state.filters.amountMax;
@@ -7752,6 +7766,8 @@ def build_fragment(
                 state.filters.hour = elements.hour.value;
                 state.filters.hourFrom = elements.hourFrom.value;
                 state.filters.hourTo = elements.hourTo.value;
+                state.filters.timeFrom = elements.timeFrom.value;
+                state.filters.timeTo = elements.timeTo.value;
                 state.filters.dateFrom = elements.dateFrom.value;
                 state.filters.dateTo = elements.dateTo.value;
                 state.filters.donor = elements.donor.value;
@@ -7761,10 +7777,16 @@ def build_fragment(
 
               function filterRows(rows, options = {}) {
                 const { includeAmbassador = true } = options;
-                const { ambassador, projectDay, dateExact, hour, hourFrom, hourTo, dateFrom, dateTo, donor, amountMin, amountMax } = state.filters;
+                const { ambassador, projectDay, dateExact, hour, hourFrom, hourTo, timeFrom, timeTo, dateFrom, dateTo, donor, amountMin, amountMax } = state.filters;
                 const donorQuery = normalizeSearchToken(donor);
                 const minimumAmount = amountMin === "" ? null : Number(amountMin);
                 const maximumAmount = amountMax === "" ? null : Number(amountMax);
+                const parseTimeMinutes = (value) => {
+                  const match = String(value || "").match(/^([0-9]{2}):([0-9]{2})$/);
+                  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+                };
+                const timeFromMinutes = parseTimeMinutes(timeFrom);
+                const timeToMinutes = parseTimeMinutes(timeTo);
                 return rows.filter((row) => {
                   if (includeAmbassador && ambassador !== "all" && row.ambassador !== ambassador) {
                     return false;
@@ -7787,6 +7809,14 @@ def build_fragment(
                     return false;
                   }
                   if (hourTo !== "all" && row.hour > Number(hourTo)) {
+                    return false;
+                  }
+                  const rowTimeMatch = String(row.createdIso || "").match(/T([0-9]{2}):([0-9]{2})/);
+                  const rowTimeMinutes = rowTimeMatch ? Number(rowTimeMatch[1]) * 60 + Number(rowTimeMatch[2]) : Number(row.hour || 0) * 60;
+                  if (timeFromMinutes !== null && rowTimeMinutes < timeFromMinutes) {
+                    return false;
+                  }
+                  if (timeToMinutes !== null && rowTimeMinutes > timeToMinutes) {
                     return false;
                   }
                   if (dateFrom && row.date < dateFrom) {
@@ -8133,6 +8163,43 @@ def build_fragment(
                 });
               }
 
+              function getSprintWindow() {
+                const from = state.filters.timeFrom || (state.filters.hourFrom !== "all" ? `${String(state.filters.hourFrom).padStart(2, "0")}:00` : "");
+                const to = state.filters.timeTo || (state.filters.hourTo !== "all" ? `${String(state.filters.hourTo).padStart(2, "0")}:00` : "");
+                const hasSingleDate =
+                  state.filters.dateExact !== "all" ||
+                  (state.filters.dateFrom && state.filters.dateFrom === state.filters.dateTo) ||
+                  (state.filters.projectDay !== "all" && state.filters.projectDay !== "overflow");
+                if (!from || !to || !hasSingleDate) {
+                  return null;
+                }
+                const dateLabel =
+                  state.filters.dateExact !== "all"
+                    ? formatDate(state.filters.dateExact)
+                    : state.filters.dateFrom && state.filters.dateFrom === state.filters.dateTo
+                      ? formatDate(state.filters.dateFrom)
+                      : `יום פרויקט ${state.filters.projectDay}`;
+                return { from, to, dateLabel };
+              }
+
+              function computeSprintStandings(referenceRows) {
+                const window = getSprintWindow();
+                if (!window) {
+                  return null;
+                }
+                const leaderboard = buildPrizeCompetitionLeaderboard(referenceRows);
+                const winner = leaderboard[0] || null;
+                const runnerUp = leaderboard[1] || null;
+                return {
+                  ...window,
+                  winner,
+                  runnerUp,
+                  dealCount: referenceRows.length,
+                  total: sumAmount(referenceRows),
+                  leadGap: winner && runnerUp ? Math.max(winner.total - runnerUp.total, 0) : 0,
+                };
+              }
+
               function getActiveFilters() {
                 const summary = [];
                 if (state.filters.ambassador !== "all") {
@@ -8156,6 +8223,9 @@ def build_fragment(
                 }
                 if (state.filters.hourFrom !== "all" || state.filters.hourTo !== "all") {
                   summary.push(`טווח שעות: ${state.filters.hourFrom !== "all" ? formatHourLabel(state.filters.hourFrom) : "ללא התחלה"} עד ${state.filters.hourTo !== "all" ? formatHourLabel(state.filters.hourTo) : "ללא סוף"}`);
+                }
+                if (state.filters.timeFrom || state.filters.timeTo) {
+                  summary.push(`חלון ספרינט: ${state.filters.timeFrom || "ללא התחלה"} עד ${state.filters.timeTo || "ללא סוף"}`);
                 }
                 if (state.filters.amountMin !== "" || state.filters.amountMax !== "") {
                   summary.push(`סכום: ${state.filters.amountMin || "0"} עד ${state.filters.amountMax || "ללא תקרה"} ₪`);
@@ -8887,6 +8957,7 @@ def build_fragment(
               function renderPrizeBoard(prizeRows) {
                 const standings = computePrizeStandings(prizeRows);
                 const dailyWinners = computeDailyWinners(prizeRows);
+                const sprint = computeSprintStandings(prizeRows);
                 const { placeWinners, tiers, prizeModel, selectedFocus } = standings;
 
                 renderPrizeAmbassadorDirectory(standings.leaderboard);
@@ -8895,7 +8966,37 @@ def build_fragment(
                   ? `נתוני אמת אינם זמינים כרגע: ${state.auth.publicDatasetError || "יש לנסות שוב בעוד רגע."}`
                   : selectedFocus
                   ? `${selectedFocus.ambassador}: ${formatAmount(selectedFocus.total)} | פרס פעיל: ${selectedFocus.currentPrize}${selectedFocus.nextPrize ? ` | חסרים ${formatAmount(selectedFocus.gap)} ל-${selectedFocus.nextPrize}` : " | נמצא במדרגה העליונה"}`
+                  : sprint?.winner
+                  ? `ספרינט ${sprint.dateLabel}, ${sprint.from}-${sprint.to}: ${sprint.winner.ambassador} מוביל/ה עם ${formatAmount(sprint.winner.total)}`
                   : `${formatNumber(standings.leaderboard.length)} שגרירים מדורגים בטווח הזמן הנבחר`;
+
+                const sprintMarkup = sprint
+                  ? `
+                      <div class="dashboard-section">
+                        <div class="section-head">
+                          <h3>תמונת מצב ספרינט</h3>
+                          <div class="text-small text-muted">${escapeHtml(`${sprint.dateLabel} | ${sprint.from}-${sprint.to}`)}. התוצאה מחושבת רק מתרומות מוצלחות בחלון שנבחר.</div>
+                        </div>
+                        <div class="signal-grid">
+                          <article class="analysis-card">
+                            <h4>מוביל/ת הספרינט</h4>
+                            <strong>${escapeHtml(sprint.winner ? sprint.winner.ambassador : "טרם נקבע")}</strong>
+                            <p>${escapeHtml(sprint.winner ? `${formatAmount(sprint.winner.total)} | ${formatNumber(sprint.winner.deals)} עסקאות` : "אין תרומות זכאיות בחלון זה.")}</p>
+                          </article>
+                          <article class="analysis-card">
+                            <h4>פער מהמקום השני</h4>
+                            <strong>${escapeHtml(sprint.runnerUp ? formatAmount(sprint.leadGap) : "אין עדיין מקום שני")}</strong>
+                            <p>${escapeHtml(sprint.runnerUp ? `${sprint.runnerUp.ambassador} עם ${formatAmount(sprint.runnerUp.total)}` : "נדרש לפחות שגריר נוסף עם גיוס בחלון.")}</p>
+                          </article>
+                          <article class="analysis-card">
+                            <h4>היקף הספרינט</h4>
+                            <strong>${escapeHtml(formatAmount(sprint.total))}</strong>
+                            <p>${escapeHtml(`${formatNumber(sprint.dealCount)} עסקאות בטווח שנבחר`)}</p>
+                          </article>
+                        </div>
+                      </div>
+                    `
+                  : "";
 
                 const podiumMarkup = placeWinners.length
                   ? `
@@ -9087,7 +9188,7 @@ def build_fragment(
                     `
                   : `<div class="empty-state">לא נטענה טבלת פרסים תקפה. אפשר להעלות קובץ פרסים חדש ב-CSV או Excel.</div>`;
 
-                elements.prizeBoard.innerHTML = `${podiumMarkup}${dailyWinnersMarkup}${tiersMarkup}`;
+                elements.prizeBoard.innerHTML = `${sprintMarkup}${podiumMarkup}${dailyWinnersMarkup}${tiersMarkup}`;
               }
 
               function renderPrizeAmbassadorDirectory(leaderboard) {
@@ -11784,6 +11885,8 @@ def build_fragment(
                   elements.hour,
                   elements.hourFrom,
                   elements.hourTo,
+                  elements.timeFrom,
+                  elements.timeTo,
                   elements.donor,
                   elements.amountMin,
                   elements.amountMax,
