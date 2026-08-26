@@ -9375,11 +9375,14 @@ def build_fragment(
                 const bestCell = [...aggregates.entries()].sort((left, right) => right[1] - left[1])[0];
                 const bestDay = [...totalsByDate.entries()].sort((left, right) => right[1] - left[1])[0];
                 const bestHour = [...totalsByHour.entries()].sort((left, right) => right[1] - left[1])[0];
-                const cellWidth = 56;
                 const cellHeight = 20;
-                const width = Math.max(860, 150 + dates.length * cellWidth);
-                const height = 168 + hours.length * cellHeight;
                 const margin = { top: 110, right: 18, bottom: 24, left: 96 };
+                // Expand the date columns to the available chart width. A fixed 56px column
+                // left a large empty area whenever the active date range contained only a few days.
+                const availableWidth = Math.max(860, (elements.heatmapChart.clientWidth || 0) - 32);
+                const cellWidth = Math.max(56, Math.floor((availableWidth - margin.left - margin.right) / dates.length));
+                const width = margin.left + margin.right + dates.length * cellWidth;
+                const height = 168 + hours.length * cellHeight;
 
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(createSvg(width, height, "מפת חום של גיוס לפי תאריך ושעה"), "image/svg+xml");
