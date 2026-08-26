@@ -76,7 +76,20 @@ const HUMAN_FIELD_ALIASES = {
   "Ambassador name": ["ambassador", "ambassador name", "referrer", "שגריר", "שגרירה", "שם שגריר", "שם השגריר", "שם שגרירה"],
   "Ambassador email": ["ambassador email", "שגריר מייל", "מייל שגריר", "מייל השגריר"],
   city: ["city", "עיר"],
-  charged_success: ["charged success", "success", "payment success", "סטטוס", "חיוב הצליח", "סליקה הצליחה"],
+  charged_success: [
+    "charged success",
+    "charge success",
+    "charge successful",
+    "transaction success",
+    "transaction successful",
+    "payment success",
+    "payment successful",
+    "is charged",
+    "success",
+    "סטטוס",
+    "חיוב הצליח",
+    "סליקה הצליחה",
+  ],
   charge_result: ["charge result", "payment result", "תוצאת סליקה", "תוצאת חיוב"],
 };
 

@@ -60,6 +60,18 @@ test("normalizes the active Google Sheets transaction column names", () => {
   assert.equal(getDonationRecordValidationError(record), "");
 });
 
+test("normalizes the Redash charge_success payment column", () => {
+  const record = normalizeExternalRecord({
+    transaction_id: "live-sheet-002",
+    transaction_datetime: "23/08/2026 09:11",
+    transaction_amount: "730",
+    charge_success: "TRUE",
+  });
+
+  assert.equal(record.charged_success, "TRUE");
+  assert.equal(getDonationRecordValidationError(record), "");
+});
+
 test("keeps the configured campaign date window when donations currently exist on one day", () => {
   const meta = buildDatasetMeta(
     [{ date: "2026-08-23" }],
