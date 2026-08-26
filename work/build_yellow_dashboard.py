@@ -9514,6 +9514,7 @@ def build_fragment(
                 const intensityBarX = 66;
                 const amountLabelX = 184;
                 const ambassadorLabelX = 474;
+                const ambassadorLabelWidth = ambassadorLabelX - amountLabelX - 24;
                 const gridStartX = 504;
                 const width = Math.max(1180, gridStartX + projectDates.length * cellWidth + 26);
                 const height = 122 + selectedAmbassadors.length * rowHeight;
@@ -9574,6 +9575,15 @@ def build_fragment(
                   label.setAttribute("font-size", "11");
                   label.setAttribute("class", `matrix-label${state.filters.ambassador === ambassador ? " is-active" : ""}`);
                   label.textContent = ambassador;
+                  // Keep long Hebrew names inside their dedicated lane instead of letting
+                  // later-rendered matrix cells cover part of the text.
+                  if (ambassador.length * 7.2 > ambassadorLabelWidth) {
+                    label.setAttribute("textLength", String(ambassadorLabelWidth));
+                    label.setAttribute("lengthAdjust", "spacingAndGlyphs");
+                  }
+                  const fullName = doc.createElementNS("http://www.w3.org/2000/svg", "title");
+                  fullName.textContent = ambassador;
+                  label.appendChild(fullName);
                   label.addEventListener("click", () => {
                     state.filters.ambassador = state.filters.ambassador === ambassador ? "all" : ambassador;
                     resetFilterOptions();
