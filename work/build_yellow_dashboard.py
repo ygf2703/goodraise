@@ -2101,6 +2101,12 @@ def build_fragment(
               min-width: 100%;
             }
 
+            /* Keep the ambassador summary lane readable; narrow screens scroll inside the chart. */
+            #yellow-dashboard-root .chart-surface > svg.movement-matrix {
+              width: max(100%, 1180px);
+              min-width: 1180px;
+            }
+
             #yellow-dashboard-root .metric-toolbar {
               justify-content: flex-end;
             }
@@ -9499,12 +9505,20 @@ def build_fragment(
 
                 const cellWidth = 64;
                 const rowHeight = 32;
-                const width = Math.max(900, 260 + projectDates.length * cellWidth);
+                // Reserve a real lane for rank, amount, and the full ambassador name.
+                // Previously the name was squeezed between the amount and the first matrix cell.
+                const rankCenterX = 30;
+                const intensityBarX = 66;
+                const amountLabelX = 184;
+                const ambassadorLabelX = 474;
+                const gridStartX = 504;
+                const width = Math.max(1180, gridStartX + projectDates.length * cellWidth + 26);
                 const height = 122 + selectedAmbassadors.length * rowHeight;
-                const margin = { top: 66, right: 26, bottom: 24, left: 238 };
+                const margin = { top: 66, right: 26, bottom: 24, left: gridStartX };
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(createSvg(width, height, "מטריצת פעילות שגרירים לאורך ימי הפרויקט"), "image/svg+xml");
                 const svgNode = doc.documentElement;
+                svgNode.classList.add("movement-matrix");
                 const matrixValues = new Map();
 
                 focusRows.forEach((row) => {
@@ -9543,15 +9557,17 @@ def build_fragment(
                   svgNode.insertAdjacentHTML(
                     "beforeend",
                     `<rect x="${margin.left + 1}" y="${y + 1}" width="${projectDates.length * cellWidth - 2}" height="${rowHeight - 2}" rx="16" fill="${rowIndex % 2 === 0 ? "rgba(17, 29, 74, 0.025)" : "rgba(255,255,255,0)"}"></rect>
-                     <circle cx="${margin.left - 210}" cy="${y + rowHeight / 2}" r="12" fill="${rowIndex === 0 ? "#FFD629" : "rgba(17,29,74,0.12)"}" stroke="rgba(17,29,74,0.18)"></circle>
-                     <text x="${margin.left - 210}" y="${labelY - 1}" text-anchor="middle" fill="${rowIndex === 0 ? "#111D4A" : "#111D4A"}" font-size="11" font-weight="800">${rowIndex + 1}</text>
-                     <rect x="${margin.left - 188}" y="${y + 6}" width="10" height="${rowHeight - 12}" rx="5" fill="${interpolateRgb([255, 226, 102], [17, 29, 74], intensity)}"></rect>
-                     <text x="${margin.left - 162}" y="${labelY}" text-anchor="end" fill="rgba(17,29,74,0.92)" font-size="11" font-weight="700">${escapeHtml(formatMetricValue(total))}</text>`
+                     <circle cx="${rankCenterX}" cy="${y + rowHeight / 2}" r="12" fill="${rowIndex === 0 ? "#FFD629" : "rgba(17,29,74,0.12)"}" stroke="rgba(17,29,74,0.18)"></circle>
+                     <text x="${rankCenterX}" y="${labelY - 1}" text-anchor="middle" fill="#111D4A" font-size="11" font-weight="800">${rowIndex + 1}</text>
+                     <rect x="${intensityBarX}" y="${y + 6}" width="10" height="${rowHeight - 12}" rx="5" fill="${interpolateRgb([255, 226, 102], [17, 29, 74], intensity)}"></rect>
+                     <text x="${amountLabelX}" y="${labelY}" text-anchor="end" fill="rgba(17,29,74,0.92)" font-size="11" font-weight="700">${escapeHtml(formatMetricValue(total))}</text>`
                   );
                   const label = doc.createElementNS("http://www.w3.org/2000/svg", "text");
-                  label.setAttribute("x", String(margin.left - 30));
+                  label.setAttribute("x", String(ambassadorLabelX));
                   label.setAttribute("y", String(labelY));
                   label.setAttribute("text-anchor", "end");
+                  label.setAttribute("direction", "rtl");
+                  label.setAttribute("unicode-bidi", "plaintext");
                   label.setAttribute("font-size", "11");
                   label.setAttribute("class", `matrix-label${state.filters.ambassador === ambassador ? " is-active" : ""}`);
                   label.textContent = ambassador;
