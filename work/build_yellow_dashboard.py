@@ -7223,7 +7223,8 @@ def build_fragment(
               async function navigateToPage(page) {
                 setPage(page);
                 const publicPage = page === "project" || page === "prizes";
-                if (publicPage && !state.auth.adminDatasetLoaded && state.auth.publicDatasetStatus !== "live") {
+                // Public pages must not keep an earlier in-memory snapshot after the source updates.
+                if (publicPage) {
                   await loadPublicDataset().catch(() => false);
                 }
                 renderAll();
@@ -7856,7 +7857,34 @@ def build_fragment(
                 if (!state.auth.adminDatasetLoaded && state.auth.publicDatasetStatus === "unavailable") {
                   return [];
                 }
-                return filterRows(state.rows, { includeAmbassador: false });
+                const configuredDates = new Set(state.meta?.projectDates || []);
+                return state.rows.filter((row) => {
+                  if (row.status !== "success") {
+                    return false;
+                  }
+                  return !configuredDates.size || configuredDates.has(row.date);
+                });
+              }
+
+              function getSprintScopeRows() {
+                const window = getSprintWindow();
+                if (!window) {
+                  return [];
+                }
+                const parseTimeMinutes = (value) => {
+                  const match = String(value || "").match(/^([0-9]{2}):([0-9]{2})$/);
+                  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+                };
+                const fromMinutes = parseTimeMinutes(window.from);
+                const toMinutes = parseTimeMinutes(window.to);
+                return getPrizeScopeRows().filter((row) => {
+                  if (row.date !== window.date) {
+                    return false;
+                  }
+                  const match = String(row.createdIso || "").match(/T([0-9]{2}):([0-9]{2})/);
+                  const rowMinutes = match ? Number(match[1]) * 60 + Number(match[2]) : Number(row.hour || 0) * 60;
+                  return (fromMinutes === null || rowMinutes >= fromMinutes) && (toMinutes === null || rowMinutes <= toMinutes);
+                });
               }
 
               function sumAmount(rows) {
@@ -8119,7 +8147,7 @@ def build_fragment(
               }
 
               function computeDailyWinners(referenceRows) {
-                const projectDates = (state.meta.projectDates?.length ? state.meta.projectDates : state.meta.uniqueDates || []).slice(0, 10);
+                const projectDates = state.meta.projectDates?.length ? state.meta.projectDates : state.meta.uniqueDates || [];
                 const groupedByDate = new Map();
                 referenceRows.forEach((row) => {
                   const dateKey = row.date;
@@ -8179,13 +8207,16 @@ def build_fragment(
                 if (!from || !to || !hasSingleDate) {
                   return null;
                 }
-                const dateLabel =
+                const date =
                   state.filters.dateExact !== "all"
-                    ? formatDate(state.filters.dateExact)
+                    ? state.filters.dateExact
                     : state.filters.dateFrom && state.filters.dateFrom === state.filters.dateTo
-                      ? formatDate(state.filters.dateFrom)
-                      : `יום פרויקט ${state.filters.projectDay}`;
-                return { from, to, dateLabel };
+                      ? state.filters.dateFrom
+                      : state.meta?.projectDates?.[Number(state.filters.projectDay) - 1] || "";
+                if (!date) {
+                  return null;
+                }
+                return { from, to, date, dateLabel: formatDate(date) };
               }
 
               function computeSprintStandings(referenceRows) {
@@ -8963,7 +8994,7 @@ def build_fragment(
               function renderPrizeBoard(prizeRows) {
                 const standings = computePrizeStandings(prizeRows);
                 const dailyWinners = computeDailyWinners(prizeRows);
-                const sprint = computeSprintStandings(prizeRows);
+                const sprint = computeSprintStandings(getSprintScopeRows());
                 const { placeWinners, tiers, prizeModel, selectedFocus } = standings;
 
                 renderPrizeAmbassadorDirectory(standings.leaderboard);

@@ -52,6 +52,16 @@ test("prize dashboard calculates a sprint winner from a precise selected time wi
   assert.match(template, /חלון ספרינט:/);
 });
 
+test("prize rankings use every successful campaign donation and isolate only the sprint window", async () => {
+  const template = await readFile(new URL("../work/build_yellow_dashboard.py", import.meta.url), "utf8");
+  assert.match(template, /function getPrizeScopeRows\(\)/);
+  assert.match(template, /row\.status !== "success"/);
+  assert.match(template, /configuredDates\.has\(row\.date\)/);
+  assert.match(template, /function getSprintScopeRows\(\)/);
+  assert.match(template, /computeSprintStandings\(getSprintScopeRows\(\)\)/);
+  assert.match(template, /if \(publicPage\) \{\s*await loadPublicDataset\(\)/);
+});
+
 test("campaign prize settings persist and display a sprint prize separately from uploaded prize tables", async () => {
   const template = await readFile(new URL("../work/build_yellow_dashboard.py", import.meta.url), "utf8");
   assert.match(template, /id="sprint-prize-input"/);
