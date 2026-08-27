@@ -58,6 +58,17 @@ test("commits a new ledger row and its dataset snapshot atomically", async () =>
   assert.ok(commitAt > snapshotAt);
 });
 
+test("resolves the operational scope using stable app IDs as well as UUIDs and slugs", async () => {
+  const source = await readFile(new URL("../netlify/lib/postgres-ingest.mjs", import.meta.url), "utf8");
+  const scopeResolver = source.slice(
+    source.indexOf("async function resolveScope"),
+    source.indexOf("async function backfillExistingCanonicalEventKeys"),
+  );
+
+  assert.match(scopeResolver, /LOWER\(o\.app_id\) = LOWER\(\$1\)/);
+  assert.match(scopeResolver, /LOWER\(c\.app_id\) = LOWER\(\$2\)/);
+});
+
 test("updates an existing Sheets transaction when its amount is corrected", () => {
   const existingRecord = {
     id: "transaction-100",

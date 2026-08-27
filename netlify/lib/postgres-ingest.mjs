@@ -1037,9 +1037,17 @@ async function resolveScope(client, organizationIdentifier, campaignIdentifier) 
       INNER JOIN goodraise.campaigns c
         ON c.organization_id = o.id
       WHERE
-        (LOWER(CAST(o.id AS TEXT)) = LOWER($1) OR LOWER(o.slug) = LOWER($1))
+        (
+          LOWER(CAST(o.id AS TEXT)) = LOWER($1)
+          OR LOWER(o.app_id) = LOWER($1)
+          OR LOWER(o.slug) = LOWER($1)
+        )
         AND
-        (LOWER(CAST(c.id AS TEXT)) = LOWER($2) OR LOWER(c.slug) = LOWER($2))
+        (
+          LOWER(CAST(c.id AS TEXT)) = LOWER($2)
+          OR LOWER(c.app_id) = LOWER($2)
+          OR LOWER(c.slug) = LOWER($2)
+        )
       LIMIT 1
     `,
     [organizationIdentifier, campaignIdentifier],
