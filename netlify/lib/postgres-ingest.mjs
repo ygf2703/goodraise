@@ -1782,9 +1782,24 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
   }
 }
 
+function normalizeManualContributionAttributedAt(value, fallback = new Date().toISOString()) {
+  const raw = normalizeText(value || fallback);
+  const timestamp = Date.parse(raw);
+  if (!Number.isFinite(timestamp)) {
+    throw new IngestHttpError(400, "יש להזין תאריך ושעת שיוך תקינים.");
+  }
+  return new Date(timestamp).toISOString();
+}
+
 // A manual match is still a real ledger transaction. Keeping it on the same
 // ingestion path makes it visible in all campaign calculations and exports.
-export function buildManualContributionRecord({ enteredBy, amount, createdAt = new Date().toISOString(), id = randomUUID() } = {}) {
+export function buildManualContributionRecord({
+  enteredBy,
+  amount,
+  attributedAt = "",
+  createdAt = new Date().toISOString(),
+  id = randomUUID(),
+} = {}) {
   const cleanName = normalizeText(enteredBy);
   const parsedAmount = parseDecimal(amount);
   if (!cleanName) {
@@ -1797,7 +1812,7 @@ export function buildManualContributionRecord({ enteredBy, amount, createdAt = n
   const reference = `manual-match-${normalizeText(id) || randomUUID()}`;
   return {
     id: reference,
-    created_at: createdAt,
+    created_at: normalizeManualContributionAttributedAt(attributedAt, createdAt),
     full_name: `הכפלה - ${cleanName}`,
     total: String(parsedAmount),
     currencyname: "ILS",
@@ -1808,8 +1823,20 @@ export function buildManualContributionRecord({ enteredBy, amount, createdAt = n
   };
 }
 
-export async function ingestManualContribution({ organizationIdentifier, campaignIdentifier, enteredBy, amount, requestId = "" } = {}) {
-  const record = buildManualContributionRecord({ enteredBy, amount, id: requestId || randomUUID() });
+export async function ingestManualContribution({
+  organizationIdentifier,
+  campaignIdentifier,
+  enteredBy,
+  amount,
+  attributedAt = "",
+  requestId = "",
+} = {}) {
+  const record = buildManualContributionRecord({
+    enteredBy,
+    amount,
+    attributedAt,
+    id: requestId || randomUUID(),
+  });
   // Keep manual matches on the same bulk ingestion path as Google Sheets.
   // That path is exercised continuously in production and keeps the ledger,
   // raw record and campaign dataset snapshot in one consistent flow.

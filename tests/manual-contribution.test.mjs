@@ -25,6 +25,17 @@ test("builds a clean manual match donation row", () => {
   assert.equal(record.sourceLabel, "manual-match");
 });
 
+test("attributes a manual match to the selected report date and time", () => {
+  const record = buildManualContributionRecord({
+    enteredBy: "נעם פרוסטיג",
+    amount: "30000",
+    attributedAt: "2026-08-28T20:30:00+03:00",
+    id: "manual-attribution-001",
+  });
+
+  assert.equal(record.created_at, "2026-08-28T17:30:00.000Z");
+});
+
 test("rejects a manual match without a name or positive amount", () => {
   assert.throws(
     () => buildManualContributionRecord({ enteredBy: "", amount: "50" }),
@@ -32,6 +43,10 @@ test("rejects a manual match without a name or positive amount", () => {
   );
   assert.throws(
     () => buildManualContributionRecord({ enteredBy: "מנהל", amount: "0" }),
+    (error) => error instanceof IngestHttpError && error.status === 400,
+  );
+  assert.throws(
+    () => buildManualContributionRecord({ enteredBy: "מנהל", amount: "50", attributedAt: "not-a-date" }),
     (error) => error instanceof IngestHttpError && error.status === 400,
   );
 });
@@ -43,6 +58,7 @@ test("saves manual matches through the same relational batch ingestion path as G
   assert.match(manualContribution, /sourceLabel: "manual-match"/);
   assert.match(manualContribution, /records: \[record\]/);
   assert.match(manualContribution, /requestId = ""/);
+  assert.match(manualContribution, /attributedAt = ""/);
   assert.match(manualContribution, /id: requestId \|\| randomUUID\(\)/);
 });
 

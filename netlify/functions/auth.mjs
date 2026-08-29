@@ -156,6 +156,7 @@ async function addCampaignManualContribution(request, payload, scope) {
       campaignIdentifier: access.campaign.id,
       enteredBy: payload.enteredBy,
       amount: payload.amount,
+      attributedAt: payload.attributedAt,
       requestId: payload.requestId,
     });
     await appendAuditEventSafely({

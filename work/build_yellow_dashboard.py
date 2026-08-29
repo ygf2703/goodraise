@@ -3919,6 +3919,11 @@ def build_fragment(
                 סכום להוספה
                 <input id="manual-contribution-amount" class="form-control" type="number" inputmode="decimal" min="0.01" step="0.01" required dir="ltr" />
               </label>
+              <label class="form-label">
+                תאריך ושעת שיוך
+                <input id="manual-contribution-attributed-at" class="form-control" type="datetime-local" required dir="ltr" />
+                <span class="field-hint">הסכום יוצג בדוחות, בדירוגים ובספרינטים לפי המועד שתבחרו.</span>
+              </label>
               <div id="manual-contribution-status" class="status-note text-small" aria-live="polite"></div>
               <div class="manual-contribution-actions">
                 <button class="button-primary action-button" type="submit">הוספת סכום</button>
@@ -4030,6 +4035,7 @@ def build_fragment(
                 manualContributionForm: root.querySelector("#manual-contribution-form"),
                 manualContributionEnteredBy: root.querySelector("#manual-contribution-entered-by"),
                 manualContributionAmount: root.querySelector("#manual-contribution-amount"),
+                manualContributionAttributedAt: root.querySelector("#manual-contribution-attributed-at"),
                 manualContributionStatus: root.querySelector("#manual-contribution-status"),
                 manualContributionCancel: root.querySelector("#manual-contribution-cancel"),
                 sourceConfigStatus: root.querySelector("#source-config-status"),
@@ -6934,6 +6940,13 @@ def build_fragment(
                   throw new Error("לא ניתן לפתוח את חלונית ההכפלה בדפדפן זה.");
                 }
                 elements.manualContributionForm?.reset();
+                if (elements.manualContributionAttributedAt) {
+                  const now = new Date();
+                  const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+                    .toISOString()
+                    .slice(0, 16);
+                  elements.manualContributionAttributedAt.value = localNow;
+                }
                 manualContributionRequestId = typeof globalThis.crypto?.randomUUID === "function"
                   ? globalThis.crypto.randomUUID()
                   : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -6945,11 +6958,16 @@ def build_fragment(
               async function submitManualContribution() {
                 const enteredBy = String(elements.manualContributionEnteredBy?.value || "").trim().replace(/\\s+/g, " ");
                 const amount = Number(elements.manualContributionAmount?.value || 0);
+                const attributedAtInput = String(elements.manualContributionAttributedAt?.value || "").trim();
                 if (!enteredBy) {
                   throw new Error("יש להזין את שם המכניס/ה.");
                 }
                 if (!Number.isFinite(amount) || amount <= 0) {
                   throw new Error("יש להזין סכום חיובי.");
+                }
+                const attributedAtDate = new Date(attributedAtInput);
+                if (!attributedAtInput || Number.isNaN(attributedAtDate.getTime())) {
+                  throw new Error("יש להזין תאריך ושעת שיוך תקינים.");
                 }
                 const scope = getActiveCampaignIdentity();
                 const endpoint = buildScopedAdminEndpoint("manual-contribution", scope);
@@ -6958,7 +6976,12 @@ def build_fragment(
                 }
                 const { response, payload } = await authRequest(endpoint, {
                   method: "POST",
-                  body: { enteredBy, amount, requestId: manualContributionRequestId },
+                  body: {
+                    enteredBy,
+                    amount,
+                    attributedAt: attributedAtDate.toISOString(),
+                    requestId: manualContributionRequestId,
+                  },
                 });
                 if (!response.ok) {
                   throw new Error(payload?.message || "שמירת ההכפלה נכשלה.");
