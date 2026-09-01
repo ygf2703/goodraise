@@ -13,6 +13,7 @@ The app receives campaign export files and turns them into an active dashboard t
 - display live prize standings based on a prize table and thresholds
 - export filtered results for follow-up work
 - understand campaign health, momentum, forecast, and who requires intervention now
+- ask free-text questions about the active campaign from the manager dashboard, using aggregated campaign data only
 
 ## Current Capabilities
 
@@ -370,7 +371,14 @@ Required environment variable:
 ```powershell
 $env:GOODRAISE_DATABASE_URL="postgresql://username:password@host/database?sslmode=require"
 $env:GOODRAISE_INGEST_API_KEY="replace-with-a-long-random-secret"
+$env:OPENAI_API_KEY="replace-with-a-server-side-openai-key"
 ```
+
+## Ask The Data
+
+The manager-only `שאל את הנתונים` panel appears directly below the dashboard summary metrics. It answers questions only from the currently selected campaign and requires a server-side `OPENAI_API_KEY` in Netlify (or the local backend environment). `GOODRAISE_AI_MODEL` is optional and defaults to `gpt-4.1-mini`.
+
+For privacy, the model receives campaign aggregates only: totals, successful transaction count, project dates, hourly/daily totals, and ambassador fundraising totals. Raw donation rows and donor names, emails, phones, and cities are never sent to the model. The key is never exposed to the browser.
 
 Install the Python dependencies:
 

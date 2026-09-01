@@ -14,6 +14,7 @@ export const ACTION_POLICY = {
   campaign_list: ROLE_VIEWER,
   campaign_view: ROLE_VIEWER,
   dataset_view: ROLE_ANALYST,
+  insight_query: ROLE_CAMPAIGN_MANAGER,
   source_view: ROLE_CAMPAIGN_MANAGER,
   source_update: ROLE_CAMPAIGN_MANAGER,
   source_refresh: ROLE_CAMPAIGN_MANAGER,

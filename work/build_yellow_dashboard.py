@@ -1928,6 +1928,37 @@ def build_fragment(
               flex-wrap: wrap;
             }
 
+            #yellow-dashboard-root .insight-assistant-panel {
+              display: grid;
+              gap: var(--space-4);
+              padding: var(--space-5);
+            }
+
+            #yellow-dashboard-root .insight-assistant-form {
+              display: grid;
+              gap: var(--space-3);
+            }
+
+            #yellow-dashboard-root .insight-assistant-question {
+              min-height: 96px;
+              resize: vertical;
+            }
+
+            #yellow-dashboard-root .insight-assistant-answer {
+              display: grid;
+              gap: var(--space-2);
+              padding: var(--space-4);
+              border: 1px solid var(--border-light);
+              border-inline-start: 4px solid var(--yolk-600);
+              border-radius: var(--radius-md);
+              background: var(--surface-soft);
+            }
+
+            #yellow-dashboard-root .insight-assistant-answer h4,
+            #yellow-dashboard-root .insight-assistant-answer p {
+              margin: 0;
+            }
+
             #yellow-dashboard-root .active-filter-summary {
               min-height: 50px;
               display: flex;
@@ -3754,6 +3785,30 @@ def build_fragment(
 
                       <section id="metrics-grid" class="metric-grid" aria-label="מדדי סיכום"></section>
 
+                      <section class="dashboard-section insight-assistant-panel app-card app-card--elevated" aria-labelledby="insight-assistant-title">
+                        <div class="section-header">
+                          <div>
+                            <h3 id="insight-assistant-title">שאל את הנתונים</h3>
+                            <p class="text-small text-muted">שאלו שאלה חופשית על הקמפיין הפעיל וקבלו תשובה המבוססת על הנתונים המעודכנים בלבד.</p>
+                          </div>
+                          <div id="insight-assistant-scope" class="status-chip">ממתין לנתוני הקמפיין</div>
+                        </div>
+                        <form id="insight-assistant-form" class="insight-assistant-form" novalidate>
+                          <label class="form-field" for="insight-assistant-question">
+                            <span>השאלה שלך</span>
+                            <textarea id="insight-assistant-question" class="form-control insight-assistant-question" rows="3" maxlength="500" required placeholder="לדוגמה: מי הם שלושת השגרירים המובילים ומה הפער ביניהם?"></textarea>
+                          </label>
+                          <div class="control-actions control-actions--inline">
+                            <button id="insight-assistant-submit" class="button-primary action-button" type="submit">קבלת תשובה</button>
+                          </div>
+                        </form>
+                        <div id="insight-assistant-status" class="status-note text-small" aria-live="polite"></div>
+                        <article id="insight-assistant-answer" class="insight-assistant-answer" hidden aria-live="polite">
+                          <h4>תשובה</h4>
+                          <p id="insight-assistant-answer-text"></p>
+                        </article>
+                      </section>
+
                       <section class="dashboard-section">
                         <div class="section-header">
                           <h3>יעדים מול ביצוע</h3>
@@ -4038,6 +4093,13 @@ def build_fragment(
                 manualContributionAttributedAt: root.querySelector("#manual-contribution-attributed-at"),
                 manualContributionStatus: root.querySelector("#manual-contribution-status"),
                 manualContributionCancel: root.querySelector("#manual-contribution-cancel"),
+                insightAssistantForm: root.querySelector("#insight-assistant-form"),
+                insightAssistantQuestion: root.querySelector("#insight-assistant-question"),
+                insightAssistantSubmit: root.querySelector("#insight-assistant-submit"),
+                insightAssistantStatus: root.querySelector("#insight-assistant-status"),
+                insightAssistantAnswer: root.querySelector("#insight-assistant-answer"),
+                insightAssistantAnswerText: root.querySelector("#insight-assistant-answer-text"),
+                insightAssistantScope: root.querySelector("#insight-assistant-scope"),
                 sourceConfigStatus: root.querySelector("#source-config-status"),
                 analysisProjectStart: root.querySelector("#analysis-project-start"),
                 analysisProjectEnd: root.querySelector("#analysis-project-end"),
@@ -6202,6 +6264,9 @@ def build_fragment(
                 if (kind === "manual-contribution") {
                   return buildAuthUrl(`${basePath}/manual-contributions`);
                 }
+                if (kind === "insight-question") {
+                  return buildAuthUrl(`${basePath}/insights/questions`);
+                }
                 return getFallbackAdminEndpoint(kind);
               }
 
@@ -6990,6 +7055,61 @@ def build_fragment(
                 await loadAdminDataset(scope);
                 renderAll();
                 setImportMessage(payload?.message || "ההכפלה נוספה לסכום הקמפיין.", "success");
+                return payload;
+              }
+
+              function setInsightAssistantStatus(message = "", tone = "") {
+                if (!elements.insightAssistantStatus) {
+                  return;
+                }
+                elements.insightAssistantStatus.textContent = message;
+                elements.insightAssistantStatus.dataset.tone = tone;
+              }
+
+              function setInsightAssistantScope(scope = {}) {
+                if (!elements.insightAssistantScope) {
+                  return;
+                }
+                const currentScope = scope.organizationId && scope.campaignId ? scope : getActiveCampaignIdentity();
+                const campaignName = String(state.activeCampaign?.name || state.campaignConfig?.campaign?.name || "הקמפיין הפעיל").trim();
+                const rowCount = Array.isArray(state.rows) ? state.rows.filter((row) => row?.status === "success").length : 0;
+                elements.insightAssistantScope.textContent = `${campaignName} · ${formatNumber(rowCount)} תרומות תקינות`;
+                elements.insightAssistantScope.dataset.organizationId = currentScope.organizationId || "";
+                elements.insightAssistantScope.dataset.campaignId = currentScope.campaignId || "";
+              }
+
+              async function submitInsightAssistantQuestion() {
+                if (!isManagerAuthenticated() || !canUseBackendAuth()) {
+                  throw new Error("שאלות על הנתונים זמינות רק למנהל מחובר דרך שרת הניהול.");
+                }
+                const question = String(elements.insightAssistantQuestion?.value || "").trim();
+                if (question.length < 3 || question.length > 500) {
+                  throw new Error("יש להזין שאלה באורך 3 עד 500 תווים.");
+                }
+                const scope = getActiveCampaignIdentity();
+                const endpoint = buildScopedAdminEndpoint("insight-question", scope);
+                if (!endpoint) {
+                  throw new Error("לא נמצאה זהות קמפיין לשאילתה.");
+                }
+                const { response, payload } = await authRequest(endpoint, {
+                  method: "POST",
+                  body: { question },
+                });
+                if (!response.ok) {
+                  throw new Error(payload?.message || "לא ניתן לקבל תשובה מהנתונים כרגע.");
+                }
+                if (elements.insightAssistantAnswerText) {
+                  elements.insightAssistantAnswerText.textContent = String(payload?.answer || "לא התקבלה תשובה.");
+                }
+                if (elements.insightAssistantAnswer) {
+                  elements.insightAssistantAnswer.hidden = false;
+                }
+                const updatedAt = formatDateTime(payload?.dataScope?.sourceUpdatedAt);
+                const count = formatNumber(payload?.dataScope?.successfulTransactions || 0);
+                setInsightAssistantStatus(
+                  `התשובה חושבה על ${count} תרומות תקינות${updatedAt ? ` · עדכון מקור: ${updatedAt}` : ""}.`,
+                  "success"
+                );
                 return payload;
               }
 
@@ -11041,6 +11161,7 @@ def build_fragment(
                   runRenderStep("control-note", () => setControlNote(filteredRows, prizeRows));
                   runRenderStep("admin-hero", () => renderHeroBadges(filteredRows, prizeRows, compareRows));
                   runRenderStep("metrics", () => renderMetrics(filteredRows));
+                  runRenderStep("insight-assistant-scope", () => setInsightAssistantScope());
                   runRenderStep("goals", () => renderGoalsBoard(filteredRows));
                   runRenderStep("validation", () => renderValidationBoard());
                   runRenderStep("executive", () => renderExecutiveBoard(filteredRows));
@@ -11951,6 +12072,25 @@ def build_fragment(
                     } finally {
                       if (submitButton) {
                         submitButton.disabled = false;
+                      }
+                    }
+                  });
+                }
+
+                if (elements.insightAssistantForm) {
+                  elements.insightAssistantForm.addEventListener("submit", async (event) => {
+                    event.preventDefault();
+                    try {
+                      setInsightAssistantStatus("מחשב תשובה על בסיס נתוני הקמפיין...", "loading");
+                      if (elements.insightAssistantSubmit) {
+                        elements.insightAssistantSubmit.disabled = true;
+                      }
+                      await submitInsightAssistantQuestion();
+                    } catch (error) {
+                      setInsightAssistantStatus(error?.message || "לא ניתן לקבל תשובה מהנתונים כרגע.", "error");
+                    } finally {
+                      if (elements.insightAssistantSubmit) {
+                        elements.insightAssistantSubmit.disabled = false;
                       }
                     }
                   });

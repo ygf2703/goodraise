@@ -27,6 +27,7 @@ import {
   saveAdminSourceConfig,
 } from "../lib/source-store.mjs";
 import { refreshAdminSource } from "../lib/source-sync.mjs";
+import { answerCampaignInsightQuestion } from "../lib/insight-assistant.mjs";
 import {
   IngestHttpError,
   importAmbassadorRegistrations,
@@ -291,6 +292,12 @@ export default async (request) => {
   if (scopedManualContribution && request.method === "POST") {
     const payload = await readRequestPayload(request);
     return addCampaignManualContribution(request, payload, scopedManualContribution);
+  }
+
+  const scopedInsightQuestion = matchScopedCampaignRoute(pathname, "/insights/questions");
+  if (scopedInsightQuestion && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return answerCampaignInsightQuestion(request, payload, scopedInsightQuestion);
   }
 
   const scopedIngest = matchScopedCampaignRoute(pathname, "/ingest");
