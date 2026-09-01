@@ -3503,6 +3503,30 @@ def build_fragment(
                           <div id="hero-badges" class="hero-badges" aria-live="polite"></div>
                         </article>
 
+                        <section class="insight-assistant-panel app-card app-card--elevated" aria-labelledby="insight-assistant-title">
+                          <div class="section-header">
+                            <div>
+                              <h3 id="insight-assistant-title">שאל את הנתונים</h3>
+                              <p class="text-small text-muted">שאלו שאלה חופשית על הקמפיין הפעיל וקבלו תשובה המבוססת על הנתונים המעודכנים בלבד.</p>
+                            </div>
+                            <div id="insight-assistant-scope" class="status-chip">ממתין לנתוני הקמפיין</div>
+                          </div>
+                          <form id="insight-assistant-form" class="insight-assistant-form" novalidate>
+                            <label class="form-field" for="insight-assistant-question">
+                              <span>השאלה שלך</span>
+                              <textarea id="insight-assistant-question" class="form-control insight-assistant-question" rows="3" maxlength="500" required placeholder="לדוגמה: מי הם שלושת השגרירים המובילים ומה הפער ביניהם?"></textarea>
+                            </label>
+                            <div class="control-actions control-actions--inline">
+                              <button id="insight-assistant-submit" class="button-primary action-button" type="submit">קבלת תשובה</button>
+                            </div>
+                          </form>
+                          <div id="insight-assistant-status" class="status-note text-small" aria-live="polite"></div>
+                          <article id="insight-assistant-answer" class="insight-assistant-answer" hidden aria-live="polite">
+                            <h4>תשובה</h4>
+                            <p id="insight-assistant-answer-text"></p>
+                          </article>
+                        </section>
+
                         <aside class="control-panel app-card app-card--elevated">
                           <div class="section-header">
                             <div>
@@ -3784,30 +3808,6 @@ def build_fragment(
                       </section>
 
                       <section id="metrics-grid" class="metric-grid" aria-label="מדדי סיכום"></section>
-
-                      <section class="dashboard-section insight-assistant-panel app-card app-card--elevated" aria-labelledby="insight-assistant-title">
-                        <div class="section-header">
-                          <div>
-                            <h3 id="insight-assistant-title">שאל את הנתונים</h3>
-                            <p class="text-small text-muted">שאלו שאלה חופשית על הקמפיין הפעיל וקבלו תשובה המבוססת על הנתונים המעודכנים בלבד.</p>
-                          </div>
-                          <div id="insight-assistant-scope" class="status-chip">ממתין לנתוני הקמפיין</div>
-                        </div>
-                        <form id="insight-assistant-form" class="insight-assistant-form" novalidate>
-                          <label class="form-field" for="insight-assistant-question">
-                            <span>השאלה שלך</span>
-                            <textarea id="insight-assistant-question" class="form-control insight-assistant-question" rows="3" maxlength="500" required placeholder="לדוגמה: מי הם שלושת השגרירים המובילים ומה הפער ביניהם?"></textarea>
-                          </label>
-                          <div class="control-actions control-actions--inline">
-                            <button id="insight-assistant-submit" class="button-primary action-button" type="submit">קבלת תשובה</button>
-                          </div>
-                        </form>
-                        <div id="insight-assistant-status" class="status-note text-small" aria-live="polite"></div>
-                        <article id="insight-assistant-answer" class="insight-assistant-answer" hidden aria-live="polite">
-                          <h4>תשובה</h4>
-                          <p id="insight-assistant-answer-text"></p>
-                        </article>
-                      </section>
 
                       <section class="dashboard-section">
                         <div class="section-header">

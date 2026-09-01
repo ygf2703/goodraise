@@ -51,12 +51,12 @@ test("insight question endpoint is campaign-scoped and manager-authorized", asyn
   assert.match(authorization, /insight_query: ROLE_CAMPAIGN_MANAGER/);
 });
 
-test("dashboard places the insight assistant beneath the summary metric bar", async () => {
+test("dashboard places the insight assistant beneath the campaign summary and before manual matching", async () => {
   const template = await readFile(new URL("../work/build_yellow_dashboard.py", import.meta.url), "utf8");
-  const metricIndex = template.indexOf('<section id="metrics-grid"');
+  const summaryIndex = template.indexOf('id="hero-badges"');
   const assistantIndex = template.indexOf('id="insight-assistant-form"');
-  const goalsIndex = template.indexOf("<h3>יעדים מול ביצוע</h3>");
+  const manualContributionIndex = template.indexOf('id="add-manual-contribution"');
 
-  assert.ok(metricIndex >= 0 && assistantIndex > metricIndex && goalsIndex > assistantIndex);
+  assert.ok(summaryIndex >= 0 && assistantIndex > summaryIndex && manualContributionIndex > assistantIndex);
   assert.match(template, /buildScopedAdminEndpoint\("insight-question", scope\)/);
 });
