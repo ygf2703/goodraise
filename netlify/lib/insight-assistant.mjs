@@ -86,6 +86,30 @@ function extractResponseText(payload = {}) {
   return fragments.join("\n").trim();
 }
 
+function createProviderError(code, status) {
+  const error = new Error(code);
+  error.code = code;
+  error.providerStatus = status;
+  return error;
+}
+
+function getSafeProviderMessage(error) {
+  switch (error?.code || error?.message) {
+    case "AI_NOT_CONFIGURED":
+      return "שירות שאלות הנתונים אינו מוגדר עדיין. יש להגדיר OPENAI_API_KEY ב־Netlify.";
+    case "OPENAI_AUTH_FAILED":
+      return "החיבור ל־OpenAI נדחה. יש לבדוק את OPENAI_API_KEY ב־Netlify ולבצע Deploy מחדש.";
+    case "OPENAI_MODEL_UNAVAILABLE":
+      return "מודל השאלות אינו זמין לחשבון המוגדר. יש לבדוק את GOODRAISE_AI_MODEL ב־Netlify.";
+    case "OPENAI_RATE_LIMITED":
+      return "שירות השאלות הגיע למגבלת שימוש זמנית. נסו שוב בעוד כמה דקות.";
+    case "OPENAI_TIMEOUT":
+      return "שירות השאלות לא הגיב בזמן. נסו שוב בעוד רגע.";
+    default:
+      return "שירות שאלות הנתונים אינו זמין כרגע. נסו שוב בעוד רגע.";
+  }
+}
+
 async function requestInsightAnswer(question, insightContext) {
   const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
   if (!apiKey) {
@@ -113,12 +137,24 @@ async function requestInsightAnswer(question, insightContext) {
       }),
     });
     if (!response.ok) {
-      throw new Error(`OPENAI_HTTP_${response.status}`);
+      const code = response.status === 401 || response.status === 403
+        ? "OPENAI_AUTH_FAILED"
+        : response.status === 404
+          ? "OPENAI_MODEL_UNAVAILABLE"
+          : response.status === 429
+            ? "OPENAI_RATE_LIMITED"
+            : "OPENAI_PROVIDER_UNAVAILABLE";
+      throw createProviderError(code, response.status);
     }
     const payload = await response.json();
     const answer = extractResponseText(payload);
     if (!answer) throw new Error("OPENAI_EMPTY_RESPONSE");
     return answer;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw createProviderError("OPENAI_TIMEOUT");
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -165,6 +201,14 @@ export async function answerCampaignInsightQuestion(request, payload = {}, scope
     });
   } catch (error) {
     const configured = String(process.env.OPENAI_API_KEY || "").trim();
+    const reason = error?.code || error?.message || "provider_unavailable";
+    console.error("[goodraise][insight-assistant] request failed", {
+      reason,
+      providerStatus: error?.providerStatus || null,
+      configured: Boolean(configured),
+      organizationId: access.organization.id,
+      campaignId: access.campaign.id,
+    });
     await appendAuditEvent({
       user: access.auth.email,
       role: access.auth.role,
@@ -172,13 +216,10 @@ export async function answerCampaignInsightQuestion(request, payload = {}, scope
       campaignId: access.campaign.id,
       action: "insight_query",
       outcome: "error",
-      detail: { reason: configured ? "provider_unavailable" : "provider_not_configured" },
+      detail: { reason: configured ? reason : "provider_not_configured" },
     });
-    return jsonResponse(error?.status === 503 ? 503 : 502, {
-      message:
-        error?.status === 503
-          ? "שירות שאלות הנתונים אינו מוגדר עדיין. יש להגדיר OPENAI_API_KEY ב־Netlify."
-          : "שירות שאלות הנתונים אינו זמין כרגע. נסו שוב בעוד רגע.",
+    return jsonResponse(reason === "AI_NOT_CONFIGURED" ? 503 : 502, {
+      message: getSafeProviderMessage(error),
     });
   }
 }

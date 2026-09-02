@@ -3521,9 +3521,9 @@ def build_fragment(
                             </div>
                           </form>
                           <div id="insight-assistant-status" class="status-note text-small" aria-live="polite"></div>
-                          <article id="insight-assistant-answer" class="insight-assistant-answer" hidden aria-live="polite">
+                          <article id="insight-assistant-answer" class="insight-assistant-answer" aria-live="polite">
                             <h4>תשובה</h4>
-                            <p id="insight-assistant-answer-text"></p>
+                            <p id="insight-assistant-answer-text">התשובה תופיע כאן לאחר שליחת השאלה.</p>
                           </article>
                         </section>
 
@@ -12081,6 +12081,12 @@ def build_fragment(
                   elements.insightAssistantForm.addEventListener("submit", async (event) => {
                     event.preventDefault();
                     try {
+                      if (elements.insightAssistantAnswer) {
+                        elements.insightAssistantAnswer.hidden = false;
+                      }
+                      if (elements.insightAssistantAnswerText) {
+                        elements.insightAssistantAnswerText.textContent = "מחשב תשובה על בסיס הנתונים המעודכנים של הקמפיין...";
+                      }
                       setInsightAssistantStatus("מחשב תשובה על בסיס נתוני הקמפיין...", "loading");
                       if (elements.insightAssistantSubmit) {
                         elements.insightAssistantSubmit.disabled = true;

@@ -376,7 +376,7 @@ $env:OPENAI_API_KEY="replace-with-a-server-side-openai-key"
 
 ## Ask The Data
 
-The manager-only `שאל את הנתונים` panel appears directly below the dashboard summary metrics. It answers questions only from the currently selected campaign and requires a server-side `OPENAI_API_KEY` in Netlify (or the local backend environment). `GOODRAISE_AI_MODEL` is optional and defaults to `gpt-4.1-mini`.
+The manager-only `שאל את הנתונים` panel appears immediately beneath the campaign summary bar and before the control center. It answers questions only from the currently selected campaign and requires a server-side `OPENAI_API_KEY` in Netlify (or the local backend environment). `GOODRAISE_AI_MODEL` is optional and defaults to `gpt-4.1-mini`.
 
 For privacy, the model receives campaign aggregates only: totals, successful transaction count, project dates, hourly/daily totals, and ambassador fundraising totals. Raw donation rows and donor names, emails, phones, and cities are never sent to the model. The key is never exposed to the browser.
 

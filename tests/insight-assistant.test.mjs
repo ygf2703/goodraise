@@ -59,4 +59,14 @@ test("dashboard places the insight assistant beneath the campaign summary and be
 
   assert.ok(summaryIndex >= 0 && assistantIndex > summaryIndex && manualContributionIndex > assistantIndex);
   assert.match(template, /buildScopedAdminEndpoint\("insight-question", scope\)/);
+  assert.match(template, /התשובה תופיע כאן לאחר שליחת השאלה/);
+});
+
+test("insight assistant classifies provider failures without exposing provider payloads", async () => {
+  const moduleSource = await readFile(new URL("../netlify/lib/insight-assistant.mjs", import.meta.url), "utf8");
+
+  assert.match(moduleSource, /OPENAI_AUTH_FAILED/);
+  assert.match(moduleSource, /OPENAI_RATE_LIMITED/);
+  assert.match(moduleSource, /OPENAI_TIMEOUT/);
+  assert.match(moduleSource, /providerStatus: error\?\.providerStatus \|\| null/);
 });
