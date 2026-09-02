@@ -34,12 +34,28 @@ test("insight assistant sends aggregate campaign data without donor personal det
     activeAmbassadors: 1,
     targetPercent: 20,
   });
-  assert.deepEqual(context.topAmbassadors, [{ label: "שגריר א", total: 200 }]);
+  assert.deepEqual(context.ambassadorTotals, [{ label: "שגריר א", total: 200 }]);
+  assert.equal(context.ambassadorTotalsTruncated, false);
   assert.deepEqual(context.dailyTotals, [{ label: "2026-09-01", total: 200 }]);
   assert.deepEqual(context.hourlyTotals, [{ label: "10:00", total: 200 }]);
 
   const serialized = JSON.stringify(context);
   assert.doesNotMatch(serialized, /תורם סודי|donor@example\.com|0500000000|תל אביב/);
+});
+
+test("insight assistant includes the full ambassador totals list for fundraising range questions", () => {
+  const rows = Array.from({ length: 20 }, (_, index) => ({
+    status: "success",
+    amount: index + 1,
+    ambassador: `שגריר ${index + 1}`,
+    date: "2026-09-01",
+    hour: 12,
+  }));
+  const context = buildCampaignInsightContext({ dataset: { rows } });
+
+  assert.equal(context.ambassadorTotals.length, 20);
+  assert.deepEqual(context.ambassadorTotals.at(-1), { label: "שגריר 1", total: 1 });
+  assert.equal(context.ambassadorTotalsTruncated, false);
 });
 
 test("insight question endpoint is campaign-scoped and manager-authorized", async () => {
