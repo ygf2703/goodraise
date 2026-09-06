@@ -126,45 +126,45 @@ export function getDeterministicInsightAnswer(question, insightContext = {}) {
   const metrics = insightContext.metrics || {};
   const currency = insightContext.campaign?.currency || "ILS";
   const mentionsDonation = /תרומ|עסק/.test(normalized);
-  const asksMaximum = /הגדול|הגבוה|maxימום|max\b/.test(normalized);
-  const asksMinimum = /הקטנ|הנמוכ|minימום|min\b/.test(normalized);
+  const asksMaximum = /גדול|גבוה|שיא|מקסימום|מקסימל|maxימום|max\b/.test(normalized);
+  const asksMinimum = /קטנ|נמוך|נמוכ|מינימום|מינימל|minימום|min\b/.test(normalized);
 
-  if (mentionsDonation && asksMaximum && !/שגריר/.test(normalized)) {
+  if (mentionsDonation && asksMaximum && !/שגריר|יום|שעה|שעת/.test(normalized)) {
     return `סכום התרומה הבודדת הגבוה ביותר בחלון הקמפיין הפעיל הוא ${formatInsightAmount(metrics.maximumSingleDonation, currency)}.`;
   }
   if (mentionsDonation && asksMinimum && !/שגריר/.test(normalized)) {
     return `סכום התרומה הבודדת הנמוך ביותר בחלון הקמפיין הפעיל הוא ${formatInsightAmount(metrics.minimumSingleDonation, currency)}.`;
   }
-  if (/ממוצע/.test(normalized) && mentionsDonation) {
+  if (/ממוצע/.test(normalized) && (mentionsDonation || /תורמ/.test(normalized))) {
     return `ממוצע התרומה בחלון הקמפיין הפעיל הוא ${formatInsightAmount(metrics.averageDonation, currency)}.`;
   }
   if (mentionsDonation && /כמה|מספר|כמות/.test(normalized)) {
     return `בחלון הקמפיין הפעיל נקלטו ${formatInsightNumber(metrics.successfulTransactions)} תרומות תקינות.`;
   }
-  if (/סך|סה["׳']?כ|גיוס/.test(normalized) && !/שגריר/.test(normalized)) {
+  if ((/התקדמות|אחוז|שיעור|עמידה|כמה.*יעד/.test(normalized) && /יעד|גיוס/.test(normalized))) {
+    return metrics.targetPercent === null
+      ? "לא הוגדר יעד גיוס מספרי לקמפיין הפעיל."
+      : `הקמפיין הגיע ל-${formatInsightNumber(metrics.targetPercent)}% מהיעד.`;
+  }
+  if (/סך|סה["׳']?כ|גיוס|גויס|גויסו|הכנסות|כסף.*נכנס|תרומות.*כולל|מצטבר/.test(normalized) && !/שגריר|יום|שעה|שעת/.test(normalized)) {
     return `סך הגיוס בחלון הקמפיין הפעיל הוא ${formatInsightAmount(metrics.totalRaised, currency)}.`;
   }
   if (/שגריר/.test(normalized) && /פעיל|כמה|מספר|כמות/.test(normalized)) {
     return `בחלון הקמפיין הפעיל יש ${formatInsightNumber(metrics.activeAmbassadors)} שגרירים פעילים.`;
   }
-  if (/התקדמות|אחוז/.test(normalized) && /יעד|גיוס/.test(normalized)) {
-    return metrics.targetPercent === null
-      ? "לא הוגדר יעד גיוס מספרי לקמפיין הפעיל."
-      : `הקמפיין הגיע ל-${formatInsightNumber(metrics.targetPercent)}% מהיעד.`;
-  }
-  if (/שגריר/.test(normalized) && /מוביל|ראשונ|מקום.*1/.test(normalized)) {
+  if (/שגריר/.test(normalized) && /מוביל|ראשון|ראשונ|מקום.*1|הכי.*הרבה|גבוה/.test(normalized)) {
     const leader = insightContext.ambassadorTotals?.[0];
     return leader
       ? `השגריר/ה המוביל/ה הוא/היא ${leader.label}, עם ${formatInsightAmount(leader.total, currency)} בחלון הקמפיין הפעיל.`
       : "אין עדיין נתוני שגרירים בחלון הקמפיין הפעיל.";
   }
-  if (/יום/.test(normalized) && /שיא|מוביל|הגבוה|חזק/.test(normalized)) {
+  if (/יום/.test(normalized) && /שיא|מוביל|הוביל|הגבוה|חזק|הכי.*הרבה/.test(normalized)) {
     const bestDay = insightContext.dailyTotals?.[0];
     return bestDay
       ? `יום השיא בגיוס הוא ${bestDay.label}, עם ${formatInsightAmount(bestDay.total, currency)}.`
       : "אין עדיין נתוני ימים בחלון הקמפיין הפעיל.";
   }
-  if (/שעה/.test(normalized) && /שיא|מוביל|הגבוה|חזק/.test(normalized)) {
+  if (/שעה|שעת/.test(normalized) && /שיא|מוביל|הוביל|הגבוה|חזק|הכי.*הרבה/.test(normalized)) {
     const bestHour = insightContext.hourlyTotals?.[0];
     return bestHour
       ? `שעת השיא בגיוס היא ${bestHour.label}, עם ${formatInsightAmount(bestHour.total, currency)}.`
