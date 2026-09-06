@@ -29,6 +29,8 @@ PRIZES_XLSX = Path(os.getenv("YELLOW_DASHBOARD_PRIZES_XLSX", str(WORK_DIR / "pri
 PRIZES_CSV = Path(os.getenv("YELLOW_DASHBOARD_PRIZES_CSV", str(WORK_DIR / "prizes.csv"))).resolve()
 ORG_LOGO_PATH = ASSETS_DIR / "achim-lasemel-logo.png"
 CAMPAIGN_LOGO_PATH = ASSETS_DIR / "osim-tov-betzahov-logo.png"
+GOODRAISE_LANDING_TEMPLATE_PATH = WORK_DIR / "goodraise-landing.html"
+GOODRAISE_LOGO_PATH = ASSETS_DIR / "goodraise-logo.png"
 BACKDROP_PATH = ASSETS_DIR / "dashboard-backdrop.png"
 PROJECT_HERO_IMAGE_PATH = ASSETS_DIR / "campaign-project-hero.jpeg"
 PROJECT_PAGE_CONTENT_PATH = Path(
@@ -12694,6 +12696,17 @@ def main() -> None:
     browser_document = build_browser_document(fragment)
     BROWSER_OUTPUT_HTML.write_text(browser_document, encoding="utf-8")
     INDEX_OUTPUT_HTML.write_text(browser_document, encoding="utf-8")
+
+    # The marketing landing page is kept separate from the campaign application
+    # and is served by Netlify at /goodraise/.
+    landing_output_dir = OUTPUTS_DIR / "goodraise"
+    landing_output_dir.mkdir(parents=True, exist_ok=True)
+    if GOODRAISE_LANDING_TEMPLATE_PATH.exists():
+        (landing_output_dir / "index.html").write_text(
+            GOODRAISE_LANDING_TEMPLATE_PATH.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    if GOODRAISE_LOGO_PATH.exists():
+        shutil.copy2(GOODRAISE_LOGO_PATH, landing_output_dir / GOODRAISE_LOGO_PATH.name)
 
     if render_shell_output():
         export_browser_friendly_html()

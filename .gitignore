@@ -13,6 +13,8 @@ netlify/data/*
 outputs/index.html
 outputs/yellow-project-dashboard.html
 outputs/yellow-project-dashboard-browser.html
+outputs/assets/
+outputs/goodraise/
 outputs/.render-cache/
 outputs/ui-review/
 *.pyc

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { buildCampaignInsightContext } from "../netlify/lib/insight-assistant.mjs";
+import { buildCampaignInsightContext, getDeterministicInsightAnswer } from "../netlify/lib/insight-assistant.mjs";
 
 test("insight assistant sends aggregate campaign data without donor personal details", () => {
   const context = buildCampaignInsightContext({
@@ -31,6 +31,8 @@ test("insight assistant sends aggregate campaign data without donor personal det
     totalRaised: 200,
     successfulTransactions: 1,
     averageDonation: 200,
+    maximumSingleDonation: 200,
+    minimumSingleDonation: 200,
     activeAmbassadors: 1,
     targetPercent: 20,
   });
@@ -41,6 +43,38 @@ test("insight assistant sends aggregate campaign data without donor personal det
 
   const serialized = JSON.stringify(context);
   assert.doesNotMatch(serialized, /תורם סודי|donor@example\.com|0500000000|תל אביב/);
+});
+
+test("insight assistant uses the configured campaign window and answers maximum donation deterministically", () => {
+  const context = buildCampaignInsightContext({
+    campaign: { currency: "ILS" },
+    dataset: {
+      meta: { defaultFrom: "2026-09-01", defaultTo: "2026-09-02" },
+      rows: [
+        { status: "success", amount: 100, ambassador: "א", date: "2026-08-31" },
+        { status: "success", amount: 720, ambassador: "ב", date: "2026-09-01" },
+        { status: "success", amount: 180, ambassador: "ג", date: "2026-09-02" },
+        { status: "success", amount: 5000, ambassador: "ד", date: "2026-09-03" },
+      ],
+    },
+  });
+
+  assert.deepEqual(context.metrics, {
+    totalRaised: 900,
+    successfulTransactions: 2,
+    averageDonation: 450,
+    maximumSingleDonation: 720,
+    minimumSingleDonation: 180,
+    activeAmbassadors: 2,
+    targetPercent: null,
+  });
+  assert.match(getDeterministicInsightAnswer("מה סכום התרומה הגדול ביותר שנכנסה?", context), /720/);
+  assert.match(getDeterministicInsightAnswer("מה סך הגיוס?", context), /900/);
+  assert.match(getDeterministicInsightAnswer("כמה תרומות נכנסו?", context), /2/);
+  assert.match(getDeterministicInsightAnswer("כמה שגרירים פעילים?", context), /2/);
+  assert.match(getDeterministicInsightAnswer("מי השגריר המוביל?", context), /ב/);
+  assert.match(getDeterministicInsightAnswer("איזה יום היה יום השיא?", context), /2026-09-01/);
+  assert.match(getDeterministicInsightAnswer("מה טווח תאריכי הקמפיין?", context), /2026-09-01 עד 2026-09-02/);
 });
 
 test("insight assistant includes the full ambassador totals list for fundraising range questions", () => {
