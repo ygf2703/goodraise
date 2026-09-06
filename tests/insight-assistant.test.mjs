@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { buildCampaignInsightContext, getDeterministicInsightAnswer } from "../netlify/lib/insight-assistant.mjs";
+import { applyConfiguredProjectWindow } from "../netlify/lib/campaign-repositories.mjs";
 
 test("insight assistant sends aggregate campaign data without donor personal details", () => {
   const context = buildCampaignInsightContext({
@@ -75,6 +76,24 @@ test("insight assistant uses the configured campaign window and answers maximum 
   assert.match(getDeterministicInsightAnswer("מי השגריר המוביל?", context), /ב/);
   assert.match(getDeterministicInsightAnswer("איזה יום היה יום השיא?", context), /2026-09-01/);
   assert.match(getDeterministicInsightAnswer("מה טווח תאריכי הקמפיין?", context), /2026-09-01 עד 2026-09-02/);
+});
+
+test("server campaign context preserves the dashboard dataset window over stale builder draft dates", () => {
+  const dataset = applyConfiguredProjectWindow(
+    {
+      meta: {
+        projectDates: ["2026-08-23", "2026-08-24"],
+        defaultFrom: "2026-08-23",
+        defaultTo: "2026-08-24",
+      },
+      rows: [],
+    },
+    { basics: { startDate: "2026-03-15", endDate: "2026-03-24" } },
+    {},
+  );
+
+  assert.equal(dataset.meta.defaultFrom, "2026-08-23");
+  assert.equal(dataset.meta.defaultTo, "2026-08-24");
 });
 
 test("insight assistant includes the full ambassador totals list for fundraising range questions", () => {

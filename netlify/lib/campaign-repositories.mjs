@@ -1065,6 +1065,28 @@ function projectDateRange(startAt = "", endAt = "") {
 }
 
 export function applyConfiguredProjectWindow(dataset, config = {}, campaign = {}) {
+  const baseDataset = dataset && typeof dataset === "object" ? dataset : {};
+  const storedMeta = baseDataset.meta && typeof baseDataset.meta === "object" ? baseDataset.meta : {};
+  const storedProjectDates = Array.isArray(storedMeta.projectDates)
+    ? storedMeta.projectDates.map((value) => String(value || "").slice(0, 10)).filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))
+    : [];
+  // The browser dashboard uses the project window stored alongside its dataset.
+  // Prefer it when it exists so server consumers (including Ask the Data) cannot
+  // silently switch to unrelated draft dates from Campaign Builder.
+  if (storedProjectDates.length) {
+    return {
+      ...baseDataset,
+      meta: {
+        ...storedMeta,
+        projectDates: storedProjectDates,
+        defaultFrom: String(storedMeta.defaultFrom || storedProjectDates[0]).slice(0, 10),
+        defaultTo: String(storedMeta.defaultTo || storedProjectDates.at(-1)).slice(0, 10),
+        minDate: String(storedMeta.minDate || storedProjectDates[0]).slice(0, 10),
+        maxDate: String(storedMeta.maxDate || storedProjectDates.at(-1)).slice(0, 10),
+        projectWindowLabel: String(storedMeta.projectWindowLabel || `${storedProjectDates[0]} עד ${storedProjectDates.at(-1)}`),
+      },
+    };
+  }
   const basics = config?.basics && typeof config.basics === "object" ? config.basics : {};
   const startAt = basics.startDate
     ? buildDateTimeIso(basics.startDate, basics.startTime, "")
@@ -1076,7 +1098,6 @@ export function applyConfiguredProjectWindow(dataset, config = {}, campaign = {}
   if (!projectDates.length) {
     return dataset;
   }
-  const baseDataset = dataset && typeof dataset === "object" ? dataset : {};
   return {
     ...baseDataset,
     meta: {
