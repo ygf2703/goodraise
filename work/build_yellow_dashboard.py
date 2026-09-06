@@ -39,6 +39,13 @@ GOODRAISE_LANDING_MEDIA_PATHS = (
     ASSETS_DIR / "landing-data-question.png",
     ASSETS_DIR / "landing-intelligence.png",
 )
+GOODRAISE_LANDING_MEDIA_PLACEHOLDERS = {
+    "__LANDING_HERO_IMAGE_DATA_URI__": ASSETS_DIR / "landing-hero-campaign.png",
+    "__LANDING_STATUS_IMAGE_DATA_URI__": ASSETS_DIR / "landing-campaign-status.png",
+    "__LANDING_LEADERBOARD_IMAGE_DATA_URI__": ASSETS_DIR / "landing-leaderboard.png",
+    "__LANDING_QUESTION_IMAGE_DATA_URI__": ASSETS_DIR / "landing-data-question.png",
+    "__LANDING_INTELLIGENCE_IMAGE_DATA_URI__": ASSETS_DIR / "landing-intelligence.png",
+}
 BACKDROP_PATH = ASSETS_DIR / "dashboard-backdrop.png"
 PROJECT_HERO_IMAGE_PATH = ASSETS_DIR / "campaign-project-hero.jpeg"
 PROJECT_PAGE_CONTENT_PATH = Path(
@@ -12711,10 +12718,13 @@ def main() -> None:
     landing_output_dir.mkdir(parents=True, exist_ok=True)
     if GOODRAISE_LANDING_TEMPLATE_PATH.exists():
         landing_logo_data_uri = load_logo_data_uri(GOODRAISE_TRANSPARENT_LOGO_PATH)
+        landing_html = GOODRAISE_LANDING_TEMPLATE_PATH.read_text(encoding="utf-8").replace(
+            "__GOODRAISE_LOGO_DATA_URI__", landing_logo_data_uri
+        )
+        for placeholder, media_path in GOODRAISE_LANDING_MEDIA_PLACEHOLDERS.items():
+            landing_html = landing_html.replace(placeholder, load_file_data_uri(media_path))
         (landing_output_dir / "index.html").write_text(
-            GOODRAISE_LANDING_TEMPLATE_PATH.read_text(encoding="utf-8").replace(
-                "__GOODRAISE_LOGO_DATA_URI__", landing_logo_data_uri
-            ),
+            landing_html,
             encoding="utf-8",
         )
     if GOODRAISE_LOGO_PATH.exists():
