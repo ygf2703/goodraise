@@ -57,6 +57,14 @@
   status = 200
   force = true
 
+# Keep the marketing landing page public instead of treating "goodraise" as a
+# campaign slug and routing it into the application SPA.
+[[redirects]]
+  from = "/goodraise"
+  to = "/goodraise/index.html"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/:project"
   to = "/index.html"
