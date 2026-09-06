@@ -32,6 +32,13 @@ CAMPAIGN_LOGO_PATH = ASSETS_DIR / "osim-tov-betzahov-logo.png"
 GOODRAISE_LANDING_TEMPLATE_PATH = WORK_DIR / "goodraise-landing.html"
 GOODRAISE_LOGO_PATH = ASSETS_DIR / "goodraise-logo.png"
 GOODRAISE_TRANSPARENT_LOGO_PATH = ASSETS_DIR / "goodraise-logo-transparent.png"
+GOODRAISE_LANDING_MEDIA_PATHS = (
+    ASSETS_DIR / "landing-hero-campaign.png",
+    ASSETS_DIR / "landing-campaign-status.png",
+    ASSETS_DIR / "landing-leaderboard.png",
+    ASSETS_DIR / "landing-data-question.png",
+    ASSETS_DIR / "landing-intelligence.png",
+)
 BACKDROP_PATH = ASSETS_DIR / "dashboard-backdrop.png"
 PROJECT_HERO_IMAGE_PATH = ASSETS_DIR / "campaign-project-hero.jpeg"
 PROJECT_PAGE_CONTENT_PATH = Path(
@@ -12712,6 +12719,11 @@ def main() -> None:
         )
     if GOODRAISE_LOGO_PATH.exists():
         shutil.copy2(GOODRAISE_LOGO_PATH, landing_output_dir / GOODRAISE_LOGO_PATH.name)
+    landing_media_dir = landing_output_dir / "media"
+    landing_media_dir.mkdir(parents=True, exist_ok=True)
+    for media_path in GOODRAISE_LANDING_MEDIA_PATHS:
+        if media_path.exists():
+            shutil.copy2(media_path, landing_media_dir / media_path.name)
 
     if render_shell_output():
         export_browser_friendly_html()
