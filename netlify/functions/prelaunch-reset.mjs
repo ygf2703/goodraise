@@ -22,6 +22,3 @@ export async function handler() {
   }
 }
 
-export const config = {
-  schedule: "*/5 * * * *",
-};
