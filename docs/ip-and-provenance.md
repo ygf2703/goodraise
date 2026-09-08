@@ -1,5 +1,7 @@
 # IP And Provenance
 
+> Historical assessment (August 2026). Preserved for context; current behavior and verification are documented in the [R&D guide](README.md) and [engineering assessment](engineering-assessment.md).
+
 Updated: 2026-08-12
 
 ## Ownership Notes

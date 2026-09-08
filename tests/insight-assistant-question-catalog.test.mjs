@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getDeterministicInsightAnswer } from "../netlify/lib/insight-assistant.mjs";
+import { getDeterministicInsightAnswer } from "../backend/services/insight-assistant.mjs";
 
 const context = {
   campaign: { currency: "ILS", defaultFrom: "2026-08-23", defaultTo: "2026-09-01" },

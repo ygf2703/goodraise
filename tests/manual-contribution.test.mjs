@@ -6,7 +6,7 @@ import {
   IngestHttpError,
   buildManualContributionRecord,
   selectCampaignRecordsForUpsert,
-} from "../netlify/lib/postgres-ingest.mjs";
+} from "../backend/services/postgres-ingest.mjs";
 
 test("builds a clean manual match donation row", () => {
   const record = buildManualContributionRecord({
@@ -52,7 +52,7 @@ test("rejects a manual match without a name or positive amount", () => {
 });
 
 test("saves manual matches through the same relational batch ingestion path as Google Sheets", async () => {
-  const source = await readFile(new URL("../netlify/lib/postgres-ingest.mjs", import.meta.url), "utf8");
+  const source = await readFile(new URL("../backend/services/postgres-ingest.mjs", import.meta.url), "utf8");
   const manualContribution = source.slice(source.indexOf("export async function ingestManualContribution"));
   assert.match(manualContribution, /ingestCampaignRecords\(/);
   assert.match(manualContribution, /sourceLabel: "manual-match"/);
@@ -63,7 +63,7 @@ test("saves manual matches through the same relational batch ingestion path as G
 });
 
 test("commits a new ledger row and its dataset snapshot atomically", async () => {
-  const source = await readFile(new URL("../netlify/lib/postgres-ingest.mjs", import.meta.url), "utf8");
+  const source = await readFile(new URL("../backend/services/postgres-ingest.mjs", import.meta.url), "utf8");
   const ingestion = source.slice(source.indexOf("export async function ingestCampaignRecords"));
   const upsertAt = ingestion.indexOf("await bulkUpsertCampaignRecords");
   const snapshotAt = ingestion.indexOf("await rebuildCampaignDatasetSnapshotWithClient", upsertAt);
@@ -75,7 +75,7 @@ test("commits a new ledger row and its dataset snapshot atomically", async () =>
 });
 
 test("resolves the operational scope using stable app IDs as well as UUIDs and slugs", async () => {
-  const source = await readFile(new URL("../netlify/lib/postgres-ingest.mjs", import.meta.url), "utf8");
+  const source = await readFile(new URL("../backend/services/postgres-ingest.mjs", import.meta.url), "utf8");
   const scopeResolver = source.slice(
     source.indexOf("async function resolveScope"),
     source.indexOf("async function backfillExistingCanonicalEventKeys"),

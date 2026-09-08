@@ -1,5 +1,7 @@
 # Go Live Checklist
 
+> Historical assessment (August 2026). Preserved for context; current behavior and verification are documented in the [R&D guide](README.md) and [engineering assessment](engineering-assessment.md).
+
 תאריך עדכון: 2026-07-28
 
 ## חובה לפני עליה

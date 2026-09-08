@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildCampaignProjectDates } from "../netlify/lib/campaign-store.mjs";
-import { applyConfiguredProjectWindow } from "../netlify/lib/campaign-repositories.mjs";
+import { buildCampaignProjectDates } from "../backend/services/campaign-store.mjs";
+import { applyConfiguredProjectWindow } from "../backend/services/campaign-repositories.mjs";
 
 test("builds the complete configured campaign window without a fixed duration", () => {
   assert.deepEqual(
@@ -16,14 +16,14 @@ test("rejects an invalid or reversed campaign window", () => {
   assert.deepEqual(buildCampaignProjectDates("2026-09-02T09:00:00", "2026-09-01T22:00:00"), []);
 });
 
-test("uses builder dates for the response even when a stored campaign timestamp is stale", () => {
+test("preserves the snapshot analysis window until the configuration save flow updates it", () => {
   const dataset = applyConfiguredProjectWindow(
     { rows: [], meta: { projectDates: ["2026-03-15"], defaultTo: "2026-03-15" } },
     { basics: { startDate: "2026-08-23", startTime: "09:00", endDate: "2026-09-01", endTime: "22:00" } },
     { startAt: "2026-03-15T00:00:00", endAt: "2026-03-24T23:59:00" },
   );
 
-  assert.equal(dataset.meta.defaultFrom, "2026-08-23");
-  assert.equal(dataset.meta.defaultTo, "2026-09-01");
-  assert.equal(dataset.meta.projectDates.length, 10);
+  assert.equal(dataset.meta.defaultFrom, "2026-03-15");
+  assert.equal(dataset.meta.defaultTo, "2026-03-15");
+  assert.equal(dataset.meta.projectDates.length, 1);
 });

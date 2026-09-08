@@ -1,32 +1,19 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT_DIR = fileURLToPath(new URL("../", import.meta.url));
-const PLATFORM_STORE_PATH = fileURLToPath(new URL("../work/data/goodraise-platform-dev.json", import.meta.url));
-const TEST_AUTH_DB_PATH = fileURLToPath(new URL("../work/data/dashboard-auth.test.sqlite3", import.meta.url));
-const LEGACY_SOURCE_PATH = fileURLToPath(new URL("../work/data/dashboard-source-config.json", import.meta.url));
-const LEGACY_CAMPAIGN_PATH = fileURLToPath(new URL("../work/data/dashboard-campaign-config.json", import.meta.url));
-
-function detectPython() {
-  const envPython = process.env.PYTHON_BIN || process.env.PYTHON;
-  if (envPython) {
-    return envPython;
-  }
-  if (process.platform === "win32") {
-    const cached = join(process.env.USERPROFILE || "", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python", "python.exe");
-    if (existsSync(cached)) {
-      return cached;
-    }
-    return "python";
-  }
-  return "python3";
-}
+const TEST_DATA_DIR = await mkdtemp(join(tmpdir(), "goodraise-server-test-"));
+after(() => rm(TEST_DATA_DIR, { recursive: true, force: true }));
+const PLATFORM_STORE_PATH = join(TEST_DATA_DIR, "goodraise-platform-dev.json");
+const TEST_AUTH_DB_PATH = join(TEST_DATA_DIR, "netlify-auth-dev.json");
+const LEGACY_SOURCE_PATH = join(TEST_DATA_DIR, "netlify-source-config-dev.json");
+const LEGACY_CAMPAIGN_PATH = join(TEST_DATA_DIR, "netlify-campaign-config-dev.json");
 
 async function backupFiles(paths) {
   const backups = new Map();
@@ -313,7 +300,8 @@ async function setupManager(baseUrl, email) {
     },
   });
   assert.equal(result.response.status, 200);
-  assert.match(result.cookie, /yellow_dashboard_admin_session=/);
+  assert.match(result.cookie, /goodraise_admin_session=/);
+  assert.ok(result.response.headers.getSetCookie().some((cookie) => cookie.startsWith("yellow_dashboard_admin_session=") && cookie.includes("Max-Age=0")));
   return result.cookie;
 }
 
@@ -335,16 +323,17 @@ test("local backend enforces campaign scope and returns scoped payloads", { conc
     await rm(LEGACY_SOURCE_PATH, { force: true });
     await rm(LEGACY_CAMPAIGN_PATH, { force: true });
 
-    const python = detectPython();
     serverProcess = spawn(
-      python,
-      ["scripts/run_dashboard_server.py", "--skip-build", "--host", "127.0.0.1", "--port", String(port)],
+      process.execPath,
+      ["--import", "tsx", "backend/server.ts"],
       {
         cwd: ROOT_DIR,
         env: {
           ...process.env,
-          YELLOW_DASHBOARD_AUTH_DB_PATH: TEST_AUTH_DB_PATH,
-          YELLOW_DASHBOARD_MANAGER_EMAILS: JSON.stringify([
+          GOODRAISE_DATA_DIR: TEST_DATA_DIR,
+          PORT: String(port),
+          HOST: "127.0.0.1",
+          GOODRAISE_MANAGER_EMAILS: JSON.stringify([
             { email: "local-org-admin@example.org", role: "organization_admin", organizationSlug: "alpha" },
             { email: "local-a1-manager@example.org", role: "campaign_manager", organizationSlug: "alpha", campaignSlugs: ["alpha-1"] },
           ]),
@@ -354,6 +343,12 @@ test("local backend enforces campaign scope and returns scoped payloads", { conc
     );
 
     await waitForHealth(`${baseUrl}/api/health`);
+
+    const publicCampaign = await requestJson(`${baseUrl}/api/public-context?project=alpha-2`);
+    assert.equal(publicCampaign.response.status, 200);
+    assert.equal(publicCampaign.payload.campaignId, "alpha-2");
+    const unknownCampaign = await requestJson(`${baseUrl}/api/public-context?project=does-not-exist`);
+    assert.equal(unknownCampaign.response.status, 404);
 
     const orgAdminCookie = await setupManager(baseUrl, "local-org-admin@example.org");
     const managerCookie = await setupManager(baseUrl, "local-a1-manager@example.org");
@@ -434,16 +429,17 @@ test("local backend blocks unsafe source endpoints on save and refresh", { concu
     await rm(LEGACY_SOURCE_PATH, { force: true });
     await rm(LEGACY_CAMPAIGN_PATH, { force: true });
 
-    const python = detectPython();
     serverProcess = spawn(
-      python,
-      ["scripts/run_dashboard_server.py", "--skip-build", "--host", "127.0.0.1", "--port", String(port)],
+      process.execPath,
+      ["--import", "tsx", "backend/server.ts"],
       {
         cwd: ROOT_DIR,
         env: {
           ...process.env,
-          YELLOW_DASHBOARD_AUTH_DB_PATH: TEST_AUTH_DB_PATH,
-          YELLOW_DASHBOARD_MANAGER_EMAILS: JSON.stringify([
+          GOODRAISE_DATA_DIR: TEST_DATA_DIR,
+          PORT: String(port),
+          HOST: "127.0.0.1",
+          GOODRAISE_MANAGER_EMAILS: JSON.stringify([
             { email: "local-a1-manager@example.org", role: "campaign_manager", organizationSlug: "alpha", campaignSlugs: ["alpha-1"] },
           ]),
         },

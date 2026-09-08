@@ -1,5 +1,5 @@
-import authHandler from "../netlify/functions/auth.mjs";
-import healthHandler from "../netlify/functions/health.mjs";
+import authHandler from "../backend/http-handler.mjs";
+import healthHandler from "../netlify/functions/health.ts";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +9,7 @@ import {
   saveCampaignConfig,
   saveCampaignDataset,
   saveOrganization,
-} from "../netlify/lib/campaign-repositories.mjs";
+} from "../backend/services/campaign-repositories.mjs";
 
 const PLATFORM_STORE_PATH = fileURLToPath(new URL("../work/data/goodraise-platform-dev.json", import.meta.url));
 const AUTH_STORE_PATH = fileURLToPath(new URL("../work/data/netlify-auth-dev.json", import.meta.url));
@@ -137,7 +137,7 @@ async function seedScopedCampaignDataset() {
 
 async function main() {
   const uniqueEmail = `qa-admin-${Date.now()}@example.org`;
-  process.env.YELLOW_DASHBOARD_MANAGER_EMAILS = JSON.stringify([
+  process.env.GOODRAISE_MANAGER_EMAILS = JSON.stringify([
     {
       email: uniqueEmail,
       role: "platform_admin",
@@ -201,7 +201,7 @@ async function main() {
     const setupCookie = setupResponse.headers.get("set-cookie") || "";
     assert(setupResponse.status === 200, "Setup should succeed.");
     assert(setupPayload.authenticated === true, "Setup should authenticate the manager.");
-    assert(setupCookie.includes("yellow_dashboard_admin_session="), "Setup should return a session cookie.");
+    assert(setupCookie.includes("goodraise_admin_session="), "Setup should return a session cookie.");
 
     const statusAfter = await authHandler(
       new Request("http://localhost/api/auth/status", {
@@ -250,7 +250,7 @@ async function main() {
 
     console.log("Netlify auth flow verification passed.");
   } finally {
-    delete process.env.YELLOW_DASHBOARD_MANAGER_EMAILS;
+    delete process.env.GOODRAISE_MANAGER_EMAILS;
     await restoreFiles(backups);
   }
 }

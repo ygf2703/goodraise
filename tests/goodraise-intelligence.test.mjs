@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import vm from "node:vm";
+import { createGoodRaiseIntelligence } from "../shared/intelligence/engine.mjs";
 
 function groupBy(rows, getKey) {
   const map = new Map();
@@ -29,13 +28,7 @@ function buildLeaderboard(rows) {
     .sort((left, right) => right.total - left.total || right.deals - left.deals || left.ambassador.localeCompare(right.ambassador, "he"));
 }
 
-async function loadEngineFactory() {
-  const source = await readFile(new URL("../work/frontend/goodraise-intelligence.js", import.meta.url), "utf8");
-  const sandbox = {};
-  vm.createContext(sandbox);
-  vm.runInContext(`${source}\nthis.__factory = createGoodRaiseIntelligence;`, sandbox);
-  return sandbox.__factory;
-}
+async function loadEngineFactory() { return createGoodRaiseIntelligence; }
 
 function buildRows() {
   return [

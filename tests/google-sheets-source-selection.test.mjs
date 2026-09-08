@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { mapSourceRecordsToCanonicalFields, parseGoogleValues, selectGoogleSheetCandidate } from "../netlify/lib/source-store.mjs";
-import { summarizeGoogleSheetsRecords } from "../netlify/lib/source-sync.mjs";
+import { mapSourceRecordsToCanonicalFields, parseGoogleValues, selectGoogleSheetCandidate } from "../backend/services/source-store.mjs";
+import { summarizeGoogleSheetsRecords } from "../backend/services/source-sync.mjs";
 
 test("keeps Redash transaction fields aligned when an empty header is absent from a data row", () => {
   const [row] = parseGoogleValues([
@@ -120,7 +120,7 @@ test("selects the newest valid Google Sheets transactions tab over a larger hist
 });
 
 test("discovers Google Sheets tabs with one batch request instead of sequential requests", async () => {
-  const source = await readFile(new URL("../netlify/lib/source-store.mjs", import.meta.url), "utf8");
+  const source = await readFile(new URL("../backend/services/source-store.mjs", import.meta.url), "utf8");
   assert.match(source, /values:batchGet/);
   assert.match(source, /fetchValuesBatch\(sheetRanges\)/);
   assert.doesNotMatch(source, /for \(const sheetName of sheetNames\)\s*\{\s*const candidate = await fetchValues/);

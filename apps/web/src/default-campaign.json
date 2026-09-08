@@ -1,0 +1,61 @@
+{
+  "projectDatesLabel": "",
+  "platformBaseUrl": "",
+  "projectSlug": "campaign",
+  "eyebrow": "GoodRaise",
+  "title": "שם הקמפיין",
+  "subtitle": "עדכנו את הטקסט, המדיה והמיתוג מתוך הגדרות הקמפיין כדי להתאים את עמוד הפרויקט לקמפיין הפעיל.",
+  "storyMarkdown": "## הסיפור של הקמפיין\n\nכאן תוכלו לשתף את מטרת הקמפיין, למי הוא מסייע וכיצד התרומות יעזרו.",
+  "primaryCtaLabel": "המשך לתרומה מאובטחת",
+  "secondaryCtaLabel": "צפייה במובילים ובזוכים",
+  "externalDonationUrl": "",
+  "trustNote": "התשלום והסליקה יתבצעו אצל ספק חיצוני מאובטח. מסך זה מרכז את בחירת סכום התרומה ופרטי ההתקדמות בלבד.",
+  "successHint": "לאחר לחיצה תועברו לעמוד התשלום של ספק התרומות החיצוני עם פרטי התרומה שבחרתם.",
+  "mediaType": "image",
+  "mediaUrl": "",
+  "mediaAlt": "Campaign hero media",
+  "campaignLogoUrl": "",
+  "organizationLogoUrl": "",
+  "fontFamily": "Assistant",
+  "theme": {
+    "primary": "#111D4A",
+    "secondary": "#24377C",
+    "accent": "#FFD629",
+    "surface": "#F6F7FA",
+    "text": "#090B10"
+  },
+  "amountCards": [
+    {
+      "value": 54,
+      "label": "תמיכה בקמפיין",
+      "description": "כל תרומה עוזרת להתקדם אל היעד."
+    },
+    {
+      "value": 100,
+      "label": "תמיכה בקמפיין",
+      "description": "כל תרומה עוזרת להתקדם אל היעד."
+    },
+    {
+      "value": 180,
+      "label": "תמיכה בקמפיין",
+      "description": "כל תרומה עוזרת להתקדם אל היעד."
+    },
+    {
+      "value": 360,
+      "label": "תמיכה בקמפיין",
+      "description": "כל תרומה עוזרת להתקדם אל היעד."
+    },
+    {
+      "value": 500,
+      "label": "תמיכה בקמפיין",
+      "description": "כל תרומה עוזרת להתקדם אל היעד."
+    },
+    {
+      "value": 1000,
+      "label": "תמיכה בקמפיין",
+      "description": "כל תרומה עוזרת להתקדם אל היעד."
+    }
+  ],
+  "stats": [],
+  "showRecurring": true
+}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildDatasetMeta, getDonationRecordValidationError, normalizeExternalRecord } from "../netlify/lib/postgres-ingest.mjs";
+import { buildDatasetMeta, getDonationRecordValidationError, normalizeExternalRecord } from "../backend/services/postgres-ingest.mjs";
 
 test("rejects a source row that only contains ambassador data", () => {
   assert.match(

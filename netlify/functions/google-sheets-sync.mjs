@@ -1,4 +1,4 @@
-import { runScheduledGoogleSheetsSync } from "../lib/source-sync.mjs";
+import { runScheduledGoogleSheetsSync } from "../../backend/services/source-sync.mjs";
 
 export default async () => {
   const startedAt = new Date().toISOString();

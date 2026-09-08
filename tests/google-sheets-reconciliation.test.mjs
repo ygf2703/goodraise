@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { normalizeSourceConfig } from "../netlify/lib/multi-tenant-model.mjs";
-import { summarizeGoogleSheetsRecords } from "../netlify/lib/source-sync.mjs";
+import { normalizeSourceConfig } from "../backend/services/multi-tenant-model.mjs";
+import { summarizeGoogleSheetsRecords } from "../backend/services/source-sync.mjs";
 
 test("restores the canonical field map when a Google Sheets config contains an empty object", () => {
   const config = normalizeSourceConfig({

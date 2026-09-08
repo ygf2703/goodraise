@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { normalizeAmbassadorRegistration } from "../netlify/lib/postgres-ingest.mjs";
+import { normalizeAmbassadorRegistration } from "../backend/services/postgres-ingest.mjs";
 
 test("maps the Hebrew ambassador registration form into campaign ambassador fields", () => {
   const record = normalizeAmbassadorRegistration({

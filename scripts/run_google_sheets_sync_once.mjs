@@ -1,4 +1,4 @@
-import { runScheduledGoogleSheetsSync } from "../netlify/lib/source-sync.mjs";
+import { runScheduledGoogleSheetsSync } from "../backend/services/source-sync.mjs";
 
 const summary = await runScheduledGoogleSheetsSync({
   triggeredBy: "local-google-sheets-sync-once",

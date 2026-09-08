@@ -1,10 +1,9 @@
 [build]
-  command = "python work/build_yellow_dashboard.py && python scripts/verify_dashboard_release.py"
-  publish = "outputs"
+  command = "npm run build"
+  publish = "dist"
 
 [build.environment]
-  PYTHON_VERSION = "3.12"
-  YELLOW_DASHBOARD_DEPLOY_MODE = "netlify"
+  NODE_VERSION = "24"
 
 [functions]
   directory = "netlify/functions"
@@ -31,6 +30,12 @@
 [[redirects]]
   from = "/api/public-context"
   to = "/.netlify/functions/public-context"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/auth"
   status = 200
   force = true
 

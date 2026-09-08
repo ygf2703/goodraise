@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { validateExternalUrl } from "../netlify/lib/source-security.mjs";
+import { validateExternalUrl } from "../backend/services/source-security.mjs";
 
 test("source security rejects localhost, private and unsafe schemes", async () => {
   await assert.rejects(() => validateExternalUrl("http://127.0.0.1:8080/feed"), /private|local|פנימי|מורשה/i);

@@ -1,4 +1,4 @@
-import { runScheduledGoogleSheetsSync } from "../netlify/lib/source-sync.mjs";
+import { runScheduledGoogleSheetsSync } from "../backend/services/source-sync.mjs";
 
 const intervalMinutes = Math.max(Number.parseInt(String(process.env.GOODRAISE_GOOGLE_SHEETS_SYNC_MINUTES || "2"), 10) || 2, 1);
 const intervalMs = intervalMinutes * 60 * 1000;

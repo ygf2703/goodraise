@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { selectPrelaunchResetCandidates } from "../netlify/lib/prelaunch-reset.mjs";
+import { selectPrelaunchResetCandidates } from "../backend/services/prelaunch-reset.mjs";
 
 const campaigns = [
   {

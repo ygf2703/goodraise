@@ -1,0 +1,2707 @@
+@import url("https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;500;600;700;800&display=swap");
+html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
+
+#goodraise-root {
+  --navy-1000: #070D24;
+  --navy-950: #0B1435;
+  --navy-900: #111D4A;
+  --navy-800: #19275F;
+  --navy-700: #24377C;
+  --accent-600: #F4C900;
+  --accent-500: #FFD629;
+  --accent-400: #FFE266;
+  --accent-200: #FFF2AD;
+  --white: #FFFFFF;
+  --off-white: #F6F7FA;
+  --surface-soft: #EEF0F5;
+  --black: #090B10;
+  --graphite: #252934;
+  --text-muted: #697080;
+  --border-light: rgba(17, 29, 74, 0.12);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --shadow-soft: 0 20px 48px rgba(11, 20, 53, 0.08);
+  --shadow-card: 0 12px 30px rgba(11, 20, 53, 0.08);
+  --brand-pattern-campaign: none;
+  --brand-pattern-organization: none;
+  --dashboard-backdrop: none;
+  position: relative;
+  isolation: isolate;
+  color: var(--graphite);
+  font-family: "Assistant", Arial, sans-serif;
+  font-size: var(--font-size-base);
+  background:
+    linear-gradient(180deg, rgba(246, 247, 250, 0.84), rgba(246, 247, 250, 0.96)),
+    radial-gradient(circle at top left, rgba(255, 214, 41, 0.16), transparent 24rem),
+    radial-gradient(circle at top right, rgba(17, 29, 74, 0.07), transparent 28rem),
+    var(--dashboard-backdrop),
+    linear-gradient(180deg, rgba(17, 29, 74, 0.05), var(--off-white) 18%);
+  background-size: auto, auto, auto, cover, auto;
+  background-position: center, top left, top right, center top, center;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  padding: var(--space-4);
+  min-height: 100%;
+}
+
+#goodraise-root::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--brand-pattern-campaign), var(--brand-pattern-organization);
+  background-size: 160px 160px, 128px 128px;
+  background-position: 3rem 8rem, 10rem 15rem;
+  background-repeat: repeat;
+  opacity: 0.03;
+}
+
+#goodraise-root,
+#goodraise-root button,
+#goodraise-root input,
+#goodraise-root select,
+#goodraise-root textarea {
+  font-family: "Assistant", Arial, sans-serif;
+}
+
+#goodraise-root * {
+  box-sizing: border-box;
+}
+
+#goodraise-root [hidden] {
+  display: none !important;
+}
+
+#goodraise-root svg text,
+#goodraise-root .metric-value,
+#goodraise-root .comparison-value,
+#goodraise-root .amount-cell,
+#goodraise-root .winner-amount,
+#goodraise-root .hero-meta strong,
+#goodraise-root .status-chip,
+#goodraise-root .prize-pill,
+#goodraise-root .tooltip,
+#goodraise-root input[type="number"],
+#goodraise-root input[type="date"] {
+  font-variant-numeric: tabular-nums;
+}
+
+#goodraise-root .app-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--space-5);
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+#goodraise-root .app-content,
+#goodraise-root .dashboard-shell,
+#goodraise-root .page-shell,
+#goodraise-root .prize-shell,
+#goodraise-root .analysis-shell,
+#goodraise-root .comparison-shell {
+  display: grid;
+  gap: var(--space-5);
+}
+
+#goodraise-root .page-shell {
+  display: none;
+  animation: pageFade 180ms ease;
+}
+
+#goodraise-root .page-shell.is-active {
+  display: grid;
+}
+
+@keyframes pageFade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#goodraise-root .app-card,
+#goodraise-root .app-topbar,
+#goodraise-root .page-panel,
+#goodraise-root .chart-panel,
+#goodraise-root .comparison-card,
+#goodraise-root .comparison-list,
+#goodraise-root .analysis-card,
+#goodraise-root .metric-card,
+#goodraise-root .prize-card,
+#goodraise-root .admin-lock,
+#goodraise-root .legal-document,
+#goodraise-root .legal-sidebar,
+#goodraise-root .public-hero,
+#goodraise-root .legal-hero {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+}
+
+#goodraise-root .app-card--elevated {
+  box-shadow: var(--shadow-soft);
+}
+
+#goodraise-root .app-card--dark,
+#goodraise-root .public-hero,
+#goodraise-root .brand-command,
+#goodraise-root .login-visual {
+  background:
+    linear-gradient(135deg, rgba(7, 13, 36, 0.98), rgba(17, 29, 74, 0.96) 54%, rgba(36, 55, 124, 0.95) 100%);
+  color: var(--white);
+  border-color: rgba(255, 214, 41, 0.16);
+}
+
+#goodraise-root .app-topbar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  background: linear-gradient(135deg, var(--topbar-primary, rgba(11, 20, 53, 0.96)), var(--topbar-secondary, rgba(36, 55, 124, 0.94)));
+  border-color: color-mix(in srgb, var(--topbar-accent, #FFD629) 22%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+#goodraise-root .brand-header::after {
+  content: "";
+  position: absolute;
+  inset-inline: var(--space-5);
+  inset-block-end: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--topbar-accent, #FFD629) 72%, transparent), transparent);
+}
+
+#goodraise-root .topbar-brand,
+#goodraise-root .topbar-actions,
+#goodraise-root .session-box,
+#goodraise-root .brand-row,
+#goodraise-root .prize-title-row,
+#goodraise-root .brand-command-head,
+#goodraise-root .control-group-header,
+#goodraise-root .bucket-head,
+#goodraise-root .comparison-main,
+#goodraise-root .login-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .topbar-brand {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+#goodraise-root .brand-logo-cluster,
+#goodraise-root .public-brand-cluster,
+#goodraise-root .brand-command-logos,
+#goodraise-root .login-logos {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .topbar-campaign-logo,
+#goodraise-root .topbar-logo {
+  object-fit: contain;
+  display: block;
+}
+
+#goodraise-root .topbar-campaign-logo {
+  height: 54px;
+  width: auto;
+  max-width: 156px;
+}
+
+#goodraise-root .topbar-logo {
+  height: 62px;
+  width: auto;
+  max-width: 144px;
+  transform: scale(1.55);
+  transform-origin: center;
+}
+
+#goodraise-root .brand-divider {
+  inline-size: 1px;
+  block-size: 52px;
+  background: color-mix(in srgb, var(--topbar-accent, #FFD629) 40%, rgba(255, 255, 255, 0.24));
+  flex: 0 0 auto;
+}
+
+#goodraise-root .topbar-meta {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--white);
+}
+
+#goodraise-root .topbar-title {
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+#goodraise-root .topbar-actions {
+  justify-content: flex-end;
+}
+
+#goodraise-root .top-nav,
+#goodraise-root .action-row,
+#goodraise-root .data-toolbar,
+#goodraise-root .public-badges,
+#goodraise-root .hero-badges,
+#goodraise-root .legend-row,
+#goodraise-root .control-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .nav-button,
+#goodraise-root .button-primary,
+#goodraise-root .button-secondary,
+#goodraise-root .button-ghost,
+#goodraise-root .action-button {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  padding: 0.72rem 1.05rem;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+#goodraise-root .nav-button {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.74);
+  border-color: transparent;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  padding-inline: 0.9rem;
+  position: relative;
+}
+
+#goodraise-root .nav-button::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0.9rem;
+  inset-block-end: 0.22rem;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+#goodraise-root .nav-button.is-active {
+  color: var(--white);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#goodraise-root .nav-button.is-active::after {
+  background: var(--accent-500);
+}
+
+#goodraise-root .button-primary,
+#goodraise-root .action-button,
+#goodraise-root .action-button.primary {
+  background: var(--accent-500);
+  color: var(--navy-950);
+  box-shadow: 0 10px 24px rgba(255, 214, 41, 0.24);
+}
+
+#goodraise-root .button-secondary,
+#goodraise-root .action-button.secondary {
+  background: var(--navy-950);
+  color: var(--white);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+#goodraise-root .button-ghost {
+  background: transparent;
+  color: var(--navy-900);
+  border-color: rgba(17, 29, 74, 0.14);
+}
+
+#goodraise-root .app-topbar .button-ghost {
+  color: var(--white);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#goodraise-root .session-chip,
+#goodraise-root .status-chip,
+#goodraise-root .hero-badge,
+#goodraise-root .prize-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.48rem 0.82rem;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+#goodraise-root .session-chip {
+  background: rgba(255, 214, 41, 0.16);
+  color: var(--white);
+  border: 1px solid rgba(255, 214, 41, 0.18);
+  max-width: 100%;
+  white-space: normal;
+}
+
+#goodraise-root .status-chip,
+#goodraise-root .status-note {
+  background: rgba(255, 214, 41, 0.12);
+  color: var(--navy-950);
+  border: 1px solid rgba(17, 29, 74, 0.12);
+}
+
+#goodraise-root .status-note.is-error,
+#goodraise-root .status-chip.is-error {
+  background: rgba(255, 214, 41, 0.18);
+  border-inline-start: 4px solid var(--black);
+  color: var(--navy-950);
+}
+
+#goodraise-root .status-note.is-success,
+#goodraise-root .status-chip.is-success {
+  background: rgba(17, 29, 74, 0.08);
+  border-inline-start: 4px solid var(--accent-500);
+  color: var(--navy-950);
+}
+
+#goodraise-root .status-note.is-warning,
+#goodraise-root .status-chip.is-warning {
+  background: rgba(255, 226, 102, 0.22);
+  border-inline-start: 4px solid var(--navy-900);
+  color: var(--navy-950);
+}
+
+#goodraise-root .hero-badge {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#goodraise-root .text-small {
+  font-size: 0.92rem;
+}
+
+#goodraise-root .text-muted,
+#goodraise-root .view-note,
+#goodraise-root .control-note {
+  color: var(--text-muted);
+}
+
+#goodraise-root .public-hero,
+#goodraise-root .brand-command,
+#goodraise-root .legal-hero,
+#goodraise-root .admin-lock {
+  position: relative;
+  overflow: hidden;
+}
+
+#goodraise-root .public-hero::after,
+#goodraise-root .brand-command::after,
+#goodraise-root .login-visual::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: -8%;
+  inset-block-end: -14%;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 214, 41, 0.26), transparent 72%);
+}
+
+#goodraise-root .public-hero,
+#goodraise-root .legal-hero,
+#goodraise-root .brand-command,
+#goodraise-root .control-panel,
+#goodraise-root .page-panel,
+#goodraise-root .admin-lock {
+  padding: var(--space-6);
+}
+
+#goodraise-root .public-hero-grid,
+#goodraise-root .admin-overview-grid,
+#goodraise-root .login-shell,
+#goodraise-root .legal-layout {
+  display: grid;
+  gap: var(--space-5);
+}
+
+#goodraise-root .public-hero-grid {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+#goodraise-root .public-hero-copy,
+#goodraise-root .brand-copy,
+#goodraise-root .login-copy {
+  display: grid;
+  gap: var(--space-4);
+}
+
+#goodraise-root .public-hero-copy {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+#goodraise-root .brand-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.42rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 214, 41, 0.16);
+  color: var(--accent-200);
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+#goodraise-root .hero-title,
+#goodraise-root .public-hero-title {
+  margin: 0;
+  line-height: 1.02;
+  font-size: clamp(2rem, 3.6vw, 3.2rem);
+  font-weight: 800;
+}
+
+#goodraise-root .public-hero-title {
+  color: var(--white);
+  max-width: 9ch;
+  font-size: clamp(2.1rem, 3.5vw, 3.6rem);
+}
+
+#goodraise-root .hero-subtitle,
+#goodraise-root .public-hero p,
+#goodraise-root .login-copy p {
+  margin: 0;
+  max-width: 48rem;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.75;
+}
+
+#goodraise-root .public-hero-watermark {
+  position: absolute;
+  left: max(-4%, -42px);
+  right: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  width: clamp(460px, 52vw, 920px);
+  max-width: 56%;
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#goodraise-root .public-hero-watermark img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+}
+
+#goodraise-root .public-badges {
+  display: block;
+  width: 100%;
+}
+
+#goodraise-root .public-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  width: 100%;
+}
+
+#goodraise-root .public-snapshot-card {
+  display: grid;
+  gap: var(--space-2);
+  min-height: 150px;
+  padding: 1.05rem 1.1rem;
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+#goodraise-root .public-snapshot-card--primary {
+  background: linear-gradient(180deg, rgba(255, 214, 41, 0.16), rgba(255, 214, 41, 0.08));
+  border-color: rgba(255, 214, 41, 0.22);
+}
+
+#goodraise-root .public-snapshot-card--wide {
+  grid-column: span 1;
+}
+
+#goodraise-root .public-snapshot-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+#goodraise-root .public-snapshot-value {
+  color: var(--white);
+  font-size: clamp(1.25rem, 1.8vw, 1.9rem);
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+#goodraise-root .public-snapshot-card--primary .public-snapshot-value {
+  color: var(--accent-200);
+  font-size: clamp(1.7rem, 2.6vw, 2.45rem);
+}
+
+#goodraise-root .public-snapshot-meta {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+#goodraise-root .public-snapshot-status {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.42rem 0.78rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--white);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+#goodraise-root .project-stage,
+#goodraise-root .project-landing {
+  display: grid;
+  gap: var(--space-5);
+}
+
+#goodraise-root .project-landing {
+  --campaign-page-primary: var(--navy-900);
+  --campaign-page-secondary: var(--navy-700);
+  --campaign-page-accent: var(--accent-500);
+  --campaign-page-surface: var(--off-white);
+  --campaign-page-text: var(--black);
+  font-family: "Assistant", Arial, sans-serif;
+}
+
+#goodraise-root .project-hero {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(24px, 4vw, 42px);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--campaign-page-primary) 94%, black 6%), color-mix(in srgb, var(--campaign-page-secondary) 90%, black 10%)),
+    var(--campaign-page-primary);
+}
+
+#goodraise-root .project-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -6% -18% auto;
+  width: min(36vw, 380px);
+  aspect-ratio: 1 / 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 214, 41, 0.22), rgba(255, 214, 41, 0));
+  pointer-events: none;
+}
+
+#goodraise-root .project-hero-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.88fr);
+  gap: var(--space-6);
+  align-items: center;
+}
+
+#goodraise-root .project-hero-copy {
+  display: grid;
+  gap: var(--space-4);
+  color: var(--white);
+}
+
+#goodraise-root .project-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(255, 214, 41, 0.14);
+  color: var(--accent-200);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+#goodraise-root .project-title {
+  margin: 0;
+  font-size: clamp(2.2rem, 4.7vw, 4.35rem);
+  line-height: 0.96;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+#goodraise-root .project-subtitle {
+  margin: 0;
+  max-width: 70ch;
+  font-size: clamp(1.02rem, 1.5vw, 1.22rem);
+  line-height: 1.9;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+#goodraise-root .project-hero-actions,
+#goodraise-root .donation-frequency,
+#goodraise-root .project-trust-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+#goodraise-root .project-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+#goodraise-root .project-stat-card {
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+#goodraise-root .project-stat-value {
+  font-size: clamp(1.4rem, 2vw, 2rem);
+  font-weight: 800;
+  color: var(--white);
+}
+
+#goodraise-root .project-stat-label {
+  margin-top: 4px;
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+#goodraise-root .project-progress {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: rgba(9, 11, 16, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#goodraise-root .project-progress-track {
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+#goodraise-root .project-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--campaign-page-accent), color-mix(in srgb, var(--campaign-page-accent) 72%, white 28%));
+}
+
+#goodraise-root .project-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.94rem;
+}
+
+#goodraise-root .project-media-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: calc(var(--radius-xl) + 6px);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 26px 64px rgba(7, 13, 36, 0.32);
+}
+
+#goodraise-root .project-media,
+#goodraise-root .project-media-frame img,
+#goodraise-root .project-media-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+#goodraise-root .project-media-badge {
+  position: absolute;
+  inset: 18px 18px auto auto;
+  z-index: 1;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--campaign-page-primary);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+#goodraise-root .project-body-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+#goodraise-root .project-story-panel,
+#goodraise-root .donation-panel,
+#goodraise-root .campaign-settings-panel {
+  padding: clamp(22px, 3vw, 32px);
+  border-radius: var(--radius-lg);
+}
+
+#goodraise-root .project-story-content {
+  color: var(--campaign-page-text);
+  line-height: 1.95;
+  font-size: 1.02rem;
+}
+
+#goodraise-root .project-story-content h2,
+#goodraise-root .project-story-content h3 {
+  margin: 0 0 var(--space-3);
+  color: var(--navy-900);
+}
+
+#goodraise-root .project-story-content p {
+  margin: 0 0 var(--space-4);
+}
+
+#goodraise-root .project-story-content strong {
+  color: var(--navy-900);
+}
+
+#goodraise-root .donation-panel {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: var(--space-4);
+  background: linear-gradient(180deg, var(--white), color-mix(in srgb, var(--campaign-page-surface) 92%, white 8%));
+}
+
+#goodraise-root .donation-stepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+#goodraise-root .donation-step {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(17, 29, 74, 0.05), rgba(17, 29, 74, 0.025));
+  border: 1px solid rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .donation-step-index {
+  color: var(--navy-700);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+#goodraise-root .donation-step-title {
+  color: var(--navy-900);
+  font-size: 0.96rem;
+  font-weight: 700;
+}
+
+#goodraise-root .donation-step-meta {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+#goodraise-root .donation-impact {
+  display: grid;
+  gap: var(--space-3);
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 214, 41, 0.18), rgba(255, 214, 41, 0.08));
+  border: 1px solid rgba(244, 201, 0, 0.3);
+}
+
+#goodraise-root .donation-impact-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+#goodraise-root .donation-impact-kicker {
+  color: var(--navy-700);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+#goodraise-root .donation-impact-value {
+  color: var(--navy-1000);
+  font-size: clamp(1.7rem, 2.2vw, 2.35rem);
+  font-weight: 800;
+}
+
+#goodraise-root .donation-impact-title {
+  color: var(--navy-900);
+  font-size: 1.04rem;
+  font-weight: 700;
+}
+
+#goodraise-root .donation-impact-description {
+  color: var(--graphite);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+#goodraise-root .donation-frequency-button,
+#goodraise-root .amount-card,
+#goodraise-root .project-trust-chip {
+  border: 1px solid rgba(17, 29, 74, 0.12);
+  background: var(--white);
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+#goodraise-root .donation-frequency-button {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--navy-900);
+  cursor: pointer;
+}
+
+#goodraise-root .donation-frequency-button.is-active {
+  background: var(--navy-900);
+  color: var(--accent-500);
+  border-color: var(--navy-900);
+}
+
+#goodraise-root .amount-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+#goodraise-root .amount-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 16px 14px;
+  border-radius: var(--radius-md);
+  text-align: right;
+  cursor: pointer;
+}
+
+#goodraise-root .amount-card:hover,
+#goodraise-root .amount-card.is-active,
+#goodraise-root .donation-frequency-button:hover,
+#goodraise-root .project-trust-chip:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--campaign-page-accent) 56%, var(--navy-900) 44%);
+  box-shadow: 0 14px 30px rgba(17, 29, 74, 0.1);
+}
+
+#goodraise-root .amount-card.is-active {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--campaign-page-accent) 18%, white 82%), white);
+}
+
+#goodraise-root .amount-card-value {
+  color: var(--navy-900);
+  font-size: 1.42rem;
+  font-weight: 800;
+}
+
+#goodraise-root .amount-card-label {
+  color: var(--navy-900);
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+#goodraise-root .amount-card-description {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+#goodraise-root .donation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+#goodraise-root .donation-grid .form-label--full {
+  grid-column: 1 / -1;
+}
+
+#goodraise-root .donation-summary {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--campaign-page-primary) 6%, white 94%);
+  border: 1px solid rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .donation-summary strong {
+  color: var(--navy-900);
+}
+
+#goodraise-root .project-trust-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: var(--navy-900);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+#goodraise-root .donation-flow-note {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--campaign-page-accent) 16%, white 84%);
+  border-inline-start: 4px solid var(--campaign-page-accent);
+  color: var(--navy-900);
+  font-size: 0.93rem;
+  line-height: 1.7;
+}
+
+#goodraise-root .donation-feedback {
+  min-height: 24px;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+#goodraise-root .donation-feedback.is-error {
+  color: #7b2f18;
+}
+
+#goodraise-root .donation-feedback.is-success {
+  color: #14532d;
+}
+
+#goodraise-root .campaign-settings-panel {
+  display: grid;
+  gap: var(--space-5);
+}
+
+#goodraise-root .campaign-settings-grid,
+#goodraise-root .settings-inline-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+#goodraise-root .settings-inline-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#goodraise-root .settings-panel-note {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-200) 76%, white 24%);
+  color: var(--navy-900);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+#goodraise-root .settings-textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+
+#goodraise-root .settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+#goodraise-root .settings-status {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+#goodraise-root .settings-status[data-tone="success"] {
+  color: #14532d;
+}
+
+#goodraise-root .settings-status[data-tone="warning"] {
+  color: var(--navy-900);
+}
+
+#goodraise-root .settings-status[data-tone="error"] {
+  color: #7c2d12;
+}
+
+#goodraise-root .settings-media-preview {
+  display: grid;
+  gap: var(--space-3);
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(17, 29, 74, 0.04), rgba(17, 29, 74, 0.02));
+  border: 1px solid rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .settings-media-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .settings-media-preview-label {
+  color: var(--navy-950);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+#goodraise-root .settings-media-preview-meta {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+#goodraise-root .settings-media-preview-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(17, 29, 74, 0.92), rgba(36, 55, 124, 0.82));
+  border: 1px solid rgba(17, 29, 74, 0.12);
+}
+
+#goodraise-root .settings-media-preview-frame img,
+#goodraise-root .settings-media-preview-frame video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+#goodraise-root .settings-media-preview-placeholder {
+  padding: 24px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.94rem;
+  text-align: center;
+}
+
+#goodraise-root .public-logo-frame,
+#goodraise-root .logo-wrap,
+#goodraise-root .login-logo-frame {
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  background: transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#goodraise-root .public-logo-frame img,
+#goodraise-root .logo-wrap img,
+#goodraise-root .login-logo-frame img {
+  display: block;
+  max-width: 100%;
+  max-height: 92px;
+  object-fit: contain;
+}
+
+#goodraise-root .section-header,
+#goodraise-root .section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .section-header h2,
+#goodraise-root .section-header h3,
+#goodraise-root .section-head h3,
+#goodraise-root .legal-document h2,
+#goodraise-root .legal-document h3,
+#goodraise-root .legal-document h4,
+#goodraise-root .analysis-card h4,
+#goodraise-root .comparison-card h4,
+#goodraise-root .comparison-list h4,
+#goodraise-root .prize-card h4,
+#goodraise-root .control-panel h3,
+#goodraise-root .login-card h2 {
+  margin: 0;
+  color: var(--navy-950);
+}
+
+#goodraise-root .section-header h3,
+#goodraise-root .section-head h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+#goodraise-root .admin-content[hidden] {
+  display: none !important;
+}
+
+#goodraise-root .admin-tabs-shell {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+#goodraise-root .admin-tabs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .admin-tabs-copy {
+  display: grid;
+  gap: var(--space-1);
+}
+
+#goodraise-root .admin-tabs-copy h3 {
+  margin: 0;
+  color: var(--navy-950);
+  font-size: 1.18rem;
+  font-weight: 700;
+}
+
+#goodraise-root .admin-tabs-copy p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+#goodraise-root .admin-tabbar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(17, 29, 74, 0.06);
+  border: 1px solid rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .admin-tab-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.8rem 1.15rem;
+  background: transparent;
+  color: var(--navy-900);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+#goodraise-root .admin-tab-button.is-active {
+  background: var(--navy-950);
+  color: var(--accent-200);
+  box-shadow: 0 10px 22px rgba(11, 20, 53, 0.14);
+}
+
+#goodraise-root .admin-tab-panel[hidden] {
+  display: none !important;
+}
+
+#goodraise-root .admin-overview-grid {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+#goodraise-root .brand-command {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6);
+}
+
+#goodraise-root .brand-command-head {
+  align-items: start;
+}
+
+#goodraise-root .brand-command .hero-title,
+#goodraise-root .brand-command .hero-subtitle,
+#goodraise-root .brand-command .hero-badge,
+#goodraise-root .brand-command .brand-kicker,
+#goodraise-root .login-visual .brand-kicker,
+#goodraise-root .login-visual h2,
+#goodraise-root .login-visual p {
+  color: var(--white);
+}
+
+#goodraise-root .hero-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+#goodraise-root .hero-meta {
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  gap: var(--space-1);
+}
+
+#goodraise-root .hero-meta span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.9rem;
+}
+
+#goodraise-root .hero-meta strong {
+  color: var(--white);
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+#goodraise-root .control-panel {
+  display: grid;
+  gap: var(--space-5);
+}
+
+#goodraise-root .control-groups {
+  display: grid;
+  gap: var(--space-4);
+}
+
+#goodraise-root .control-group {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--off-white);
+  border: 1px solid rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .control-group-header {
+  align-items: baseline;
+}
+
+#goodraise-root .control-group-header h4 {
+  margin: 0;
+  color: var(--navy-950);
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+#goodraise-root .control-group-header p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+#goodraise-root .filters-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#goodraise-root .filters-grid.filters-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#goodraise-root .form-label {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--navy-900);
+  font-size: 0.96rem;
+  font-weight: 600;
+}
+
+#goodraise-root .form-control,
+#goodraise-root .form-select {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.82rem 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(17, 29, 74, 0.16);
+  background: var(--white);
+  color: var(--graphite);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+#goodraise-root .form-control::placeholder {
+  color: rgba(105, 112, 128, 0.76);
+}
+
+#goodraise-root .form-control:focus-visible,
+#goodraise-root .form-select:focus-visible,
+#goodraise-root .nav-button:focus-visible,
+#goodraise-root .button-primary:focus-visible,
+#goodraise-root .button-secondary:focus-visible,
+#goodraise-root .button-ghost:focus-visible,
+#goodraise-root .action-button:focus-visible,
+#goodraise-root .metric-toggle:focus-visible {
+  outline: 2px solid var(--navy-950);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(255, 214, 41, 0.48);
+}
+
+#goodraise-root input[type="file"]::file-selector-button {
+  margin-inline-end: var(--space-3);
+  border: 1px solid rgba(17, 29, 74, 0.12);
+  border-radius: 999px;
+  padding: 0.58rem 0.9rem;
+  background: var(--navy-950);
+  color: var(--white);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#goodraise-root .control-actions {
+  justify-content: flex-start;
+}
+
+#goodraise-root .manual-contribution-dialog {
+  width: min(100% - 2rem, 520px);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  background: var(--off-white);
+  color: var(--graphite);
+  box-shadow: 0 26px 80px rgba(7, 13, 36, 0.28);
+}
+
+#goodraise-root .manual-contribution-dialog::backdrop {
+  background: rgba(7, 13, 36, 0.56);
+}
+
+#goodraise-root .manual-contribution-form,
+#goodraise-root .manual-contribution-header {
+  display: grid;
+}
+
+#goodraise-root .manual-contribution-form {
+  gap: var(--space-5);
+  padding: var(--space-6);
+}
+
+#goodraise-root .manual-contribution-header {
+  gap: var(--space-2);
+}
+
+#goodraise-root .manual-contribution-header h3,
+#goodraise-root .manual-contribution-header p {
+  margin: 0;
+}
+
+#goodraise-root .manual-contribution-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .insight-assistant-panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+#goodraise-root .insight-assistant-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+#goodraise-root .insight-assistant-question {
+  min-height: 96px;
+  resize: vertical;
+}
+
+#goodraise-root .insight-assistant-answer {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border-light);
+  border-inline-start: 4px solid var(--accent-600);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+#goodraise-root .insight-assistant-answer h4,
+#goodraise-root .insight-assistant-answer p {
+  margin: 0;
+}
+
+#goodraise-root .active-filter-summary {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+}
+
+#goodraise-root .metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+#goodraise-root .kpi-card,
+#goodraise-root .metric-card {
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-2);
+  position: relative;
+  overflow: hidden;
+}
+
+#goodraise-root .kpi-card::before,
+#goodraise-root .metric-card::before {
+  content: "";
+  position: absolute;
+  inset-inline: var(--space-4);
+  inset-block-start: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-500), rgba(255, 214, 41, 0.1));
+}
+
+#goodraise-root .metric-label {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+#goodraise-root .metric-value {
+  color: var(--navy-950);
+  font-size: clamp(1.65rem, 2.6vw, 2.5rem);
+  font-weight: 800;
+}
+
+#goodraise-root .metric-detail {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+#goodraise-root .analysis-card,
+#goodraise-root .comparison-card,
+#goodraise-root .comparison-list {
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+#goodraise-root .analysis-card ul,
+#goodraise-root .comparison-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+}
+
+#goodraise-root .analysis-card li,
+#goodraise-root .comparison-list li {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(17, 29, 74, 0.05);
+  color: var(--graphite);
+}
+
+#goodraise-root .analysis-card.quality li,
+#goodraise-root .comparison-list.critical li {
+  border-inline-start: 4px solid var(--accent-500);
+  background: rgba(255, 214, 41, 0.16);
+}
+
+#goodraise-root .comparison-delta {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.38rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(17, 29, 74, 0.07);
+  color: var(--navy-950);
+  font-weight: 700;
+}
+
+#goodraise-root .comparison-delta.is-up {
+  background: rgba(255, 214, 41, 0.22);
+}
+
+#goodraise-root .comparison-delta.is-down {
+  background: rgba(9, 11, 16, 0.08);
+}
+
+#goodraise-root .signal-grid,
+#goodraise-root .segment-grid,
+#goodraise-root .comparison-metric-grid,
+#goodraise-root .comparison-lists {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+#goodraise-root .bucket-row,
+#goodraise-root .bucket-item,
+#goodraise-root .winner-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+#goodraise-root .bucket-bar,
+#goodraise-root .progress-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(17, 29, 74, 0.08);
+  overflow: hidden;
+}
+
+#goodraise-root .bucket-fill,
+#goodraise-root .progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent-500), var(--navy-800));
+}
+
+#goodraise-root .chart-frame {
+  position: relative;
+}
+
+#goodraise-root .chart-card,
+#goodraise-root .chart-panel {
+  padding: var(--space-5);
+}
+
+#goodraise-root .chart-card {
+  display: grid;
+  gap: var(--space-4);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 247, 250, 0.94)),
+    var(--white);
+  border: 1px solid rgba(17, 29, 74, 0.08);
+  box-shadow:
+    0 20px 42px rgba(11, 20, 53, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+#goodraise-root .chart-surface {
+  width: 100%;
+  min-height: 320px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(17, 29, 74, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(238, 240, 245, 0.92)),
+    var(--white);
+  padding: var(--space-4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+#goodraise-root .chart-surface--wide {
+  min-height: 520px;
+}
+
+#goodraise-root .chart-surface > svg {
+  min-width: 100%;
+}
+
+/* Keep the ambassador summary lane readable; narrow screens scroll inside the chart. */
+#goodraise-root .chart-surface > svg.movement-matrix {
+  width: max(100%, 1180px);
+  min-width: 1180px;
+}
+
+#goodraise-root .metric-toolbar {
+  justify-content: flex-end;
+}
+
+#goodraise-root .chart-header-copy {
+  display: grid;
+  gap: 0.45rem;
+}
+
+#goodraise-root .chart-overline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--navy-700);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+#goodraise-root .chart-overline::before {
+  content: "";
+  inline-size: 0.7rem;
+  block-size: 0.7rem;
+  border-radius: 999px;
+  background: var(--accent-500);
+  box-shadow: 0 0 0 4px rgba(255, 214, 41, 0.2);
+}
+
+#goodraise-root .chart-insights {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .insight-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(17, 29, 74, 0.1);
+  background: rgba(17, 29, 74, 0.04);
+  color: var(--navy-900);
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+#goodraise-root .insight-chip strong {
+  color: var(--navy-950);
+  font-weight: 800;
+}
+
+#goodraise-root .insight-chip--accent {
+  background: rgba(255, 214, 41, 0.22);
+  border-color: rgba(244, 201, 0, 0.42);
+}
+
+#goodraise-root .insight-chip--dark {
+  background: rgba(17, 29, 74, 0.94);
+  border-color: rgba(17, 29, 74, 0.94);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+#goodraise-root .insight-chip--dark strong {
+  color: var(--accent-500);
+}
+
+#goodraise-root .chart-footnote {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+#goodraise-root .metric-toggle {
+  border: 1px solid rgba(17, 29, 74, 0.14);
+  border-radius: 999px;
+  padding: 0.6rem 0.9rem;
+  background: rgba(17, 29, 74, 0.04);
+  color: var(--navy-900);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+#goodraise-root .metric-toggle.is-active {
+  background: var(--navy-950);
+  color: var(--accent-500);
+  border-color: var(--navy-950);
+}
+
+#goodraise-root .visually-hidden-select {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+#goodraise-root svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+#goodraise-root .tooltip {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 0;
+  transform: translate(-9999px, -9999px);
+  visibility: hidden;
+  pointer-events: none;
+  max-width: 18rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(17, 29, 74, 0.14);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--graphite);
+  box-shadow: 0 18px 36px rgba(11, 20, 53, 0.16);
+  z-index: 12;
+}
+
+#goodraise-root .tooltip.is-visible {
+  visibility: visible;
+}
+
+#goodraise-root .matrix-label {
+  cursor: pointer;
+  fill: var(--navy-900);
+  font-weight: 700;
+}
+
+#goodraise-root .matrix-label.is-active {
+  fill: var(--navy-700);
+}
+
+#goodraise-root .clickable-cell {
+  cursor: pointer;
+}
+
+#goodraise-root .legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+#goodraise-root .legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+#goodraise-root .podium-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  align-items: end;
+}
+
+#goodraise-root .tier-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+#goodraise-root .daily-winners-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+#goodraise-root .daily-winners-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(17, 29, 74, 0.1);
+  border-radius: var(--radius-lg);
+  background: var(--white);
+}
+
+#goodraise-root .daily-winners-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+#goodraise-root .daily-winners-table th,
+#goodraise-root .daily-winners-table td {
+  padding: 0.85rem 1rem;
+  text-align: right;
+  border-bottom: 1px solid rgba(17, 29, 74, 0.08);
+  vertical-align: middle;
+}
+
+#goodraise-root .daily-winners-table th {
+  color: var(--navy-950);
+  background: rgba(17, 29, 74, 0.045);
+  font-size: 0.86rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+#goodraise-root .daily-winners-table tbody tr:nth-child(even) {
+  background: rgba(246, 247, 250, 0.72);
+}
+
+#goodraise-root .daily-winners-table tbody tr:hover {
+  background: rgba(255, 242, 173, 0.28);
+}
+
+#goodraise-root .daily-winners-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+#goodraise-root .daily-winner-deals {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+#goodraise-root .daily-winner-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.62rem;
+  border-radius: 999px;
+  background: var(--navy-950);
+  color: var(--accent-500);
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+#goodraise-root .daily-winner-status.is-pending {
+  background: rgba(17, 29, 74, 0.08);
+  color: var(--text-muted);
+}
+
+#goodraise-root .prize-page-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+#goodraise-root .prize-ambassador-sidebar {
+  position: sticky;
+  top: calc(var(--space-5) + 76px);
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: rgba(246, 247, 250, 0.92);
+}
+
+#goodraise-root .prize-directory-head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+#goodraise-root .prize-directory-head h4 {
+  margin: 0;
+  color: var(--navy-950);
+  font-size: 1.08rem;
+}
+
+#goodraise-root .prize-directory-search {
+  inline-size: 100%;
+  min-height: 42px;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--graphite);
+  font: inherit;
+}
+
+#goodraise-root .prize-directory-search:focus-visible {
+  outline: 3px solid rgba(255, 214, 41, 0.55);
+  outline-offset: 2px;
+  border-color: var(--navy-700);
+}
+
+#goodraise-root .prize-directory-list {
+  display: grid;
+  gap: var(--space-2);
+  max-block-size: min(62vh, 720px);
+  overflow: auto;
+  padding-inline-end: var(--space-1);
+}
+
+#goodraise-root .prize-directory-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid rgba(17, 29, 74, 0.08);
+  border-radius: var(--radius-md);
+  background: var(--white);
+}
+
+#goodraise-root .prize-directory-rank {
+  min-inline-size: 27px;
+  color: var(--navy-700);
+  font-size: 0.84rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+#goodraise-root .prize-directory-name {
+  overflow: hidden;
+  color: var(--navy-950);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#goodraise-root .prize-directory-amount {
+  color: var(--navy-900);
+  font-size: 0.93rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+#goodraise-root .daily-winner-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: rgba(17, 29, 74, 0.04);
+  border: 1px solid rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .daily-winner-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+#goodraise-root .daily-winner-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 74px;
+  padding: 0.42rem 0.72rem;
+  border-radius: 999px;
+  background: var(--navy-950);
+  color: var(--accent-500);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+#goodraise-root .daily-winner-date {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+#goodraise-root .daily-winner-name {
+  color: var(--navy-950);
+  font-size: 1.08rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+#goodraise-root .daily-winner-amount {
+  color: var(--navy-900);
+  font-size: 1.2rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+#goodraise-root .prize-card {
+  overflow: hidden;
+  display: grid;
+  gap: 0;
+}
+
+#goodraise-root .prize-visual {
+  min-height: 132px;
+  padding: var(--space-4);
+  background: linear-gradient(165deg, rgba(17, 29, 74, 0.96), rgba(36, 55, 124, 0.96) 58%, rgba(255, 214, 41, 0.94));
+}
+
+#goodraise-root .place-card--1 {
+  order: 2;
+  transform: translateY(-18px);
+}
+
+#goodraise-root .place-card--2 {
+  order: 1;
+}
+
+#goodraise-root .place-card--3 {
+  order: 3;
+}
+
+#goodraise-root .place-card--1 .prize-visual {
+  min-height: 164px;
+}
+
+#goodraise-root .place-card--2 .prize-visual,
+#goodraise-root .place-card--3 .prize-visual {
+  min-height: 142px;
+}
+
+#goodraise-root .podium-mark,
+#goodraise-root .tier-mark {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+#goodraise-root .prize-content {
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+}
+
+#goodraise-root .prize-title {
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: var(--navy-950);
+}
+
+#goodraise-root .prize-pill {
+  background: rgba(255, 214, 41, 0.18);
+  color: var(--navy-950);
+  border: 1px solid rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .winner-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(17, 29, 74, 0.05);
+  border: 1px solid transparent;
+}
+
+#goodraise-root .winner-item.is-focus {
+  background: rgba(255, 214, 41, 0.18);
+  border-color: rgba(17, 29, 74, 0.14);
+}
+
+#goodraise-root .winner-rank {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--navy-950);
+  color: var(--accent-500);
+  font-size: 0.94rem;
+  font-weight: 800;
+}
+
+#goodraise-root .winner-name {
+  color: var(--navy-950);
+  font-weight: 700;
+}
+
+#goodraise-root .winner-amount {
+  color: var(--graphite);
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+#goodraise-root .prize-meta {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+#goodraise-root .table-wrap {
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(17, 29, 74, 0.12);
+  background: rgba(255, 255, 255, 0.98);
+  max-inline-size: 100%;
+}
+
+#goodraise-root .table-panel[hidden] {
+  display: none;
+}
+
+#goodraise-root table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+#goodraise-root th,
+#goodraise-root td {
+  padding: 0.92rem 0.82rem;
+  text-align: right;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(17, 29, 74, 0.04);
+  color: var(--navy-950);
+  font-weight: 700;
+}
+
+#goodraise-root tbody tr:nth-child(even) {
+  background: rgba(246, 247, 250, 0.9);
+}
+
+#goodraise-root tbody tr:hover {
+  background: rgba(255, 214, 41, 0.12);
+}
+
+#goodraise-root .amount-cell {
+  color: var(--navy-950);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#goodraise-root .status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.62rem;
+  border-radius: 999px;
+  background: rgba(17, 29, 74, 0.09);
+  color: var(--navy-950);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+#goodraise-root .status-badge.failed {
+  background: rgba(9, 11, 16, 0.08);
+  color: var(--black);
+}
+
+#goodraise-root .empty-state {
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px dashed rgba(17, 29, 74, 0.18);
+  background: rgba(246, 247, 250, 0.88);
+  color: var(--text-muted);
+}
+
+#goodraise-root .legal-hero {
+  padding: var(--space-6);
+}
+
+#goodraise-root .legal-hero h2 {
+  margin: 0 0 var(--space-3);
+  color: var(--navy-950);
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+#goodraise-root .legal-hero p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.8;
+  max-width: 60rem;
+}
+
+#goodraise-root .legal-layout {
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  align-items: start;
+}
+
+#goodraise-root .legal-sidebar,
+#goodraise-root .legal-document {
+  padding: var(--space-6);
+}
+
+#goodraise-root .legal-sidebar {
+  position: sticky;
+  top: 112px;
+  display: grid;
+  gap: var(--space-4);
+}
+
+#goodraise-root .legal-sidebar nav {
+  display: grid;
+  gap: var(--space-2);
+}
+
+#goodraise-root .legal-sidebar a {
+  color: var(--navy-900);
+  text-decoration: none;
+  padding: 0.52rem 0.7rem;
+  border-radius: var(--radius-md);
+  background: rgba(17, 29, 74, 0.04);
+  font-weight: 600;
+}
+
+#goodraise-root .legal-document {
+  max-width: 900px;
+  justify-self: center;
+  width: 100%;
+  display: grid;
+  gap: var(--space-6);
+}
+
+#goodraise-root .legal-document section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+#goodraise-root .legal-document h3 {
+  font-size: 1.28rem;
+  font-weight: 800;
+}
+
+#goodraise-root .legal-document h4 {
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+#goodraise-root .legal-document p,
+#goodraise-root .legal-document li {
+  margin: 0;
+  line-height: 1.9;
+  color: var(--graphite);
+}
+
+#goodraise-root .legal-document ol,
+#goodraise-root .legal-document ul {
+  margin: 0;
+  padding-inline-start: 1.35rem;
+  display: grid;
+  gap: var(--space-2);
+}
+
+#goodraise-root .admin-lock {
+  padding: var(--space-4);
+}
+
+#goodraise-root .login-shell {
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+}
+
+#goodraise-root .login-visual {
+  position: relative;
+  z-index: 0;
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  display: grid;
+  gap: var(--space-5);
+  pointer-events: none;
+}
+
+#goodraise-root .login-logo-frame {
+  min-height: 96px;
+}
+
+#goodraise-root .login-card {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  display: grid;
+  gap: var(--space-4);
+  align-content: center;
+  padding: var(--space-6);
+}
+
+#goodraise-root .login-card h2 {
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+#goodraise-root .password-field {
+  position: relative;
+}
+
+#goodraise-root .password-field .form-control {
+  padding-inline-end: 5.5rem;
+}
+
+#goodraise-root .password-toggle {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  inset-block-end: var(--space-2);
+  min-height: 38px;
+  padding: 0.45rem 0.8rem;
+}
+
+#goodraise-root .login-message {
+  min-height: 1.4rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-md);
+  border-inline-start: 4px solid transparent;
+}
+
+#goodraise-root .login-message.is-error {
+  color: var(--navy-950);
+  background: rgba(255, 214, 41, 0.16);
+  border-inline-start-color: var(--black);
+}
+
+#goodraise-root .login-message.is-success {
+  color: var(--navy-950);
+  background: rgba(17, 29, 74, 0.08);
+  border-inline-start-color: var(--accent-500);
+}
+
+#goodraise-root .login-message.is-warning {
+  color: var(--navy-950);
+  background: rgba(255, 214, 41, 0.12);
+  border-inline-start-color: var(--accent-500);
+}
+
+#goodraise-root .login-actions {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+#goodraise-root #login-button,
+#goodraise-root #login-reset-button {
+  position: relative;
+  z-index: 5;
+}
+
+#goodraise-root .public-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .public-panel-header h3 {
+  margin: 0;
+  color: var(--navy-950);
+  font-size: 1.38rem;
+  font-weight: 800;
+}
+
+#goodraise-root .manager-entry-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+#goodraise-root .manager-entry-card {
+  display: none !important;
+}
+
+#goodraise-root .manager-entry-copy h3 {
+  margin: 0 0 var(--space-2);
+  color: var(--navy-950);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+#goodraise-root .manager-entry-copy p {
+  margin: 0;
+  color: var(--graphite);
+  line-height: 1.75;
+}
+
+#goodraise-root .manager-entry-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .manager-entry-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 var(--space-4);
+  border-radius: 999px;
+  background: rgba(17, 29, 74, 0.06);
+  color: var(--navy-900);
+  font-size: 0.94rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#goodraise-root .action-button:hover,
+#goodraise-root .button-primary:hover {
+  background: var(--accent-600);
+  transform: translateY(-1px);
+}
+
+#goodraise-root .button-secondary:hover,
+#goodraise-root .action-button.secondary:hover {
+  background: var(--navy-900);
+}
+
+#goodraise-root .button-ghost:hover,
+#goodraise-root .nav-button:hover {
+  background: rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .app-card:hover,
+#goodraise-root .metric-card:hover,
+#goodraise-root .analysis-card:hover,
+#goodraise-root .comparison-card:hover,
+#goodraise-root .prize-card:hover {
+  box-shadow: 0 18px 36px rgba(11, 20, 53, 0.11);
+}
+
+@media (max-width: 1440px) {
+  #goodraise-root .metric-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  #goodraise-root .hero-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  #goodraise-root .admin-overview-grid,
+  #goodraise-root .login-shell,
+  #goodraise-root .public-hero-grid,
+  #goodraise-root .legal-layout,
+  #goodraise-root .manager-entry-card {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-root .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #goodraise-root .public-snapshot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #goodraise-root .public-snapshot-card--wide {
+    grid-column: span 1;
+  }
+
+  #goodraise-root .public-hero-brand,
+  #goodraise-root .brand-command-logos {
+    justify-items: start;
+    justify-content: flex-start;
+  }
+
+  #goodraise-root .legal-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 1024px) {
+  #goodraise-root {
+    padding: var(--space-3);
+  }
+
+  #goodraise-root .project-hero-grid,
+  #goodraise-root .project-body-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-root .project-media-frame {
+    aspect-ratio: 16 / 9;
+  }
+
+  #goodraise-root .donation-panel {
+    position: static;
+  }
+
+  #goodraise-root .public-hero-watermark {
+    left: -6%;
+    right: auto;
+    width: clamp(280px, 40vw, 460px);
+    max-width: 44%;
+    opacity: 0.022;
+  }
+
+  #goodraise-root .filters-grid,
+  #goodraise-root .filters-grid.filters-grid--three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #goodraise-root .podium-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-root .prize-page-layout {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-root .prize-ambassador-sidebar {
+    position: static;
+  }
+
+  #goodraise-root .place-card--1 {
+    transform: none;
+  }
+}
+
+@media (max-width: 768px) {
+  #goodraise-root::before {
+    opacity: 0.018;
+    background-size: 112px 112px, 96px 96px;
+  }
+
+  #goodraise-root .project-stat-grid,
+  #goodraise-root .donation-stepper,
+  #goodraise-root .amount-grid,
+  #goodraise-root .donation-grid,
+  #goodraise-root .campaign-settings-grid,
+  #goodraise-root .settings-inline-grid,
+  #goodraise-root .settings-inline-grid--three {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-root .app-topbar {
+    padding: var(--space-4);
+    gap: var(--space-4);
+  }
+
+  #goodraise-root .topbar-brand,
+  #goodraise-root .topbar-actions,
+  #goodraise-root .session-box,
+  #goodraise-root .section-header,
+  #goodraise-root .section-head,
+  #goodraise-root .brand-command-head,
+  #goodraise-root .control-group-header {
+    align-items: stretch;
+  }
+
+  #goodraise-root .topbar-actions,
+  #goodraise-root .session-box {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  #goodraise-root .topbar-brand,
+  #goodraise-root .topbar-meta,
+  #goodraise-root .brand-logo-cluster {
+    width: 100%;
+  }
+
+  #goodraise-root .manager-entry-actions {
+    justify-content: flex-start;
+  }
+
+  #goodraise-root .brand-logo-cluster {
+    justify-content: flex-end;
+    gap: var(--space-3);
+  }
+
+  #goodraise-root .topbar-meta {
+    gap: var(--space-2);
+  }
+
+  #goodraise-root .session-chip,
+  #goodraise-root .hero-badge {
+    white-space: normal;
+  }
+
+  #goodraise-root .top-nav {
+    width: 100%;
+    overflow-x: auto;
+    padding-block-end: 2px;
+  }
+
+  #goodraise-root .nav-button {
+    flex: 0 0 auto;
+  }
+
+  #goodraise-root .hero-meta-grid,
+  #goodraise-root .metric-grid,
+  #goodraise-root .public-snapshot-grid,
+  #goodraise-root .filters-grid,
+  #goodraise-root .filters-grid.filters-grid--three {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-root .public-snapshot-card--wide {
+    grid-column: span 1;
+  }
+
+  #goodraise-root .public-hero,
+  #goodraise-root .legal-hero,
+  #goodraise-root .brand-command,
+  #goodraise-root .control-panel,
+  #goodraise-root .page-panel,
+  #goodraise-root .login-card,
+  #goodraise-root .login-visual,
+  #goodraise-root .legal-sidebar,
+  #goodraise-root .legal-document {
+    padding: var(--space-5);
+  }
+
+  #goodraise-root .public-hero-watermark {
+    display: none;
+  }
+}
+
+@media (max-width: 390px) {
+  #goodraise-root .topbar-campaign-logo {
+    max-width: 118px;
+    height: 42px;
+  }
+
+  #goodraise-root .topbar-logo {
+    max-width: 102px;
+    height: 46px;
+    transform: scale(1.38);
+  }
+
+  #goodraise-root .brand-divider {
+    block-size: 40px;
+  }
+
+  #goodraise-root .topbar-title {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #goodraise-root .page-shell,
+  #goodraise-root .action-button,
+  #goodraise-root .button-primary,
+  #goodraise-root .button-secondary,
+  #goodraise-root .button-ghost,
+  #goodraise-root .metric-toggle,
+  #goodraise-root .nav-button,
+  #goodraise-root .app-card {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.application-status { position: fixed; z-index: 100; bottom: 16px; left: 16px; max-width: calc(100vw - 64px); padding: 12px 20px; border-radius: 12px; background: #111d4a; color: white; font: 600 16px Assistant, sans-serif; box-shadow: 0 8px 28px #111d4a30; }

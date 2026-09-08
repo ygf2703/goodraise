@@ -2,21 +2,59 @@
   "name": "goodraise",
   "private": true,
   "version": "1.0.0",
-  "description": "Netlify deployment support for the GoodRaise campaign dashboard",
+  "description": "GoodRaise campaign platform — Node.js, React and TypeScript",
   "scripts": {
-    "verify:auth": "node scripts/verify_netlify_auth.mjs",
+    "verify:auth": "node --import tsx scripts/verify_netlify_auth.mjs",
     "reset:prelaunch:once": "node scripts/run_prelaunch_reset_once.mjs",
     "sync:google-sheets:once": "node scripts/run_google_sheets_sync_once.mjs",
     "sync:google-sheets:loop": "node scripts/run_google_sheets_sync_loop.mjs",
     "test:intelligence": "node --test tests/goodraise-intelligence.test.mjs",
     "test:multi-campaign": "node --test tests/multi-campaign-isolation.test.mjs",
-    "test:local-backend": "node --test --test-concurrency=1 tests/local-backend-scope.test.mjs",
+    "test:local-backend": "node --import tsx --test --test-concurrency=1 tests/local-backend-scope.test.mjs",
     "test:prelaunch-reset": "node --test tests/prelaunch-reset.test.mjs",
     "test:source-security": "node --test tests/source-security.test.mjs",
-    "benchmark:intelligence": "node scripts/benchmark_intelligence.mjs"
+    "benchmark:intelligence": "node scripts/benchmark_intelligence.mjs",
+    "prepare:assets": "node --env-file-if-exists=.env --import tsx scripts/prepare.ts",
+    "dev": "npm run prepare:assets && node --env-file-if-exists=.env --import tsx --watch scripts/dev.tsx",
+    "build": "npm run prepare:assets && npm run typecheck && node --import tsx scripts/build.tsx && npm run verify:release",
+    "start": "node --env-file-if-exists=.env --import tsx backend/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-concurrency=1 tests/*.test.mjs tests/*.test.ts",
+    "verify:release": "node --import tsx scripts/verify-release.ts",
+    "verify:hygiene": "node --import tsx scripts/verify-hygiene.ts",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate-db.ts",
+    "import:campaign": "node --env-file-if-exists=.env --import tsx scripts/import-campaign.ts",
+    "test:postgres": "node --import tsx tests/postgres.integration.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^10.7.10",
-    "pg": "^8.16.3"
+    "csv-parse": "^7.0.2",
+    "pg": "^8.16.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "parse5": "^8.0.1",
+    "read-excel-file": "^9.3.10",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <27"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "@embedded-postgres/darwin-arm64": true,
+    "@embedded-postgres/linux-x64": true,
+    "@embedded-postgres/linux-arm64": true,
+    "@embedded-postgres/darwin-x64": true
   }
 }

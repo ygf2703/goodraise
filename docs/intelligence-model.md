@@ -1,213 +1,105 @@
-# GoodRaise Intelligence Model
+# Intelligence and question model
 
-Updated: 2026-08-12
+Updated 2026-09-08; formulas were retained during platform migration. Sources: [browser engine](../shared/intelligence/engine.mjs), [browser caller](../apps/web/src/compat/dashboard-controller.js), and [question service](../backend/services/insight-assistant.mjs).
 
-This document defines the reusable product IP that turns GoodRaise from a dashboard into a campaign intelligence and operations platform.
+## Two separate systems
 
-## Design Principles
+The browser intelligence engine computes health, velocity, forecast, ambassador state, intervention lists, and a campaign fingerprint using deterministic rules. It does not call a model provider.
 
-- deterministic, not opaque
-- explainable, not magical
-- campaign-relative, not calendar-only
-- reusable across organizations and campaigns
-- safe for benchmark-readiness without cross-tenant aggregation
+The hosted question service computes aggregates from the saved server dataset, answers recognized questions with rules, and calls a model provider for other questions when configured. It is not a training pipeline, retrieval index, or predictive machine-learning service.
 
-## 1. Campaign Timeline Normalization
+## Engine contract and time reference
 
-Every campaign should be analyzed using normalized progress references:
+`createGoodRaiseIntelligence({groupBy, sumAmount, buildLeaderboard})` receives helper dependencies and returns calculation functions. Functions require explicit `organizationId` and `campaignId` in context; missing either throws. Context also supplies dataset `meta`, `goals.total`, `goals.daily`, personal targets/directory, prize rules, and builder settings.
 
-- campaign day
-- elapsed hours
-- elapsed campaign percentage
+Calculations operate on the rows the caller supplies. They do not universally filter unsuccessful payments. The general dashboard passes filtered browser rows, whereas prize rendering and SQL-built snapshots have additional success filtering. Preserve that distinction when interpreting a score.
 
-This allows comparisons between campaigns with different real-world dates.
+The reference time is the **latest donation timestamp in the supplied rows**, not the wall clock. Bounds combine configured project dates, known dataset dates, and row dates; start is midnight of the earliest date and end is 23:59:59 of the latest. Elapsed hours have a minimum of one. No new donations means the reference time need not advance: these are dataset-relative metrics, not reliable idle-time monitoring.
 
-## 2. Campaign Health Model
+## Velocity
 
-### Output
+The engine reports last hour, last three hours, preceding three hours, recent/previous twelve hours, latest donation date, previous observed date, and campaign averages.
 
-- numeric score: `0-100`
-- label:
-  - `Excellent`
-  - `Healthy`
-  - `Needs Attention`
-  - `At Risk`
-  - `Critical`
-- reasons list
+- Campaign amount/hour = total amount ÷ elapsed hours.
+- Recent amount/hour = last-three-hour amount ÷ 3.
+- Three-hour change = (recent amount − preceding amount) ÷ preceding amount; returns zero when the preceding amount is zero.
+- “Today” means the latest donation's date. “Previous date” means the previous date with rows, not necessarily yesterday.
 
-### Inputs
+Windows are anchored to the latest row and use timestamp comparisons. Date parsing uses JavaScript date semantics; an organization timezone is not supplied to the engine.
 
-- fundraising vs target trajectory
-- elapsed campaign time
-- current velocity
-- recent 3-hour velocity delta
-- active ambassadors ratio
-- inactive or unstarted ambassadors
-- failed transaction rate
-- daily goal gap
+## Forecast
 
-### Example Explanation
+```text
+if previous-three-hour amount > 0:
+    trajectory = 0.6 × recent amount/hour + 0.4 × campaign amount/hour
+else:
+    trajectory = campaign amount/hour
 
-- pace is behind the target trajectory
-- many ambassadors still have no first donation
-- recent momentum improved over the last 3 hours
+projected final = current total + trajectory × remaining campaign hours
+projected target ratio = projected final / goal, when goal > 0
+gap or surplus = projected final - goal, when goal > 0
+```
 
-### Product Value
+Confidence is a heuristic label: high at 120+ rows and 35%+ elapsed time; medium at 40+ rows and 20%+ elapsed time; otherwise low. It is not a probability, statistical interval, or measured forecast accuracy.
 
-This creates a fast management answer to:
+## Campaign health
 
-`What is the real state of the campaign right now?`
+The score starts at 100, applies the adjustments below, then rounds and clamps to 0–100. Pace gap = amount/total-goal minus elapsed-time ratio.
 
-## 3. Velocity Model
+| Trigger | Adjustment |
+| --- | --- |
+| Pace gap below −10 percentage points | Subtract rounded absolute gap × 100, capped at 25 |
+| Pace gap above +8 points | Add 4 |
+| Three-hour amount change below −15% | Subtract 15 |
+| Three-hour amount change above +8% | Add 5 |
+| Inactive ambassadors | Subtract 2 each, capped at 18 |
+| Ambassadors needing attention | Subtract 1 each, capped at 10 |
+| Failed-row rate above 8% | Subtract 12 |
+| Daily target shortfall | Subtract rounded shortfall ratio × 10, capped at 12 |
 
-### Outputs
+Labels are Excellent ≥85, Healthy ≥70, Needs Attention ≥55, At Risk ≥35, otherwise Critical. At most four explanation entries are returned, in calculation order.
 
-- amount per hour
-- donations per hour
-- last hour
-- last 3 hours
-- today
-- previous comparable period
-- campaign average
-- acceleration or deceleration indication
+A success-only SQL snapshot cannot show a failed-payment penalty even if failures exist in the raw ledger. Missing goals and an empty/limited dataset also affect how informative the score is; the label is not a production-health signal.
 
-### Product Value
+## Ambassador state and intervention design
 
-This model tells the manager whether the campaign is warming up, flattening, or dropping.
+Ambassadors come from both the configured directory and names in supplied donations, matched by display name. The engine computes totals, target progress, donation counts/average, first/last donation, inactivity hours, recent six-hour velocity, recent-versus-previous six-hour trend, rank movement, and the next prize threshold.
 
-## 4. Forecast Model
+State precedence is:
 
-### Outputs
+1. Target Reached if a positive target is met.
+2. Inactive if no donations exist.
+3. Needs Attention if no activity for at least 12 dataset-relative hours, or recent six-hour amount is zero after positive preceding activity.
+4. Hot if recent six-hour activity exists and target progress is at least 60%.
+5. Active otherwise.
 
-- projected final amount
-- projected target percentage
-- surplus or gap versus target
-- trajectory direction
-- confidence band:
-  - `low`
-  - `medium`
-  - `high`
+The contact-priority rules assign: 100 for never started; 85 for near personal target (within max of 500 or 10% of target); 78 for within 500 of a prize; 72 for 10+ inactive hours after starting; 64 for falling six-hour trend. The list is sorted and capped at eight. One ambassador may appear for multiple reasons.
 
-### Rules
+“Attention now” combines unstarted ambassadors, declining velocity, daily gap, near-prize opportunities, recent failed rows, and attention states; it returns the top six rule-weighted issues. It does not send messages or trigger outreach automatically.
 
-- deterministic weighted projection
-- no fake statistical language
-- confidence rises only when enough data exists
+The fingerprint is a summary of duration, target, ambassador participation, counts, average donation, velocity, target progress, and inactivity. There is no cross-tenant benchmark database behind it.
 
-### Product Value
+## Question assistant
 
-Forecasting creates an operations answer to:
+The hosted route authorizes `insight_query`, loads `buildCampaignContext()`, and calls `buildCampaignInsightContext()`. Only successful rows within the dataset's `defaultFrom/defaultTo` window enter these aggregates. Current browser filters or a temporary CSV upload are not sent to this service.
 
-`If we continue like this, where do we land?`
+The context includes campaign name/status/target/currency/dates/freshness, donation totals/count/min/max/average, active ambassadors, and grouped totals. It keeps up to 500 ambassador totals, the top 20 dates by amount, and 24 hourly buckets. Only ambassador truncation is explicitly flagged. Longer campaigns can therefore have incomplete daily detail in model context.
 
-## 5. Ambassador State Model
+Common Hebrew questions about total, count, average, min/max donation, goal progress, active/top ambassadors, best date/hour, and date range have deterministic answers. These work without a provider key. Other questions use the implementation's configured Responses API call:
 
-### States
+- Key: server-side `OPENAI_API_KEY`.
+- Model: `GOODRAISE_AI_MODEL`, falling back to the source default `gpt-4.1-mini`.
+- Request timeout: 20 seconds.
+- Maximum output tokens: 700.
+- Question length: 3–500 characters.
+- Response: answer, deterministic/AI source, and dataset scope/freshness.
 
-- `Hot`
-- `Active`
-- `Needs Attention`
-- `Inactive`
-- `Target Reached`
+This documents the checked-in request; it does not verify model availability or external service configuration.
 
-### Features Per Ambassador
+The aggregate builder excludes donor names, email, phone, city, and raw donation rows. **Ambassador names remain in grouped labels and the manager's free-text question is transmitted unchanged.** Thus “no personal information can ever leave the server” would be too broad. Deterministic answers do not need a provider request.
 
-- amount raised
-- personal target
-- target percentage
-- donation count
-- average donation
-- first donation
-- last donation
-- hours since last activity
-- fundraising velocity
-- trend
-- leaderboard rank
-- rank change
-- prize proximity
-- team
-- operational status
+## Tests and change guidance
 
-### Product Value
+Run `npm run test:intelligence` for rule-engine coverage. The broader suite also covers question context, deterministic answers, placement/catalog, and route/policy source assertions. `npm run benchmark:intelligence` generates synthetic workloads; historical benchmark timings are not an end-to-end service capacity guarantee.
 
-This model turns a flat leaderboard into a tactical management roster.
-
-## 6. Intervention Priority Model
-
-### Output
-
-Ranked list of people or issues to address first.
-
-### Reason Types
-
-- has not started
-- near personal target
-- near prize threshold
-- previously strong but now inactive
-- recent sharp slowdown
-- high-potential ambassador losing momentum
-
-### Explainability Example
-
-Good recommendation:
-
-`Dana raised 4,200 yesterday, has had no donation for 11 hours, and is 600 short of her target.`
-
-### Product Value
-
-This is a direct management tool, not an analytics ornament.
-
-## 7. What Needs Attention Now
-
-This section summarizes the operational risks currently requiring action.
-
-Each item should include:
-
-- issue
-- severity
-- quantified evidence
-- affected entity
-- recommended action
-
-Examples:
-
-- ambassadors with no first donation
-- hourly slowdown
-- missing amount versus daily target
-- ambassadors close to prize thresholds
-- recent failed transactions
-
-## 8. Campaign Fingerprint
-
-### Purpose
-
-Create a normalized summary object that can later support anonymous campaign benchmarking.
-
-### Current Fields
-
-- campaign duration
-- target
-- ambassador count
-- active ambassador ratio
-- donation count
-- average donation
-- fundraising velocity
-- completion trajectory
-
-### Product Value
-
-This is foundational product IP for future benchmark products without requiring cross-tenant data pooling today.
-
-## 9. Why This Is The Moat
-
-GoodRaise's moat should not be chart styling.
-
-The current moat comes from:
-
-- documented health logic
-- documented velocity logic
-- documented intervention priorities
-- explainable ambassador states
-- reusable campaign fingerprint model
-
-This is the part of the product that becomes difficult to copy well once refined over many campaigns.
+For a change, identify the intended row population, date window, and time reference before adjusting a formula. Add behavior-focused cases for altered business rules, including empty data, missing goals, failed transactions, stale timestamps, and campaign switching where relevant.

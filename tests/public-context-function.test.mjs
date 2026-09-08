@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import publicContextHandler from "../netlify/functions/public-context.mjs";
+import publicContextHandler from "../netlify/functions/public-context.ts";
 
 test("public context function returns JSON without a manager session", async () => {
   const response = await publicContextHandler(new Request("http://localhost/api/public-context"));

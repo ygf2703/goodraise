@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildResolvedGoogleSheetsConfigPatch } from "../netlify/lib/source-sync.mjs";
+import { buildResolvedGoogleSheetsConfigPatch } from "../backend/services/source-sync.mjs";
 
 test("persists the resolved Google Sheets tab and range after automatic discovery", () => {
   const patch = buildResolvedGoogleSheetsConfigPatch(

@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import vm from "node:vm";
+import { createGoodRaiseIntelligence } from "../shared/intelligence/engine.mjs";
 
-import authHandler from "../netlify/functions/auth.mjs";
+import authHandler from "../backend/http-handler.mjs";
 import {
   buildCampaignContext,
   ensureMultiTenantMigration,
@@ -20,7 +20,7 @@ import {
   saveCampaignDataset,
   saveCampaignSource,
   saveOrganization,
-} from "../netlify/lib/campaign-repositories.mjs";
+} from "../backend/services/campaign-repositories.mjs";
 
 const ROOT_DIR = fileURLToPath(new URL("../", import.meta.url));
 const PLATFORM_STORE_PATH = fileURLToPath(new URL("../work/data/goodraise-platform-dev.json", import.meta.url));
@@ -28,7 +28,6 @@ const AUTH_STORE_PATH = fileURLToPath(new URL("../work/data/netlify-auth-dev.jso
 const LEGACY_CAMPAIGN_STORE_PATH = fileURLToPath(new URL("../work/data/netlify-campaign-config-dev.json", import.meta.url));
 const LEGACY_SOURCE_STORE_PATH = fileURLToPath(new URL("../work/data/netlify-source-config-dev.json", import.meta.url));
 const LEGACY_DATASET_PATH = fileURLToPath(new URL("../netlify/data/admin-dataset.json", import.meta.url));
-const INTELLIGENCE_PATH = new URL("../work/frontend/goodraise-intelligence.js", import.meta.url);
 
 function groupBy(rows, getKey) {
   const map = new Map();
@@ -56,13 +55,7 @@ function buildLeaderboard(rows) {
     .sort((left, right) => right.total - left.total || right.deals - left.deals || left.ambassador.localeCompare(right.ambassador, "he"));
 }
 
-async function loadEngineFactory() {
-  const source = await readFile(INTELLIGENCE_PATH, "utf8");
-  const sandbox = {};
-  vm.createContext(sandbox);
-  vm.runInContext(`${source}\nthis.__factory = createGoodRaiseIntelligence;`, sandbox);
-  return sandbox.__factory;
-}
+async function loadEngineFactory() { return createGoodRaiseIntelligence; }
 
 async function backupFiles(paths) {
   const backups = new Map();
@@ -133,7 +126,7 @@ async function setupManager(email) {
   });
   assert.equal(response.status, 200, `setup should succeed for ${email}`);
   assert.equal(payload.authenticated, true);
-  assert.match(cookie, /yellow_dashboard_admin_session=/);
+  assert.match(cookie, /goodraise_admin_session=/);
   return cookie;
 }
 
@@ -362,7 +355,7 @@ test("multi-campaign isolation, authorization and campaign creation are enforced
   ]);
 
   try {
-    process.env.YELLOW_DASHBOARD_MANAGER_EMAILS = JSON.stringify([
+    process.env.GOODRAISE_MANAGER_EMAILS = JSON.stringify([
       { email: "platform-admin@example.org", role: "platform_admin" },
       { email: "orga-admin@example.org", role: "organization_admin", organizationId: "org-alpha", organizationSlug: "alpha" },
       { email: "a1-manager@example.org", role: "campaign_manager", organizationId: "org-alpha", organizationSlug: "alpha", campaignIds: ["alpha-1"], campaignSlugs: ["alpha-1"] },
@@ -512,7 +505,7 @@ test("multi-campaign isolation, authorization and campaign creation are enforced
     );
     assert.equal(new Set(healthScores).size >= 2, true);
   } finally {
-    delete process.env.YELLOW_DASHBOARD_MANAGER_EMAILS;
+    delete process.env.GOODRAISE_MANAGER_EMAILS;
     await restoreFiles(backups);
   }
 });

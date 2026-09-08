@@ -1,6 +1,5 @@
 import { performance } from "node:perf_hooks";
-import { readFile } from "node:fs/promises";
-import vm from "node:vm";
+import { createGoodRaiseIntelligence } from "../shared/intelligence/engine.mjs";
 
 function groupBy(rows, getKey) {
   const map = new Map();
@@ -28,13 +27,7 @@ function buildLeaderboard(rows) {
     .sort((left, right) => right.total - left.total || right.deals - left.deals || left.ambassador.localeCompare(right.ambassador, "he"));
 }
 
-async function loadEngineFactory() {
-  const source = await readFile(new URL("../work/frontend/goodraise-intelligence.js", import.meta.url), "utf8");
-  const sandbox = {};
-  vm.createContext(sandbox);
-  vm.runInContext(`${source}\nthis.__factory = createGoodRaiseIntelligence;`, sandbox);
-  return sandbox.__factory;
-}
+async function loadEngineFactory() { return createGoodRaiseIntelligence; }
 
 function buildSyntheticData(size) {
   const start = new Date("2026-08-23T08:00:00Z");

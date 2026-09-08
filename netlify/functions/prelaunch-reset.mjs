@@ -1,4 +1,4 @@
-import { runScheduledPrelaunchReset } from "../lib/prelaunch-reset.mjs";
+import { runScheduledPrelaunchReset } from "../../backend/services/prelaunch-reset.mjs";
 
 export async function handler() {
   try {

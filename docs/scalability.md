@@ -1,5 +1,7 @@
 # GoodRaise Scalability
 
+> Historical assessment (August 2026). Preserved for context; current behavior and verification are documented in the [R&D guide](README.md) and [engineering assessment](engineering-assessment.md).
+
 Updated: 2026-08-12
 
 ## Goal
@@ -72,7 +74,7 @@ This is the correct shape for future portfolio growth.
 
 ### Intelligence
 
-Measured with [scripts/benchmark_intelligence.mjs](C:\Users\noamf\Documents\Codex\2026-07-27\mu\scripts\benchmark_intelligence.mjs):
+Measured with [scripts/benchmark_intelligence.mjs](../scripts/benchmark_intelligence.mjs):
 
 - `1,000` donations: `33.51ms`
 - `10,000` donations: `202.13ms`

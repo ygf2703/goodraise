@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { buildCampaignInsightContext, getDeterministicInsightAnswer } from "../netlify/lib/insight-assistant.mjs";
-import { applyConfiguredProjectWindow } from "../netlify/lib/campaign-repositories.mjs";
+import { buildCampaignInsightContext, getDeterministicInsightAnswer } from "../backend/services/insight-assistant.mjs";
+import { applyConfiguredProjectWindow } from "../backend/services/campaign-repositories.mjs";
 
 test("insight assistant sends aggregate campaign data without donor personal details", () => {
   const context = buildCampaignInsightContext({
@@ -112,8 +112,8 @@ test("insight assistant includes the full ambassador totals list for fundraising
 });
 
 test("insight question endpoint is campaign-scoped and manager-authorized", async () => {
-  const authFunction = await readFile(new URL("../netlify/functions/auth.mjs", import.meta.url), "utf8");
-  const authorization = await readFile(new URL("../netlify/lib/authorization.mjs", import.meta.url), "utf8");
+  const authFunction = await readFile(new URL("../backend/http-handler.mjs", import.meta.url), "utf8");
+  const authorization = await readFile(new URL("../backend/services/authorization.mjs", import.meta.url), "utf8");
 
   assert.match(authFunction, /matchScopedCampaignRoute\(pathname, "\/insights\/questions"\)/);
   assert.match(authFunction, /answerCampaignInsightQuestion\(request, payload, scopedInsightQuestion\)/);
@@ -121,18 +121,19 @@ test("insight question endpoint is campaign-scoped and manager-authorized", asyn
 });
 
 test("dashboard places the insight assistant beneath the campaign summary and before manual matching", async () => {
-  const template = await readFile(new URL("../work/build_yellow_dashboard.py", import.meta.url), "utf8");
-  const summaryIndex = template.indexOf('id="hero-badges"');
-  const assistantIndex = template.indexOf('id="insight-assistant-form"');
-  const manualContributionIndex = template.indexOf('id="add-manual-contribution"');
+  const template = await readFile(new URL("../apps/web/src/compat/dashboard-controller.js", import.meta.url), "utf8");
+  const layout = await readFile(new URL("../apps/web/src/components/InsightsPanel.tsx", import.meta.url), "utf8");
+  const summaryIndex = layout.indexOf('id="hero-badges"');
+  const assistantIndex = layout.indexOf('id="insight-assistant-form"');
+  const manualContributionIndex = layout.indexOf('id="add-manual-contribution"');
 
   assert.ok(summaryIndex >= 0 && assistantIndex > summaryIndex && manualContributionIndex > assistantIndex);
   assert.match(template, /buildScopedAdminEndpoint\("insight-question", scope\)/);
-  assert.match(template, /התשובה תופיע כאן לאחר שליחת השאלה/);
+  assert.match(layout, /התשובה תופיע כאן לאחר שליחת השאלה/);
 });
 
 test("insight assistant classifies provider failures without exposing provider payloads", async () => {
-  const moduleSource = await readFile(new URL("../netlify/lib/insight-assistant.mjs", import.meta.url), "utf8");
+  const moduleSource = await readFile(new URL("../backend/services/insight-assistant.mjs", import.meta.url), "utf8");
 
   assert.match(moduleSource, /OPENAI_AUTH_FAILED/);
   assert.match(moduleSource, /OPENAI_RATE_LIMITED/);
