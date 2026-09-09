@@ -10,6 +10,12 @@ In the table below, **C** means `/api/organizations/:organizationId/campaigns/:c
 
 Role ordering is `viewer < analyst < campaign_manager < organization_admin < platform_admin`, with organization/campaign assignment checks in addition to role. See [multi-tenancy](multi-tenancy.md). Ingest uses a configured API key instead of a manager session.
 
+Protected scoped routes validate the session and resolve the requested organization/campaign directly before reading operational data. This permission check does not load campaign summaries, configuration or donation datasets. Application IDs and slugs resolve to canonical identities; route scope takes precedence over query parameters. A missing explicit campaign returns `404`, and an existing campaign outside the user's permissions returns `403`, without falling back to another campaign. Legacy routes with incomplete scope select a viewable campaign from identity records, then enforce the requested action's role.
+
+`/api/auth/status` still explicitly returns accessible campaign summaries. The campaign configuration endpoint still returns its portfolio/registry. Those response contracts are preserved. SQL summaries use identity filtering followed by a batch amount/metadata projection; configuration contexts omit operational datasets.
+
+Account emails are case-insensitive: setup/login input is trimmed and lowercased, canonical storage is lowercase, and SQL lookups use indexed equality. SQL authentication requires migration `003_normalize_admin_email.sql` before this code is deployed. It preserves account IDs and credentials, but refuses case/whitespace collisions instead of merging accounts.
+
 ## Route inventory
 
 | Method | Route | Access | Body / result |

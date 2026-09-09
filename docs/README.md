@@ -13,7 +13,7 @@ Updated 2026-09-08 for the implemented Node.js/React migration. Start here to un
 7. [Platform migration](platform-migration.md): changes, compatibility and validation.
 8. [Engineering assessment](engineering-assessment.md): current limitations and next work.
 
-The [target architecture](target-architecture.md) records the chosen direction and remaining component/data migration work. The [performance investigation](performance-investigation.md) preserves the measured pre-migration baseline alongside current changes.
+The [target architecture](target-architecture.md) records the chosen direction and remaining component/data migration work. The [performance investigation](performance-investigation.md) preserves the measured pre-migration baseline alongside current changes. The [2026-09-09 database rollout](database-rollout-2026-09-09.md) records the production migration, rehearsal and recovery snapshot.
 
 ## Concepts
 

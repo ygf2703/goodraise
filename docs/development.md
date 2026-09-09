@@ -48,7 +48,11 @@ npm run db:migrate
 
 `db/migrations/001_initial.sql` provides the baseline schema. `002_ingest_validation.sql` aligns the import-batch schema with Node validation counters. The runner locks migration execution, records checksums, applies each migration in a transaction, skips applied files, and fails if an applied file was edited. Add a new numbered SQL file for subsequent changes.
 
-This command changes schema only. It does not migrate SQLite users, move Blobs into SQL, import donations, or reconcile campaign identities from existing deployments. Back up and rehearse actual data transfers separately. Existing runtime SQL definitions remain for compatibility; do not rely on request-time DDL for routine deployment.
+`003_normalize_admin_email.sql` also normalizes existing account emails to trimmed lowercase and adds a storage constraint. It preserves account UUIDs, password hashes and session references. Case/whitespace collisions cause the transaction to fail without merging accounts. The migration has a five-second lock timeout so it fails instead of waiting indefinitely on a busy account table.
+
+Apply migration 003 **before deploying the updated SQL authentication code**. Rehearse against a restored database copy and retain a backup. New code refuses SQL authentication if the constraint is missing, preventing duplicate account seeding against legacy mixed-case records. The previous code already normalizes writes and accepts lowercase values, so the schema change can precede code deployment. If the migration reports a collision, resolve the account ownership explicitly; do not automatically merge credentials or permissions. The GoodRaise Neon production database was migrated on 2026-09-09 after a snapshot and rehearsal; see the [rollout record](database-rollout-2026-09-09.md). Other databases still require their own migration check.
+
+Migrations do not migrate SQLite users, move Blobs into SQL, import donations, or reconcile campaign identities from existing deployments. Existing runtime SQL definitions remain for compatibility; do not rely on request-time DDL for routine deployment. The runtime DDL escape hatch does not apply migration 003.
 
 With a configured database and existing campaign:
 
@@ -73,6 +77,10 @@ npm run verify:hygiene
 Tests that open HTTP or PostgreSQL ports need permission to bind to loopback in restricted sandboxes. The PostgreSQL suite uses `embedded-postgres`, creates its own temporary cluster, sets its own database URL, exercises migrations/imports/auth/reset, closes the shared pool, and deletes the cluster. It never connects to a configured production database. Install scripts for its native packages must be enabled; the repository includes explicit npm approvals for the supported macOS/Linux development and CI architectures.
 
 The general regression suite uses development fixtures and restores files it changes. Run it with production database/Netlify environment markers unset. Test commands do not automatically load `.env`. Do not run multiple copies of fixture suites against the same directory.
+
+Scoped authorization cases run against both development storage and the disposable PostgreSQL database. The SQL suite also asserts that permission-check query counts remain constant from 2 to 50 campaigns, that authorization reads no campaign datasets, and that the scoped dataset response reads only one dataset. See the [performance investigation](performance-investigation.md#direct-authorization-validation) for the measured counts and remaining work.
+
+The SQL suite also checks joined-context and projected-summary parity, configuration-only reads, migration collision rollback, mixed-case account input, the existing plain-email index, skipped unchanged account updates, immediate assignment changes and session expiry/password changes.
 
 Browser verification uses synthetic campaigns to check public pages, first-login setup, saved-data loading, campaign selection, source settings, designer and legal routes. The implementation record distinguishes these manual browser checks from automated tests.
 

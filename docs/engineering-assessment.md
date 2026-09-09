@@ -24,7 +24,7 @@ Updated 2026-09-08 after the Node.js/React migration. GoodRaise now has a consis
 
 - The React application still embeds the established imperative controller for dynamic chart/table/project/designer content. It is isolated behind a lifecycle adapter, not fully converted into React state and components.
 - Existing backend/domain modules remain JavaScript. New TypeScript is strictly checked; JavaScript modules are included for interoperability without claiming full static type coverage.
-- Campaign summaries still load entire snapshots and perform repeated repository queries. Authorized requests can enumerate summaries more than once. Large manager datasets and repeated browser analytics remain scaling risks.
+- Scoped authorization now checks session and campaign identities directly. SQL context loading uses one joined query; summaries use two reads with amounts projected only for accessible campaigns. Summary calculations still process every stored amount, and manager datasets/browser analytics remain unpaginated. These are the next scaling limits to profile.
 - PostgreSQL is not the only state owner yet. Auxiliary auth/rate-limit/audit/job state still uses Blobs or files; non-SQL modes cannot use relational ingest/manual matching.
 - Application authorization enforces tenant access; donors are still globally keyed and SQL does not enforce row-level tenancy.
 - Allowlists authorize first password setup but do not prove mailbox ownership. Public campaign selection/projection policy also needs an explicit product/security decision.
@@ -39,7 +39,7 @@ The migration is checked with the Node 24 deployment baseline and a disposable P
 
 ## Next R&D priorities
 
-1. Measure the hosted request chain with SQL timings, payload sizes and browser profiling. Optimize summaries/aggregation/pagination where measurements point.
+1. Verify migration 003 before deploying this code to each database; the GoodRaise Neon production rollout is [complete](database-rollout-2026-09-09.md). Resolve any legacy case collisions explicitly in other environments. Measure the hosted request chain with SQL timings, payload sizes and browser profiling; consider stored aggregates/pagination where measurements point.
 2. Convert dynamic frontend workflows into typed React components, keeping row populations, date scope and money calculations unchanged.
 3. Inventory deployed state and rehearse a SQL consolidation with record/totals/role parity checks.
 4. Improve manager onboarding, public publication rules, concurrency and tenant data boundaries based on explicit product requirements.

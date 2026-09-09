@@ -23,7 +23,10 @@ import {
   buildCampaignContext,
   ensureMultiTenantMigration,
   getCampaign,
+  getCampaignIdentity,
   getOrganization,
+  listCampaigns,
+  listOrganizations,
   listCampaignSummaries,
 } from "./campaign-repositories.mjs";
 
@@ -102,8 +105,16 @@ async function ensurePostgresAuthSchema() {
       try {
         if (shouldRunRuntimeSchemaMigrations()) {
           await client.query(POSTGRES_AUTH_SCHEMA_SQL);
-        } else {
-          await client.query("SELECT 1");
+        }
+        // Equality lookups require the legacy normalization migration first.
+        // Fail before seeding can create a second account for a mixed-case email.
+        const normalizedEmails = await client.query(`
+          SELECT convalidated FROM pg_constraint
+          WHERE conrelid = 'goodraise.admin_users'::regclass
+            AND conname = 'admin_users_email_normalized'
+        `);
+        if (!normalizedEmails.rows[0]?.convalidated) {
+          throw new Error("Apply database migrations with npm run db:migrate before starting SQL authentication (003_normalize_admin_email.sql required).");
         }
       } finally {
         client.release();
@@ -372,10 +383,12 @@ async function ensureNotRateLimited(store, email, clientAddress) {
   return null;
 }
 
-async function ensureAdminSeed(store) {
+async function ensureAdminSeed(store, email = "") {
+  // Re-read current configuration on every account lookup to keep revocation
+  // immediate, but provision only that account. Health may explicitly seed all.
+  const managers = (await loadManagerRecords()).filter((manager) => !email || manager.email === normalizeEmail(email));
   if (usesPostgresAuthStore()) {
     const createdAt = isoNow();
-    const managers = await loadManagerRecords();
     await withPostgresClient(async (client) => {
       for (const manager of managers) {
         await client.query(
@@ -401,6 +414,11 @@ async function ensureAdminSeed(store) {
               campaign_slugs = EXCLUDED.campaign_slugs,
               is_active = EXCLUDED.is_active,
               updated_at = EXCLUDED.updated_at
+            WHERE (goodraise.admin_users.role, goodraise.admin_users.organization_app_id,
+              goodraise.admin_users.organization_slug, goodraise.admin_users.campaign_ids,
+              goodraise.admin_users.campaign_slugs, goodraise.admin_users.is_active)
+              IS DISTINCT FROM (EXCLUDED.role, EXCLUDED.organization_app_id,
+                EXCLUDED.organization_slug, EXCLUDED.campaign_ids, EXCLUDED.campaign_slugs, EXCLUDED.is_active)
           `,
           [
             randomUUID(),
@@ -420,8 +438,10 @@ async function ensureAdminSeed(store) {
     return;
   }
   const createdAt = isoNow();
-  for (const manager of await loadManagerRecords()) {
+  for (const manager of managers) {
     const existing = await store.getJSON(adminKey(manager.email));
+    if (existing && ["email", "role", "organizationId", "organizationSlug", "campaignIds", "campaignSlugs", "isActive"]
+      .every((key) => JSON.stringify(existing[key]) === JSON.stringify(manager[key]))) continue;
     await store.setJSON(adminKey(manager.email), {
       email: manager.email,
       role: manager.role,
@@ -459,7 +479,8 @@ function normalizeAdminRecord(record) {
 }
 
 async function getAdminRecord(store, email) {
-  await ensureAdminSeed(store);
+  if (!normalizeEmail(email)) return null;
+  await ensureAdminSeed(store, email);
   if (usesPostgresAuthStore()) {
     return withPostgresClient(async (client) => {
       const result = await client.query(
@@ -478,7 +499,7 @@ async function getAdminRecord(store, email) {
             password_set_at,
             last_login_at
           FROM goodraise.admin_users
-          WHERE lower(email) = lower($1)
+          WHERE email = $1
           LIMIT 1
         `,
         [normalizeEmail(email)],
@@ -526,7 +547,7 @@ async function saveAdminRecord(store, record) {
               updated_at = $9,
               password_set_at = NULLIF($10, '')::timestamptz,
               last_login_at = NULLIF($11, '')::timestamptz
-          WHERE lower(email) = lower($1)
+          WHERE email = $1
         `,
         [
           normalized.email,
@@ -545,7 +566,7 @@ async function saveAdminRecord(store, record) {
     });
     return;
   }
-  await store.setJSON(adminKey(record.email), record);
+  await store.setJSON(adminKey(record.email), { ...record, email: normalizeEmail(record.email) });
 }
 
 async function deleteSessionsForEmail(store, email) {
@@ -555,7 +576,7 @@ async function deleteSessionsForEmail(store, email) {
         `
           DELETE FROM goodraise.admin_sessions
           WHERE admin_user_id IN (
-            SELECT id FROM goodraise.admin_users WHERE lower(email) = lower($1)
+            SELECT id FROM goodraise.admin_users WHERE email = $1
           )
         `,
         [normalizeEmail(email)],
@@ -615,7 +636,7 @@ async function createSessionRecord(store, email, token, createdAt, expiresAt) {
   if (usesPostgresAuthStore()) {
     await withPostgresClient(async (client) => {
       const result = await client.query(
-        "SELECT id::text FROM goodraise.admin_users WHERE lower(email) = lower($1) LIMIT 1",
+        "SELECT id::text FROM goodraise.admin_users WHERE email = $1 LIMIT 1",
         [normalizeEmail(email)],
       );
       const adminUserId = result.rows[0]?.id;
@@ -689,47 +710,25 @@ function successResponse(payload, requestUrl, token) {
 }
 
 function filterAccessibleCampaignSummaries(auth, summaries) {
-  if (!auth?.authenticated) {
-    return [];
-  }
-  const role = normalizeRole(auth.role, ROLE_VIEWER);
-  if (role === ROLE_PLATFORM_ADMIN) {
-    return summaries;
-  }
-  const organizationSlug = String(auth.organizationSlug || "").trim().toLowerCase();
-  const allowedCampaigns = new Set(
-    [...(auth.campaignIds || []), ...(auth.campaignSlugs || [])]
-      .map((value) => normalizeStableId(value))
-      .filter(Boolean),
-  );
-  return summaries.filter((item) => {
-    if (organizationSlug && String(item.organizationSlug || "").trim().toLowerCase() !== organizationSlug) {
-      return false;
-    }
-    if (role === "organization_admin") {
-      return true;
-    }
-    if (!allowedCampaigns.size) {
-      return false;
-    }
-    return allowedCampaigns.has(normalizeStableId(item.campaignId)) || allowedCampaigns.has(normalizeStableId(item.campaignSlug));
-  });
+  return summaries.filter((item) => authorize(auth, "campaign_view",
+    { id: item.organizationId, slug: item.organizationSlug },
+    { id: item.campaignId, slug: item.campaignSlug }).ok);
 }
 
 async function getAccessibleCampaignSummaries(auth) {
-  const summaries = await listCampaignSummaries();
+  const summaries = await listCampaignSummaries({ auth });
   return filterAccessibleCampaignSummaries(auth, summaries).map((item) => ({
     ...item,
     organizationSlug: item.organizationSlug || normalizeSlug(item.organizationName || ""),
   }));
 }
 
-export async function getAuthStatus(request) {
+async function getSessionIdentity(request) {
   const store = getPersistence();
   const token = getSessionToken(request);
   const session = await getSessionRecord(store, token);
   const admin = session?.adminEmail ? await getAdminRecord(store, session.adminEmail) : null;
-  const authenticatedEmail = admin ? normalizeEmail(admin.email) : "";
+  const authenticatedEmail = admin && admin.isActive !== false ? normalizeEmail(admin.email) : "";
   const auth = {
     authenticated: Boolean(authenticatedEmail),
     email: authenticatedEmail,
@@ -741,6 +740,13 @@ export async function getAuthStatus(request) {
     sessionExpiresAt: session?.expiresAt || "",
     setupSupported: true,
   };
+  return auth;
+}
+
+// Portfolio data belongs to this explicit status response, not every permission
+// check. Keep the existing browser response while avoiding it on scoped reads.
+export async function getAuthStatus(request) {
+  const auth = await getSessionIdentity(request);
   if (!auth.authenticated) {
     return auth;
   }
@@ -752,7 +758,7 @@ export async function getAuthStatus(request) {
 }
 
 export async function requireManagerAccess(request, minimumRole = ROLE_VIEWER, unauthorizedMessage = "נדרשת התחברות מנהל.") {
-  const auth = await getAuthStatus(request);
+  const auth = await getSessionIdentity(request);
   if (!auth?.authenticated || !auth?.email) {
     return {
       error: failureResponse(401, unauthorizedMessage),
@@ -784,43 +790,43 @@ export async function resolveScopedAccess(request, options = {}) {
   }
 
   const auth = baseAccess.auth;
-  const summaries = await getAccessibleCampaignSummaries(auth);
-  const requestedOrganizationId = normalizeStableId(options.organizationId || resolveQueryScope(request).organizationId || "");
-  const requestedCampaignId = normalizeStableId(options.campaignId || resolveQueryScope(request).campaignId || "");
+  const queryScope = resolveQueryScope(request);
+  const requestedOrganizationId = normalizeStableId(options.organizationId || queryScope.organizationId || "");
+  const requestedCampaignId = normalizeStableId(options.campaignId || queryScope.campaignId || "");
   const hasExplicitScope = Boolean(requestedOrganizationId || requestedCampaignId);
-  const matchedSummary =
-    summaries.find((item) => {
-      const campaignMatch = requestedCampaignId
-        ? normalizeStableId(item.campaignId) === requestedCampaignId || normalizeStableId(item.campaignSlug) === requestedCampaignId
-        : true;
-      const organizationMatch = requestedOrganizationId
-        ? normalizeStableId(item.organizationId) === requestedOrganizationId
-        : true;
-      return campaignMatch && organizationMatch;
-    }) || null;
-  const selectedSummary = matchedSummary || (!hasExplicitScope ? summaries[0] || null : null);
-
-  if (hasExplicitScope && !matchedSummary) {
-    const requestedOrganization = requestedOrganizationId ? await getOrganization(requestedOrganizationId) : null;
-    const requestedCampaign = requestedOrganizationId && requestedCampaignId
-      ? await getCampaign(requestedOrganizationId, requestedCampaignId)
+  let organization = null;
+  let campaign = null;
+  if (requestedOrganizationId && requestedCampaignId) {
+    ({ organization, campaign } = await getCampaignIdentity(requestedOrganizationId, requestedCampaignId));
+  } else {
+    // Legacy unscoped/partially scoped routes select from identity records only.
+    // Keep repository order and select a viewable campaign before testing the
+    // requested action, so insufficient roles cannot cause a silent switch.
+    const organizations = await listOrganizations();
+    const requestedOrganization = requestedOrganizationId
+      ? organizations.find((item) => [item.id, item.slug].includes(requestedOrganizationId))
       : null;
-    const resourceExists = Boolean(requestedCampaign || requestedOrganization);
-    return {
-      error: failureResponse(resourceExists ? 403 : 404, resourceExists ? "אין הרשאה לקמפיין או לארגון המבוקש." : "הקמפיין המבוקש אינו קיים."),
-      auth,
-    };
+    if (requestedOrganizationId && !requestedOrganization) {
+      return { auth, error: failureResponse(404, "הקמפיין המבוקש אינו קיים.") };
+    }
+    const organizationMap = new Map(organizations.map((item) => [item.id, item]));
+    const campaigns = await listCampaigns(requestedOrganization?.id || "");
+    const selected = campaigns.find((item) =>
+      (!requestedCampaignId || [item.id, item.slug].includes(requestedCampaignId))
+      && organizationMap.has(item.organizationId)
+      && authorize(auth, "campaign_view", organizationMap.get(item.organizationId), item).ok);
+    organization = selected ? organizationMap.get(selected.organizationId) : null;
+    campaign = selected || null;
+    if (!campaign) {
+      const resourceExists = Boolean(requestedOrganization || campaigns.some((item) =>
+        requestedCampaignId && [item.id, item.slug].includes(requestedCampaignId)));
+      return {
+        auth,
+        error: failureResponse(hasExplicitScope && resourceExists ? 403 : 404,
+          hasExplicitScope && resourceExists ? "אין הרשאה לקמפיין או לארגון המבוקש." : "לא נמצא קמפיין זמין עבור המשתמש המחובר."),
+      };
+    }
   }
-
-  if (!selectedSummary) {
-    return {
-      error: failureResponse(404, "לא נמצא קמפיין זמין עבור המשתמש המחובר."),
-      auth,
-    };
-  }
-
-  const organization = await getOrganization(selectedSummary.organizationId);
-  const campaign = await getCampaign(selectedSummary.organizationId, selectedSummary.campaignId);
   if (!organization || !campaign) {
     return {
       error: failureResponse(404, "הקמפיין המבוקש אינו קיים."),
@@ -851,7 +857,6 @@ export async function resolveScopedAccess(request, options = {}) {
     auth,
     organization,
     campaign,
-    accessibleCampaigns: summaries,
   };
 }
 

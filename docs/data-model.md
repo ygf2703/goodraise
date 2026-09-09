@@ -46,9 +46,11 @@ All tables are under the `goodraise` schema.
 | `ambassadors` | Campaign-scoped identity plus name/email, nickname, registration/contact/consent metadata |
 | `rewards` | Campaign-scoped imported reward identity/details |
 | `currencies` | Currency code/name lookup |
-| `admin_users` | Email, password hash, role, organization/campaign scope metadata, activity timestamps |
+| `admin_users` | Unique trimmed lowercase email (migration 003), password hash, role, organization/campaign scope metadata, activity timestamps |
 | `admin_sessions` | User reference, session token, creation and expiry timestamps |
 | `schema_migrations` | Applied migration name/checksum and timestamp |
+
+Account emails are case-insensitive throughout setup/login. Migration 003 normalizes legacy values while preserving account UUIDs, password hashes and session references; it stops on case/whitespace collisions. New account SQL uses indexed `email = $1` with normalized input. Canonical donor/ambassador matching already uses normalized email fields; raw source payloads are retained for provenance and are not rewritten by this account migration.
 
 SQL amounts use fixed-precision numeric columns; JavaScript snapshots and calculations use `Number`. Manual matches currently use `ILS` explicitly. There is no currency-conversion pipeline.
 

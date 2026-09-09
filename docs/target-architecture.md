@@ -24,7 +24,7 @@ The platform change does not imply a complete React component rewrite or a live 
 | Established services | JavaScript ES modules reused under Node | Add types at service/repository boundaries before broader conversion; do not replace proven logic with unchecked `any` |
 | Business persistence | SQL plus Blobs/development JSON compatibility | Inventory deployed records, migrate auxiliary auth/audit/job state into SQL, verify tenant identities and totals |
 | Schema | Ordered migrations plus existing opt-in runtime DDL | Remove runtime DDL after deployed baselines are confirmed |
-| Read performance | Saved-data-first startup and shared pool; summary enumeration/full snapshots remain | Measure query counts/timing, server aggregates and pagination before changing topology |
+| Read performance | Direct scoped authorization, one joined context read, two summary queries with amount projection, indexed normalized account email | Measure remaining amount scans, stored aggregates and pagination before changing topology |
 | Public rendering | Static React shell and live API data | Decide campaign-specific metadata/SSR requirements; retain one React frontend |
 
 A future data cutover requires a backup, a rehearsal and verified source ownership. Changing the database URL is not a substitute for migrating records. Compare users/roles, organizations/campaigns, source secrets, ledger counts, snapshot amounts and runtime flags. Preserve a compatible writer and rollback path.

@@ -6,6 +6,10 @@ import { createServer } from 'node:net';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import EmbeddedPostgres from 'embedded-postgres';
+import { verifyScopedAuthorization } from './helpers/scoped-authorization.mjs';
+import { verifyPostgresAuthorizationQueries } from './helpers/postgres-authorization-queries.mjs';
+import { verifyEmailNormalizationMigration, verifySqlEmailAndSeeding, verifyEmailMigrationGuard } from './helpers/postgres-email-normalization.mjs';
+import { verifyPostgresReadQueries } from './helpers/postgres-read-queries.mjs';
 
 const directory = await mkdtemp(join(tmpdir(), 'goodraise-postgres-'));
 const port = await new Promise((resolve, reject) => {
@@ -33,7 +37,8 @@ try {
   client = database.getPgClient('goodraise_test');
   await client.connect();
   const migrations = await client.query('SELECT name FROM goodraise.schema_migrations');
-  assert.equal(migrations.rowCount, 2);
+  assert.equal(migrations.rowCount, 3);
+  await verifyEmailNormalizationMigration(client);
   const repo = await import('../backend/services/campaign-repositories.mjs');
   const ingest = await import('../backend/services/postgres-ingest.mjs');
   await repo.saveOrganization({ id: 'org-sql', slug: 'sql', name: 'SQL Organization' });
@@ -68,6 +73,12 @@ try {
   const response = await handleRequest(new Request('http://localhost/api/organizations/org-sql/campaigns/alpha/dataset', { headers: { cookie } }));
   assert.equal(response.status, 200);
   assert.equal((await response.json()).rows.length, 3);
+  const { resolveScopedAccess, getAuthStatus } = await import('../backend/services/auth-store.mjs');
+  await verifyPostgresAuthorizationQueries({ repo, handleRequest, resolveScopedAccess, cookie });
+  await verifyPostgresReadQueries({ repo, handleRequest, cookie });
+  await verifyScopedAuthorization({ repo, handleRequest, resolveScopedAccess, getAuthStatus });
+  await verifySqlEmailAndSeeding({ client, handleRequest, getAuthStatus });
+  await verifyEmailMigrationGuard({ database, run });
   await ingest.clearCampaignOperationalData({ ...scope });
   assert.equal((await repo.getCampaignDataset('org-sql', 'alpha')).rows.length, 0);
   assert.equal((await repo.getCampaignDataset('org-sql', 'beta')).rows[0].amount, 200);

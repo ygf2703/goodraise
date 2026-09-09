@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 
 import { createPlatformStore } from "./platform-store.mjs";
 import { validateSourceConfig } from "./source-security.mjs";
+import { authorize } from "./authorization.mjs";
 import { normalizePostgresConnectionString, shouldRunRuntimeSchemaMigrations } from "./postgres-connection.mjs";
 import {
   DEFAULT_PLATFORM_ORGANIZATION_ID,
@@ -177,14 +178,19 @@ function hasBearerTokenInSource(sourceConfig) {
   return Boolean(sourceConfig?.api && typeof sourceConfig.api === "object" && sourceConfig.api.bearerToken);
 }
 
+function sqlTimestamp(value) {
+  // pg returns Date for columns and strings for the same columns inside JSON.
+  return value ? new Date(value).toISOString() : "";
+}
+
 function mapOrganizationRow(row) {
   return createOrganizationRecord({
     id: row.app_id || row.slug,
     slug: row.slug,
     name: row.name,
     status: row.status || "active",
-    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at || ""),
-    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at || ""),
+    createdAt: sqlTimestamp(row.created_at),
+    updatedAt: sqlTimestamp(row.updated_at),
   });
 }
 
@@ -195,12 +201,12 @@ function mapCampaignRow(row) {
     slug: row.slug,
     name: row.name,
     status: row.status || "draft",
-    startAt: row.starts_at instanceof Date ? row.starts_at.toISOString() : String(row.starts_at || ""),
-    endAt: row.ends_at instanceof Date ? row.ends_at.toISOString() : String(row.ends_at || ""),
+    startAt: sqlTimestamp(row.starts_at),
+    endAt: sqlTimestamp(row.ends_at),
     target: Number(row.target_amount || 0) || 0,
     currency: String(row.currency_code || "ILS").trim().toUpperCase() || "ILS",
-    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at || ""),
-    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at || ""),
+    createdAt: sqlTimestamp(row.created_at),
+    updatedAt: sqlTimestamp(row.updated_at),
     updatedBy: normalizeEmail(row.updated_by || ""),
   });
 }
@@ -810,6 +816,26 @@ export async function getCampaign(organizationId, campaignId) {
   });
 }
 
+// Authorization needs identities, never config, source secrets or donation rows.
+// Resolve the organization once and constrain the campaign lookup to that tenant.
+export async function getCampaignIdentity(organizationId, campaignId) {
+  if (usesPostgresCampaignStore()) {
+    return withPostgresClient(async (client) => {
+      const { organizationRow, campaignRow } = await getCampaignScopeRows(client, organizationId, campaignId);
+      return {
+        organization: organizationRow ? mapOrganizationRow(organizationRow) : null,
+        campaign: campaignRow ? mapCampaignRow(campaignRow) : null,
+      };
+    });
+  }
+  const organization = await getOrganization(organizationId)
+    || (await listOrganizations()).find((item) => item.slug === organizationId) || null;
+  if (!organization) return { organization: null, campaign: null };
+  const campaign = await getCampaign(organization.id, campaignId)
+    || (await listCampaigns(organization.id)).find((item) => item.slug === campaignId) || null;
+  return { organization, campaign };
+}
+
 export async function saveCampaign(record) {
   if (!usesPostgresCampaignStore()) {
     const store = getStore();
@@ -1099,17 +1125,63 @@ export function applyConfiguredProjectWindow(dataset, config = {}, campaign = {}
   };
 }
 
-export async function buildCampaignContext(organizationId, campaignId) {
-  const organization = await getOrganization(organizationId);
-  const campaign = await getCampaign(organizationId, campaignId);
+export async function buildCampaignContext(organizationId, campaignId, { includeOperationalData = true } = {}) {
+  let organization;
+  let campaign;
+  let config;
+  let source;
+  let dataset;
+  if (usesPostgresCampaignStore()) {
+    const row = await withPostgresClient(async (client) => {
+      const result = await client.query(`
+        WITH selected_organization AS (
+          SELECT * FROM goodraise.organizations
+          WHERE app_id = $1 OR slug = $2
+          ORDER BY CASE WHEN app_id = $1 THEN 0 ELSE 1 END, updated_at DESC
+          LIMIT 1
+        ), selected_campaign AS (
+          SELECT c.* FROM goodraise.campaigns c
+          JOIN selected_organization o ON o.id = c.organization_id
+          WHERE c.app_id = $3 OR c.slug = $4
+          ORDER BY CASE WHEN c.app_id = $3 THEN 0 ELSE 1 END, c.updated_at DESC
+          LIMIT 1
+        )
+        SELECT to_jsonb(o) AS organization,
+          to_jsonb(c) || jsonb_build_object('organization_app_id', o.app_id, 'organization_slug', o.slug) AS campaign,
+          cfg.payload AS config,
+          ${includeOperationalData ? "src.payload AS source, ds.payload AS dataset" : "NULL AS source, NULL AS dataset"}
+        FROM selected_organization o
+        JOIN selected_campaign c ON c.organization_id = o.id
+        LEFT JOIN goodraise.campaign_configs cfg ON cfg.campaign_id = c.id
+        ${includeOperationalData ? `LEFT JOIN goodraise.campaign_sources src ON src.campaign_id = c.id
+        LEFT JOIN goodraise.campaign_datasets ds ON ds.campaign_id = c.id` : ""}
+      `, [
+        normalizeStableId(organizationId, DEFAULT_PLATFORM_ORGANIZATION_ID),
+        normalizeSlug(organizationId, DEFAULT_PLATFORM_ORGANIZATION_SLUG),
+        normalizeStableId(campaignId, "campaign"), normalizeSlug(campaignId, "campaign"),
+      ]);
+      return result.rows[0];
+    });
+    if (!row) return null;
+    organization = mapOrganizationRow(row.organization);
+    campaign = mapCampaignRow(row.campaign);
+    config = row.config;
+    source = row.source ? normalizeSourceConfig(row.source) : null;
+    dataset = row.dataset ? createCampaignDatasetRecord(row.dataset, { organizationId, campaignId }) : null;
+  } else {
+    organization = await getOrganization(organizationId);
+    campaign = await getCampaign(organizationId, campaignId);
+    if (organization && campaign) {
+      [config, source, dataset] = await Promise.all([
+        getCampaignConfig(organizationId, campaignId),
+        includeOperationalData ? getCampaignSource(organizationId, campaignId) : null,
+        includeOperationalData ? getCampaignDataset(organizationId, campaignId) : null,
+      ]);
+    }
+  }
   if (!organization || !campaign) {
     return null;
   }
-  const [config, source, dataset] = await Promise.all([
-    getCampaignConfig(organizationId, campaignId),
-    getCampaignSource(organizationId, campaignId),
-    getCampaignDataset(organizationId, campaignId),
-  ]);
   return {
     organizationId,
     campaignId,
@@ -1130,17 +1202,66 @@ export async function buildCampaignContext(organizationId, campaignId) {
   };
 }
 
-export async function listCampaignSummaries() {
+export async function listCampaignSummaries({ auth = null, organizationId = "" } = {}) {
+  const canRead = (organization, campaign) =>
+    (!organizationId || campaign.organizationId === organizationId)
+    && (!auth || authorize(auth, "campaign_view", organization, campaign).ok);
+  if (usesPostgresCampaignStore()) {
+    return withPostgresClient(async (client) => {
+      const identities = await client.query(`
+        SELECT c.id::text AS database_id, to_jsonb(o) AS organization,
+          to_jsonb(c) || jsonb_build_object('organization_app_id', o.app_id, 'organization_slug', o.slug) AS campaign
+        FROM goodraise.campaigns c
+        JOIN goodraise.organizations o ON o.id = c.organization_id
+        ORDER BY c.updated_at DESC, c.created_at DESC
+      `);
+      const allowed = identities.rows.map((row) => ({
+        databaseId: row.database_id,
+        // Match listOrganizations' existing treatment of legacy rows without app_id.
+        organization: row.organization.app_id !== null ? mapOrganizationRow(row.organization) : null,
+        campaign: mapCampaignRow(row.campaign),
+      })).filter((entry) => canRead(entry.organization, entry.campaign));
+      if (!allowed.length) return [];
+
+      // Keep the established JavaScript number conversion and summation order.
+      // Fetch only amounts and summary metadata, never full donor/config payloads.
+      // Restrict this read to authorized IDs before expanding any dataset rows.
+      const result = await client.query(`
+        SELECT c.id::text AS database_id,
+          CASE WHEN ds.payload IS NULL THEN NULL ELSE jsonb_build_object(
+            'generatedAt', ds.payload->'generatedAt', 'updatedAt', ds.payload->'updatedAt',
+            'rows', COALESCE((SELECT jsonb_agg(jsonb_build_object('amount', item.value->'amount') ORDER BY item.ordinality)
+              FROM jsonb_array_elements(CASE WHEN jsonb_typeof(ds.payload->'rows') = 'array'
+                THEN ds.payload->'rows' ELSE '[]'::jsonb END) WITH ORDINALITY AS item(value, ordinality)), '[]'::jsonb)
+          ) END AS dataset,
+          jsonb_build_object('basics', jsonb_build_object('target', cfg.payload #> '{basics,target}')) AS config
+        FROM goodraise.campaigns c
+        LEFT JOIN goodraise.campaign_datasets ds ON ds.campaign_id = c.id
+        LEFT JOIN goodraise.campaign_configs cfg ON cfg.campaign_id = c.id
+        WHERE c.id = ANY($1::uuid[])
+      `, [allowed.map((entry) => entry.databaseId)]);
+      const payloads = new Map(result.rows.map((row) => [row.database_id, row]));
+      return allowed.map(({ databaseId, organization, campaign }) => {
+        const payload = payloads.get(databaseId);
+        return buildCampaignSummary({
+          organization, campaign, config: payload?.config,
+          dataset: payload?.dataset ? createCampaignDatasetRecord(payload.dataset) : null,
+        });
+      });
+    });
+  }
   const organizations = await listOrganizations();
   const organizationMap = new Map(organizations.map((item) => [item.id, item]));
   const campaigns = await listCampaigns();
   const summaries = [];
   for (const campaign of campaigns) {
+    const organization = organizationMap.get(campaign.organizationId) || null;
+    if (!canRead(organization, campaign)) continue;
     const dataset = await getCampaignDataset(campaign.organizationId, campaign.id);
     const config = await getCampaignConfig(campaign.organizationId, campaign.id);
     summaries.push(
       buildCampaignSummary({
-        organization: organizationMap.get(campaign.organizationId) || null,
+        organization,
         campaign,
         dataset,
         config,

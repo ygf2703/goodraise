@@ -1,6 +1,6 @@
 # Architecture
 
-Updated 2026-09-08 for the Node.js/React platform migration. This describes the local implementation; it is not evidence of a production deployment.
+Updated 2026-09-09 for the Node.js/React platform migration and SQL read improvements. This describes the local implementation; it is not evidence of a production deployment.
 
 GoodRaise models `organization → campaign → configuration, sources, donations, ambassadors, analytics`. It has one Node application boundary used by local development, the standalone server, and Netlify. The browser is a React application built by Vite. TypeScript is the default for new application code; established JavaScript logic is retained inside those platforms. Direct campaign URLs resolve an explicit public context, and reject unknown/ambiguous identifiers.
 
@@ -72,6 +72,12 @@ Startup binds navigation immediately, restores the session, and reads the persis
 
 Service files are under `backend/services/`. Netlify owns transport packaging, not business logic. Both local and hosted requests run the same authorization, source, question and ingestion code. Differences are credentials, storage configuration and hosting limits.
 
+Session identity lookup is separate from the auth-status portfolio response. Scoped authorization resolves just the requested organization and campaign, using two bounded SQL identity lookups and the shared role/assignment policy. Legacy routes without full scope select from identity records. Authorization does not load donation snapshots or cache permissions between requests. Explicit status and campaign-registry responses still build portfolios; they are not part of the permission check.
+
+Campaign context uses one scoped SQL join. Portfolio summaries first read identities and apply the shared permission policy, then batch-read only amounts and summary metadata for allowed campaigns. Configuration registries omit operational dataset/source joins. Summary number conversion and summation stay in the existing JavaScript model to preserve behavior. These are query/transfer improvements, not a new stored aggregate model.
+
+Account emails are normalized on input and constrained to lowercase storage by migration 003. SQL auth refuses to run before that migration, preventing equality lookups or seeding against unnormalized legacy accounts. Account seeding reads current configuration but only upserts the requested account, skipping unchanged values. Session expiry cleanup retains its existing behavior.
+
 ## Storage and compatibility
 
 PostgreSQL holds the relational ledger and, when configured, campaign records/config/source/datasets and managers/sessions. Auxiliary audits, rate-limit records and job markers still use the key/value adapter. Consolidating these into SQL is a separate data migration, not accomplished by changing the runtime. See the [storage inventory](data-model.md#storage-inventory).
@@ -82,4 +88,4 @@ New browser keys, cookies, DOM IDs and environment variables use `goodraise`/`GO
 
 ## Engineering limits
 
-The platform migration does not eliminate all scaling work: summaries still enumerate and read campaign snapshots, complete datasets still go to managers, and browser analytics still scan/sort rows. The React compatibility adapter and JS services need incremental typing/component extraction. Public campaign publication policy, manager onboarding hardening, tenant isolation at the database level, and complete SQL ownership of auxiliary state remain separate work items. See [engineering assessment](engineering-assessment.md).
+The platform migration does not eliminate all scaling work: SQL summaries still enumerate identities and extract stored amounts, complete datasets still go to managers, and browser analytics still scan/sort rows. The React compatibility adapter and JS services need incremental typing/component extraction. Public campaign publication policy, manager onboarding hardening, tenant isolation at the database level, and complete SQL ownership of auxiliary state remain separate work items. See [engineering assessment](engineering-assessment.md).

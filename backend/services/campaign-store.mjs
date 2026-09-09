@@ -160,36 +160,17 @@ function buildRegistryFromContexts(contexts, activeCampaignId) {
   };
 }
 
-async function listAccessibleCampaignSummariesForAuth(auth) {
-  const summaries = await listCampaignSummaries();
-  const contexts = [];
-  for (const summary of summaries) {
-    const organization = await getOrganization(summary.organizationId);
-    const campaign = await getCampaign(summary.organizationId, summary.campaignId);
-    if (!organization || !campaign) {
-      continue;
-    }
-    const authorization = authorize(
-      {
-        ...auth,
-        authenticated: Boolean(auth?.authenticated ?? auth?.email),
-      },
-      "campaign_view",
-      organization,
-      campaign,
-    );
-    if (authorization.ok) {
-      contexts.push(summary);
-    }
-  }
-  return contexts;
+async function listAccessibleCampaignSummariesForAuth(auth, organizationId = "") {
+  return listCampaignSummaries({ organizationId, auth: {
+    ...auth, authenticated: Boolean(auth?.authenticated ?? auth?.email),
+  } });
 }
 
 async function buildAccessibleRegistry(access, preferredCampaignId = "") {
   const summaries = access.accessibleCampaigns || await listAccessibleCampaignSummariesForAuth(access.auth);
   const contexts = [];
   for (const summary of summaries) {
-    const context = await buildCampaignContext(summary.organizationId, summary.campaignId);
+    const context = await buildCampaignContext(summary.organizationId, summary.campaignId, { includeOperationalData: false });
     if (context) {
       contexts.push(context);
     }
@@ -324,7 +305,7 @@ export async function getOrganizationCampaignList(request, organizationId) {
   const accessibleCampaigns = await listAccessibleCampaignSummariesForAuth({
     ...access.auth,
     authenticated: true,
-  });
+  }, access.organization.id);
   return jsonResponse(200, {
     organizationId: access.organization.id,
     campaigns: accessibleCampaigns.filter((item) => item.organizationId === access.organization.id),
@@ -405,14 +386,17 @@ export async function getAdminCampaignConfig(request, scope = {}) {
     return access.error;
   }
 
-  const registry = await buildAccessibleRegistry(access, access.campaign.id);
+  // This endpoint explicitly returns a portfolio/registry. Scoped authorization
+  // no longer builds that portfolio as an implicit side effect.
+  const accessibleCampaigns = await listAccessibleCampaignSummariesForAuth(access.auth);
+  const registry = await buildAccessibleRegistry({ ...access, accessibleCampaigns }, access.campaign.id);
   return jsonResponse(200, {
     config: registry,
     activeCampaign: {
       organizationId: access.organization.id,
       campaignId: access.campaign.id,
     },
-    portfolio: access.accessibleCampaigns,
+    portfolio: accessibleCampaigns,
     updatedAt: access.campaign.updatedAt || "",
     updatedBy: registry.campaigns.find((item) => item.id === access.campaign.id)?.updatedBy || "",
     message: "הגדרות הקמפיין נטענו מהשרת.",
