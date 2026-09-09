@@ -33,11 +33,9 @@
   status = 200
   force = true
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/auth"
-  status = 200
-  force = true
+# The auth function declares its API paths in netlify/functions/auth.ts.
+# Custom paths disable its default /.netlify/functions/auth URL, so API
+# requests must reach those paths directly instead of being rewritten there.
 
 [[redirects]]
   from = "/admin"
