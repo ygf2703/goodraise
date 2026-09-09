@@ -344,14 +344,16 @@ test("local backend enforces campaign scope and returns scoped payloads", { conc
 
     await waitForHealth(`${baseUrl}/api/health`);
 
-    const publicCampaign = await requestJson(`${baseUrl}/api/public-context?project=alpha-2`);
-    assert.equal(publicCampaign.response.status, 200);
-    assert.equal(publicCampaign.payload.campaignId, "alpha-2");
-    const unknownCampaign = await requestJson(`${baseUrl}/api/public-context?project=does-not-exist`);
-    assert.equal(unknownCampaign.response.status, 404);
+    const anonymousCampaign = await requestJson(`${baseUrl}/api/public-context?project=alpha-2`);
+    assert.equal(anonymousCampaign.response.status, 401);
 
     const orgAdminCookie = await setupManager(baseUrl, "local-org-admin@example.org");
     const managerCookie = await setupManager(baseUrl, "local-a1-manager@example.org");
+    const publicCampaign = await requestJson(`${baseUrl}/api/public-context?project=alpha-2`, { cookie: orgAdminCookie });
+    assert.equal(publicCampaign.response.status, 200);
+    assert.equal(publicCampaign.payload.campaignId, "alpha-2");
+    const unknownCampaign = await requestJson(`${baseUrl}/api/public-context?project=does-not-exist`, { cookie: orgAdminCookie });
+    assert.equal(unknownCampaign.response.status, 404);
 
     const orgAdminStatus = await requestJson(`${baseUrl}/api/auth/status`, { cookie: orgAdminCookie });
     assert.equal(orgAdminStatus.response.status, 200);

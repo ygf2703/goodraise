@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getSessionToken } from "../backend/services/auth-store.mjs";
 import { parsePrizeTable } from "../scripts/prepare";
+import { canAccessManagerPages } from "../work/assets/site-header.js";
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -21,14 +22,26 @@ class MemoryStorage implements Storage {
   setItem(key: string, value: string) { this.values.set(key, value); }
 }
 
-test("direct public, legal and manager links retain their page after session restoration", () => {
+test("direct campaign, legal and manager links retain their destination after session restoration", () => {
   assert.equal(getInitialPage("/rules", true), "rules");
   assert.equal(getInitialPage("/privacy/"), "privacy");
   assert.equal(getInitialPage("/admin"), "admin");
+  assert.equal(getInitialPage("/project"), "project");
+  assert.equal(getInitialPage("/prizes/"), "prizes");
+  assert.deepEqual(getCampaignRoute("https://example.org/project"), { projectSlug: "", ambassadorSlug: "" });
   assert.equal(getInitialPage("/campaign/person", true), "project");
   assert.equal(getInitialPage("/", true), "admin");
   assert.deepEqual(getCampaignRoute("https://example.org/campaign-a/person-a"), { projectSlug: "campaign-a", ambassadorSlug: "person-a" });
   assert.deepEqual(getCampaignRoute("https://example.org/admin"), { projectSlug: "", ambassadorSlug: "" });
+  assert.deepEqual(getCampaignRoute("https://example.org/app.html"), { projectSlug: "", ambassadorSlug: "" });
+});
+
+test("the manager menu requires an authenticated server-granted capability", () => {
+  for (const session of [null, {}, { email: "test@example.org" }, { authenticated: true, email: "test@example.org", role: "platform_admin" }, { authenticated: false, email: "test@example.org", permissions: { campaignPages: true } }]) {
+    assert.equal(canAccessManagerPages(session), false);
+  }
+  assert.equal(canAccessManagerPages({ authenticated: true, email: "test@example.org", permissions: { campaignPages: true } }), true);
+  assert.equal(canAccessManagerPages({ authenticated: true, email: "test@example.org", permissions: { campaignPages: false } }), false);
 });
 
 test("generic browser names preserve existing drafts and never overwrite newer values", () => {

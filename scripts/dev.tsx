@@ -6,6 +6,7 @@ import { renderToString } from "react-dom/server";
 import type { ComponentType } from "react";
 import { serveApi } from "../backend/transport";
 import { closeDatabasePool } from "../backend/database";
+import { isLandingRequest } from "../shared/routes.mjs";
 
 const port = Number(process.env.PORT || 8767);
 const host = process.env.HOST || "127.0.0.1";
@@ -25,11 +26,11 @@ server.on("request", (request, response) => {
   vite.middlewares(request, response, () => {
     void (async () => {
       const url = request.url || "/";
-      if (/^\/goodraise\/?(?:\?.*)?$/.test(url)) {
+      if (isLandingRequest(new URL(url, "http://localhost"))) {
         response.setHeader("content-type", "text/html; charset=utf-8");
         response.end(await readFile(resolve("apps/web/public/goodraise/index.html"))); return;
       }
-      if (/\.[\w]+(?:\?.*)?$/.test(url) && !url.startsWith("/index.html")) { response.writeHead(404); response.end(); return; }
+      if (/\.[\w]+(?:\?.*)?$/.test(url) && !["/index.html", "/app.html"].includes(new URL(url, "http://localhost").pathname)) { response.writeHead(404); response.end(); return; }
       const template = await readFile(resolve("apps/web/index.html"), "utf8");
       const html = await vite.transformIndexHtml(url, template);
       // Let Vite own frontend module invalidation. Importing App through Node

@@ -168,9 +168,8 @@ async function main() {
 
     const publicContext = await authHandler(new Request("http://localhost/api/public-context"));
     const publicContextPayload = await readJson(publicContext);
-    assert(publicContext.status === 200, "Public campaign context should be available without manager login.");
-    assert(publicContextPayload.organizationId === "verify-org", "Public context should resolve the active organization.");
-    assert(publicContextPayload.campaignId === "verify-campaign", "Public context should resolve the active campaign.");
+    assert(publicContext.status === 401, "Campaign context requires manager login.");
+    assert(!publicContextPayload.campaignId, "Anonymous responses must not expose campaign context.");
 
     const datasetBefore = await authHandler(new Request("http://localhost/api/admin/dataset"));
     const datasetBeforePayload = await readJson(datasetBefore);
@@ -213,6 +212,10 @@ async function main() {
     assert(statusAfterPayload.email === uniqueEmail, "Status should return the seeded manager email.");
     assert(Array.isArray(statusAfterPayload.accessibleCampaigns), "Status should expose accessible campaigns.");
     assert(statusAfterPayload.accessibleCampaigns.length === 1, "Status should expose the seeded verification campaign.");
+    assert(statusAfterPayload.permissions.campaignPages === true, "Managers receive campaign navigation access.");
+    const contextAfter = await authHandler(new Request("http://localhost/api/public-context", { headers: { cookie: setupCookie } }));
+    const contextAfterPayload = await readJson(contextAfter);
+    assert(contextAfter.status === 200 && contextAfterPayload.campaignId === "verify-campaign", "Authorized managers can resolve campaign context.");
 
     const datasetAfter = await authHandler(
       new Request("http://localhost/api/admin/dataset", {

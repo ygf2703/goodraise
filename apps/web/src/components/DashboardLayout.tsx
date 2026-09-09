@@ -8,10 +8,9 @@ import { ManualContributionDialog } from './ManualContributionDialog';
 
 export function DashboardLayout() {
   return (<div id="goodraise-root" dir="rtl">
-
+  <Header />
 
   <div className="app-shell">
-    <Header />
 
     <main className="app-content">
       <ProjectPage />
@@ -24,6 +23,13 @@ export function DashboardLayout() {
 
       <AdminPage />
     </main>
+
+    <footer className="app-footer">
+      <nav aria-label="קישורים בתחתית העמוד">
+        <button type="button" data-page-target="rules">תקנון השתתפות</button>
+        <a href="/privacy">מדיניות פרטיות</a>
+      </nav>
+    </footer>
   </div>
   <ManualContributionDialog />
 

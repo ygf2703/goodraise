@@ -4,6 +4,10 @@ import { DesignPanel } from './DesignPanel';
 
 export function AdminPage() {
   return (<section id="page-admin" className="page-shell">
+        <div className="admin-session-bar">
+          <span id="session-status" aria-live="polite">מצב ניהול: אורח/ת</span>
+          <button id="logout-button" className="button-ghost" type="button" hidden>התנתקות</button>
+        </div>
         <LoginPanel />
 
         <div id="admin-content" className="admin-content" hidden>

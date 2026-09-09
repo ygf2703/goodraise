@@ -37,6 +37,29 @@ export async function verifyScopedAuthorization({ repo, handleRequest, resolveSc
     }
 
     assert.equal((await scoped(null)).error.status, 401);
+    const pageRequest = (email, path) => handleRequest(new Request(`http://localhost${path}`, {
+      headers: email ? { cookie: cookies.get(email) || "" } : {},
+    }));
+    const pageDataset = "/api/organizations/scope-org-a/campaigns/scope-campaign-a/public-dataset";
+    for (const path of ["/api/public-context", pageDataset]) {
+      assert.equal((await pageRequest(null, path)).status, 401, `anonymous page data ${path}`);
+      for (const email of ["scope-platform@example.org", "scope-org@example.org", "scope-manager@example.org", "scope-slug@example.org"]) {
+        assert.equal((await pageRequest(email, path)).status, 200, `manager page data ${email} ${path}`);
+        assert.equal((await getAuthStatus(request(email))).permissions.campaignPages, true);
+      }
+      for (const email of ["scope-analyst@example.org", "scope-viewer@example.org"]) {
+        const response = await pageRequest(email, path);
+        assert.equal(response.status, 403, `non-manager page data ${email} ${path}`);
+        assert.equal((await response.json()).rows, undefined);
+        assert.equal((await getAuthStatus(request(email))).permissions.campaignPages, false);
+      }
+    }
+    assert.equal((await getAuthStatus(request(null))).permissions.campaignPages, false);
+    assert.equal((await pageRequest("scope-manager@example.org", "/api/organizations/scope-org-b/campaigns/scope-campaign-b/public-dataset")).status, 403);
+    assert.equal((await pageRequest("scope-unassigned@example.org", pageDataset)).status, 403);
+    const managerContext = await (await pageRequest("scope-manager@example.org", "/api/public-context?project=shared-slug")).json();
+    assert.equal(managerContext.organizationId, "scope-org-a", "context only resolves campaigns assigned to the manager");
+    assert.equal((await pageRequest("scope-manager@example.org", "/api/public-context?organizationId=scope-org-b&campaignId=scope-campaign-b")).status, 404);
     for (const email of ["scope-platform@example.org", "scope-org@example.org", "scope-manager@example.org", "scope-slug@example.org", "scope-analyst@example.org"]) {
       const access = await scoped(email);
       assert.equal(access.error, undefined, `dataset access ${email}`);
@@ -76,15 +99,19 @@ export async function verifyScopedAuthorization({ repo, handleRequest, resolveSc
     manager.campaignIds = ["scope-other-a"];
     process.env.GOODRAISE_MANAGER_EMAILS = JSON.stringify(managers);
     assert.equal((await scoped(manager.email)).error.status, 403, "changed assignments apply on the next request");
+    assert.equal((await pageRequest(manager.email, pageDataset)).status, 403, "campaign page access follows reassignment");
     manager.isActive = false;
     process.env.GOODRAISE_MANAGER_EMAILS = JSON.stringify(managers);
     assert.equal((await scoped(manager.email, { campaignId: "scope-other-a" })).error.status, 401, "disabled managers cannot retain session access");
+    assert.equal((await pageRequest(manager.email, pageDataset)).status, 401);
 
     const logout = await handleRequest(new Request("http://localhost/api/auth/logout", {
       method: "POST", headers: { cookie: cookies.get("scope-slug@example.org") },
     }));
     assert.equal(logout.status, 200);
     assert.equal((await scoped("scope-slug@example.org")).error.status, 401, "revoked sessions cannot retain access");
+    assert.equal((await pageRequest("scope-slug@example.org", pageDataset)).status, 401);
+    assert.equal((await getAuthStatus(request("scope-slug@example.org"))).permissions.campaignPages, false);
   } finally {
     if (previousManagers === undefined) delete process.env.GOODRAISE_MANAGER_EMAILS;
     else process.env.GOODRAISE_MANAGER_EMAILS = previousManagers;

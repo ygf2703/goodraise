@@ -2,10 +2,12 @@ import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { parse } from "csv-parse/sync";
-import { readSheet } from "read-excel-file/node";
 import { buildDatasetMeta, buildDatasetRow, normalizeExternalRecord, getDonationRecordValidationError } from "../backend/services/postgres-ingest.mjs";
 import type { BootstrapData, DonationRow, PrizeModel } from "../shared/contracts/campaign";
 import { readSetting } from "../backend/services/legacy-compat.mjs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Header } from "../apps/web/src/components/Header";
 
 const root = resolve(import.meta.dirname, "..");
 const source = readSetting("SOURCE_CSV");
@@ -45,17 +47,14 @@ export async function prepareAssets(): Promise<void> {
   const meta = buildDatasetMeta(rows);
   await mkdir(resolve(root, "netlify/data"), { recursive: true });
   await writeFile(resolve(root, "netlify/data/admin-dataset.json"), JSON.stringify({ rows, meta, sourceLabel: basename(sourcePath), generatedAt: new Date().toISOString() }));
-  const xlsx = readSetting("PRIZES_XLSX") || resolve(root, "work/prizes.xlsx");
-  const csv = readSetting("PRIZES_CSV") || resolve(root, "work/prizes.csv");
-  const table: unknown[][] = existsSync(xlsx) ? await readSheet(xlsx) : existsSync(csv)
-    ? parse(await readFile(csv, "utf8"), { bom: true, skip_empty_lines: true }) : [];
-  // Never include donor rows or private dataset metadata in a public bundle.
-  const bootstrap: BootstrapData = { rows: [], meta: buildDatasetMeta([]), sourceLabel: "", prizes: parsePrizeTable(table) };
+  // Campaign data, including prizes, is loaded only after server authorization.
+  const bootstrap: BootstrapData = { rows: [], meta: buildDatasetMeta([]), sourceLabel: "", prizes: parsePrizeTable([]) };
   await mkdir(resolve(root, "apps/web/src/generated"), { recursive: true });
   await writeFile(resolve(root, "apps/web/src/generated/bootstrap.json"), JSON.stringify(bootstrap));
   await mkdir(resolve(root, "apps/web/public/assets"), { recursive: true });
   await cp(resolve(root, "work/assets"), resolve(root, "apps/web/public/assets"), { recursive: true });
   let landing = await readFile(resolve(root, "work/goodraise-landing.html"), "utf8");
+  landing = landing.replace("__SITE_HEADER__", renderToStaticMarkup(createElement(Header)));
   const images: Record<string, string> = {
     __GOODRAISE_LOGO_DATA_URI__: "goodraise-logo-transparent.png",
     __LANDING_HERO_IMAGE_DATA_URI__: "landing-hero-campaign.png",

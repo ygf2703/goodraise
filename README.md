@@ -1,6 +1,6 @@
 # GoodRaise
 
-GoodRaise is a platform for organizations running fundraising campaigns: public campaign pages, ambassador links and prizes, manager dashboards, source imports, and campaign intelligence.
+GoodRaise is a platform for organizations running fundraising campaigns: campaign pages, ambassador links and prizes, manager dashboards, source imports, and campaign intelligence. Campaign pages and prizes currently require a signed-in manager account.
 
 The application uses **one Node.js backend and one React frontend**. TypeScript covers the React components, application/API boundary, database pool, and new tooling. Existing JavaScript services and campaign controls are reused. Python is no longer required to build, run, test, or import data.
 
@@ -15,7 +15,11 @@ cp .env.example .env
 npm run dev
 ```
 
-Open [http://127.0.0.1:8767](http://127.0.0.1:8767). React and the API share this origin. `/admin`, `/rules`, `/privacy`, `/prizes`, campaign slugs, and ambassador links load directly. `/goodraise/` serves the marketing page.
+Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; placeholder copy and image areas can be replaced there. React and the API share this origin. `/admin`, `/rules`, `/privacy`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
+
+The build writes the landing page to `dist/index.html` as the default homepage. The React application shell is `dist/app.html`; application routes rewrite to this file. Legacy campaign query links at `/` and `/index.html` use a query-aware rewrite to preserve their campaign and ambassador context.
+
+All pages share the landing-page header. See the [navigation migration map](docs/navigation-migration.md) for the existing destinations retained during the gradual page migration.
 
 First login for an allowlisted manager enters password setup. Without a database URL, the same Node services use local JSON files for a development/demo dataset. PostgreSQL is required for ledger ingestion, manual contributions, and relational ambassador registration imports. There is no separate local backend implementation.
 

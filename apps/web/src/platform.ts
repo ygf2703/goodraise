@@ -21,7 +21,7 @@ export const authConfig = {
 
 export function getInitialPage(pathname: string, authenticated = false): Page {
   const path = pathname.replace(/\/$/, "");
-  if (["/admin", "/rules", "/privacy", "/prizes"].includes(path)) {
+  if (["/admin", "/rules", "/privacy", "/prizes", "/project"].includes(path)) {
     return path.slice(1) as Page;
   }
   return (!path || path === "/index.html") && authenticated ? "admin" : "project";
@@ -30,7 +30,7 @@ export function getInitialPage(pathname: string, authenticated = false): Page {
 export function getCampaignRoute(address: string): { projectSlug: string; ambassadorSlug: string } {
   const url = new URL(address);
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
-  const reserved = new Set(["admin", "rules", "privacy", "prizes", "goodraise", "index.html"]);
+  const reserved = new Set(["admin", "rules", "privacy", "prizes", "project", "goodraise", "index.html", "app.html"]);
   return {
     projectSlug: url.searchParams.get("project") || (reserved.has(parts[0]) ? "" : parts[0] || ""),
     ambassadorSlug: url.searchParams.get("ambassador") || url.searchParams.get("nickname") || parts[1] || "",

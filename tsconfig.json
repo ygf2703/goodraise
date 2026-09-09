@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["apps/**/*.ts", "apps/**/*.tsx", "backend/**/*.ts", "shared/**/*.ts", "scripts/**/*.ts", "scripts/**/*.tsx", "netlify/functions/*.ts", "tests/**/*.ts", "tests/**/*.tsx", "vite.config.ts", "playwright.config.ts"]
+  "include": ["apps/**/*.ts", "apps/**/*.tsx", "backend/**/*.ts", "shared/**/*.ts", "scripts/**/*.ts", "scripts/**/*.tsx", "netlify/**/*.ts", "tests/**/*.ts", "tests/**/*.tsx", "vite.config.ts", "playwright.config.ts"]
 }

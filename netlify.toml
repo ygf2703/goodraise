@@ -9,6 +9,14 @@
   directory = "netlify/functions"
   included_files = ["netlify/data/**"]
 
+[[edge_functions]]
+  path = "/"
+  function = "homepage"
+
+[[edge_functions]]
+  path = "/index.html"
+  function = "homepage"
+
 [[headers]]
   for = "/*"
   [headers.values]
@@ -39,19 +47,19 @@
 
 [[redirects]]
   from = "/admin"
-  to = "/index.html"
+  to = "/app.html"
   status = 200
   force = true
 
 [[redirects]]
   from = "/rules"
-  to = "/index.html"
+  to = "/app.html"
   status = 200
   force = true
 
 [[redirects]]
   from = "/privacy"
-  to = "/index.html"
+  to = "/app.html"
   status = 200
   force = true
 
@@ -65,10 +73,10 @@
 
 [[redirects]]
   from = "/:project"
-  to = "/index.html"
+  to = "/app.html"
   status = 200
 
 [[redirects]]
   from = "/:project/:ambassador"
-  to = "/index.html"
+  to = "/app.html"
   status = 200

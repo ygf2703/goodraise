@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { serveApi } from "./transport";
 import { closeDatabasePool } from "./database";
+import { isLandingRequest } from "../shared/routes.mjs";
 
 const output = resolve(import.meta.dirname, "../dist");
 const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml", ".webp": "image/webp", ".woff2": "font/woff2", ".ico": "image/x-icon" };
@@ -10,16 +11,18 @@ const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".j
 export function createApplicationServer() {
   return createServer(async (request, response) => {
     try {
-      const path = decodeURIComponent(new URL(request.url || "/", "http://localhost").pathname);
+      const url = new URL(request.url || "/", "http://localhost");
+      const path = decodeURIComponent(url.pathname);
       if (path.startsWith("/api/")) { await serveApi(request, response); return; }
       if (request.method !== "GET" && request.method !== "HEAD") {
         response.writeHead(405); response.end(); return;
       }
-      let file = resolve(output, `.${path}`);
+      const pageDocument = isLandingRequest(url) ? "index.html" : "app.html";
+      let file = path === "/" || path === "/index.html" ? resolve(output, pageDocument) : resolve(output, `.${path}`);
       if (!file.startsWith(output + sep) && file !== output) { response.writeHead(403); response.end(); return; }
       const entry = await stat(file).catch(() => null);
       if (entry?.isDirectory()) file = resolve(file, "index.html");
-      else if (!entry && /^\/(?:[^/.]+(?:\/[^/.]+)?\/?)?$/.test(path)) file = resolve(output, "index.html");
+      else if (!entry && /^\/(?:[^/.]+(?:\/[^/.]+)?\/?)?$/.test(path)) file = resolve(output, pageDocument);
       const content = await readFile(file).catch(() => null);
       if (!content) { response.writeHead(404); response.end("Not found"); return; }
       response.writeHead(200, {

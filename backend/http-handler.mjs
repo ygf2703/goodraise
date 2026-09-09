@@ -353,7 +353,7 @@ export default async (request) => {
 
   const scopedPublicDataset = matchScopedCampaignRoute(pathname, "/public-dataset");
   if (scopedPublicDataset && request.method === "GET") {
-    return getPublicDataset(scopedPublicDataset);
+    return getPublicDataset(request, scopedPublicDataset);
   }
 
   const scopedDataset = matchScopedCampaignRoute(pathname, "/dataset");

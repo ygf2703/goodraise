@@ -4,9 +4,10 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { authorize } from "./authorization.mjs";
+import { authorize, hasRequiredRole } from "./authorization.mjs";
 import {
   ROLE_ANALYST,
+  ROLE_CAMPAIGN_MANAGER,
   ROLE_PLATFORM_ADMIN,
   ROLE_VIEWER,
   isoNow,
@@ -747,6 +748,9 @@ async function getSessionIdentity(request) {
 // check. Keep the existing browser response while avoiding it on scoped reads.
 export async function getAuthStatus(request) {
   const auth = await getSessionIdentity(request);
+  auth.permissions = {
+    campaignPages: auth.authenticated && hasRequiredRole(auth.role, ROLE_CAMPAIGN_MANAGER),
+  };
   if (!auth.authenticated) {
     return auth;
   }
@@ -765,7 +769,7 @@ export async function requireManagerAccess(request, minimumRole = ROLE_VIEWER, u
       auth: null,
     };
   }
-  if (normalizeRole(auth.role, ROLE_VIEWER) === ROLE_VIEWER && minimumRole !== ROLE_VIEWER) {
+  if (!hasRequiredRole(auth.role, minimumRole)) {
     return {
       error: failureResponse(403, "אין הרשאה מספקת לביצוע הפעולה המבוקשת."),
       auth,
@@ -1022,14 +1026,11 @@ function buildPublicCampaignConfig(config = {}) {
   };
 }
 
-export async function getPublicDataset(scope = {}) {
-  const organizationId = normalizeStableId(scope.organizationId || "");
-  const campaignId = normalizeStableId(scope.campaignId || "");
-  if (!organizationId || !campaignId) {
-    return failureResponse(400, "חסרים organizationId או campaignId לטעינת התצוגה הציבורית.");
-  }
-
-  const context = await buildCampaignContext(organizationId, campaignId);
+// Keep the legacy endpoint name while the campaign pages are migrated.
+export async function getPublicDataset(request, scope = {}) {
+  const access = await resolveScopedAccess(request, { ...scope, action: "campaign_page_view" });
+  if (access.error) return access.error;
+  const context = await buildCampaignContext(access.organization.id, access.campaign.id);
   if (!context?.dataset) {
     return failureResponse(404, "מאגר הנתונים הציבורי לקמפיין המבוקש אינו זמין כרגע.");
   }
@@ -1047,8 +1048,13 @@ export async function getPublicDataset(scope = {}) {
   });
 }
 
-export async function getPublicContext(request = null) {
-  const summaries = await listCampaignSummaries();
+export async function getPublicContext(request) {
+  const access = await requireManagerAccess(request, ROLE_CAMPAIGN_MANAGER);
+  if (access.error) return access.error;
+  const summaries = (await listCampaignSummaries({ auth: access.auth })).filter((item) =>
+    authorize(access.auth, "campaign_page_view",
+      { id: item.organizationId, slug: item.organizationSlug },
+      { id: item.campaignId, slug: item.campaignSlug }).ok);
   if (!summaries.length) {
     return failureResponse(404, "לא נמצא קמפיין ציבורי פעיל להצגה כרגע.");
   }
@@ -1066,9 +1072,9 @@ export async function getPublicContext(request = null) {
     return String(right?.updatedAt || "").localeCompare(String(left?.updatedAt || ""));
   });
 
-  const query = request ? new URL(request.url).searchParams : new URLSearchParams();
-  const requestedProject = query.get("project")?.trim() || "";
-  const requestedOrganization = query.get("organization")?.trim() || "";
+  const query = new URL(request.url).searchParams;
+  const requestedProject = (query.get("campaignId") || query.get("project"))?.trim() || "";
+  const requestedOrganization = (query.get("organizationId") || query.get("organization"))?.trim() || "";
   const matching = requestedProject ? summaries.filter((summary) =>
     [summary.campaignId, summary.campaignSlug].includes(requestedProject) &&
     (!requestedOrganization || [summary.organizationId, summary.organizationSlug].includes(requestedOrganization))) : [];

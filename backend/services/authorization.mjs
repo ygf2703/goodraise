@@ -13,6 +13,7 @@ export const ACTION_POLICY = {
   platform_overview: ROLE_VIEWER,
   campaign_list: ROLE_VIEWER,
   campaign_view: ROLE_VIEWER,
+  campaign_page_view: ROLE_CAMPAIGN_MANAGER,
   dataset_view: ROLE_ANALYST,
   insight_query: ROLE_CAMPAIGN_MANAGER,
   source_view: ROLE_CAMPAIGN_MANAGER,
