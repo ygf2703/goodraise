@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getInitialPage, getCampaignRoute } from "../apps/web/src/platform";
+import { getInitialPage, getCampaignRoute, getCampaignViewEndpoint } from "../apps/web/src/platform";
 import { migrateBrowserStorage } from "../apps/web/src/storage";
 import { requestJson } from "../apps/web/src/api";
 import { migrateStore } from "../backend/services/platform-store.mjs";
@@ -34,6 +34,8 @@ test("direct campaign, legal and manager links retain their destination after se
   assert.deepEqual(getCampaignRoute("https://example.org/campaign-a/person-a"), { projectSlug: "campaign-a", ambassadorSlug: "person-a" });
   assert.deepEqual(getCampaignRoute("https://example.org/admin"), { projectSlug: "", ambassadorSlug: "" });
   assert.deepEqual(getCampaignRoute("https://example.org/app.html"), { projectSlug: "", ambassadorSlug: "" });
+  assert.equal(getCampaignViewEndpoint("https://example.org/campaign-a/person-a"), "/api/campaign-view?project=campaign-a");
+  assert.equal(getCampaignViewEndpoint("https://example.org/project?organizationId=org-a&campaignId=campaign-a&ambassador=person-a"), "/api/campaign-view?organizationId=org-a&campaignId=campaign-a");
 });
 
 test("the manager menu requires an authenticated server-granted capability", () => {

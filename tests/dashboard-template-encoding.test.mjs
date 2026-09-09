@@ -17,8 +17,8 @@ test("dashboard labels data freshness from the source snapshot rather than the l
 test("public prize navigation resolves the live campaign instead of keeping embedded demo data", async () => {
   const template = await readFile(new URL("../apps/web/src/compat/dashboard-controller.js", import.meta.url), "utf8");
   const authStore = await readFile(new URL("../backend/services/auth-store.mjs", import.meta.url), "utf8");
-  assert.match(template, /await fetchPublicContext\(\{ refresh: true \}\)/);
-  assert.match(template, /await navigateToPage\(targetPage\)/);
+  assert.match(template, /getCampaignViewEndpoint\(window\.location\.href\)/);
+  assert.match(template, /await navigateToPage\(targetPage, \{ updateHistory: true \}\)/);
   assert.match(authStore, /campaignConfig: buildPublicCampaignConfig\(context\.config\)/);
   assert.match(template, /state\.auth\.publicDatasetStatus === "unavailable"/);
 });
@@ -60,7 +60,7 @@ test("prize rankings use every successful campaign donation and isolate only the
   assert.match(template, /configuredDates\.has\(row\.date\)/);
   assert.match(template, /function getSprintScopeRows\(\)/);
   assert.match(template, /computeSprintStandings\(getSprintScopeRows\(\)\)/);
-  assert.match(template, /if \(publicPage\) \{\s*await loadPublicDataset\(\)/);
+  assert.match(template, /if \(publicPage\) \{\s*const loaded = await loadPublicDataset\(/);
 });
 
 test("campaign prize settings persist and display a sprint prize separately from uploaded prize tables", async () => {

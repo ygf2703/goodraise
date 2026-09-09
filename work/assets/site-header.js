@@ -43,7 +43,7 @@ export function mountSiteHeader(header, { loadSession = true } = {}) {
   }, options);
   renderSession(siteSession);
   if (loadSession) {
-    fetch("/api/auth/status", { credentials: "same-origin", cache: "no-store", signal: abort.signal })
+    fetch("/api/auth/status?includeCampaigns=false", { credentials: "same-origin", cache: "no-store", signal: abort.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Session unavailable");
         setSiteSession(await response.json());

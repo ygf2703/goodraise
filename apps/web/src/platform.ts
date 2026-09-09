@@ -13,11 +13,23 @@ export const authConfig = {
   changePasswordEndpoint: "/api/auth/change-password",
   resetEndpoint: "",
   publicContextEndpoint: "/api/public-context",
+  campaignViewEndpoint: "/api/campaign-view",
   datasetEndpoint: "/api/admin/dataset",
   campaignConfigEndpoint: "/api/admin/campaign-config",
   sourceConfigEndpoint: "/api/admin/source-config",
   sourceRefreshEndpoint: "/api/admin/source-refresh",
 };
+
+export function getCampaignViewEndpoint(address: string): string {
+  const url = new URL(address);
+  const query = new URLSearchParams();
+  for (const key of ["organizationId", "campaignId", "organization"]) {
+    if (url.searchParams.has(key)) query.set(key, url.searchParams.get(key)!);
+  }
+  const route = getCampaignRoute(address);
+  if (!query.has("campaignId") && route.projectSlug) query.set("project", route.projectSlug);
+  return `${authConfig.campaignViewEndpoint}${query.size ? `?${query}` : ""}`;
+}
 
 export function getInitialPage(pathname: string, authenticated = false): Page {
   const path = pathname.replace(/\/$/, "");

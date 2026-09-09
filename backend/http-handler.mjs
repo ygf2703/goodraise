@@ -3,6 +3,7 @@ import {
   getAdminDataset,
   getAuthStatus,
   getPublicContext,
+  getCampaignView,
   getPublicDataset,
   getRuntimeHealth,
   jsonResponse,
@@ -221,8 +222,12 @@ export default async (request) => {
     return getPublicContext(request);
   }
 
+  if (pathname === "/api/campaign-view" && request.method === "GET") {
+    return getCampaignView(request);
+  }
+
   if (pathname === "/api/auth/status" && request.method === "GET") {
-    const status = await getAuthStatus(request);
+    const status = await getAuthStatus(request, { includeCampaigns: url.searchParams.get("includeCampaigns") !== "false" });
     return jsonResponse(200, {
       mode: "backend",
       ...status,

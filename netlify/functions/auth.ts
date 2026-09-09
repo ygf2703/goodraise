@@ -6,6 +6,7 @@ export const config = {
   path: [
     "/api/health",
     "/api/public-context",
+    "/api/campaign-view",
     "/api/auth/status",
     "/api/auth/login",
     "/api/auth/setup",

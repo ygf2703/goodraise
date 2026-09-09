@@ -43,6 +43,17 @@ export async function verifyPostgresAuthorizationQueries({ repo, handleRequest, 
   assert.equal(reads.length, 1, "a scoped dataset response reads just the requested dataset once");
   assert.match(reads[0].text, /ds\.campaign_id = c\.id/);
 
+  const identity = await traceQueries(() => handleRequest(new Request("http://localhost/api/auth/status?includeCampaigns=false", { headers: { cookie } })));
+  assert.equal(identity.result.status, 200);
+  assert.equal((await identity.result.json()).permissions.campaignPages, true);
+  assert.ok(!identity.statements.some(({ text }) => /goodraise\.(?:campaigns|campaign_datasets|campaign_configs|campaign_sources|transactions)\b/.test(text)), "header/login identity checks do not read campaigns or payloads");
+  const view = await traceQueries(() => handleRequest(new Request("http://localhost/api/campaign-view?organizationId=org-sql&campaignId=alpha", { headers: { cookie } })));
+  assert.equal(view.result.status, 200);
+  const viewPayload = await view.result.json();
+  assert.equal(viewPayload.rows.length, 3);
+  assert.equal(viewPayload.rows[0].email, undefined);
+  assert.equal(view.statements.filter(({ text }) => /(?:FROM|JOIN) goodraise\.campaign_datasets\b/.test(text)).length, 1, "campaign view reads one selected dataset without portfolio passes");
+
   const anonymous = await traceQueries(() => resolveScopedAccess(new Request(request().url), scope));
   assert.equal(anonymous.result.error.status, 401);
   assert.equal(anonymous.statements.length, 0, "no SQL scope lookups before authentication");

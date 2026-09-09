@@ -26,7 +26,19 @@ accounts without manager permission. Successful login resumes the requested
 page. Header links retain the selected organization, campaign and ambassador
 context, including when opened in a new tab. Legal pages remain public.
 
-The legacy `/api/public-context` and scoped `/public-dataset` endpoints now
+The login form works before the session lookup finishes. Session restoration
+uses `/api/auth/status?includeCampaigns=false`; successful login/setup returns
+the same identity and capability without another status request. Campaign code
+is imported only after manager access is confirmed.
+
+Project and Prizes load one `/api/campaign-view` response containing the scoped
+presentation configuration, prize rules and donation fields needed for totals
+and rankings. Donor contact fields and administrative source/settings payloads
+are omitted. Header navigation between these two views retains the application
+and revalidates the campaign through the server. Back/forward navigation is
+supported; entering the management dashboard loads its full data and settings.
+
+The campaign view, legacy `/api/public-context` and scoped `/public-dataset` endpoints
 require manager authorization. Context discovery only considers accessible
 campaigns; dataset reads enforce the existing organization and campaign scope
 through `campaign_page_view`. The static bundle contains neither donor rows nor

@@ -729,6 +729,10 @@ async function getSessionIdentity(request) {
   const token = getSessionToken(request);
   const session = await getSessionRecord(store, token);
   const admin = session?.adminEmail ? await getAdminRecord(store, session.adminEmail) : null;
+  return buildSessionIdentity(admin, session);
+}
+
+function buildSessionIdentity(admin, session) {
   const authenticatedEmail = admin && admin.isActive !== false ? normalizeEmail(admin.email) : "";
   const auth = {
     authenticated: Boolean(authenticatedEmail),
@@ -740,18 +744,18 @@ async function getSessionIdentity(request) {
     campaignSlugs: Array.isArray(admin?.campaignSlugs) ? admin.campaignSlugs : [],
     sessionExpiresAt: session?.expiresAt || "",
     setupSupported: true,
+    permissions: {
+      campaignPages: Boolean(authenticatedEmail) && hasRequiredRole(admin?.role, ROLE_CAMPAIGN_MANAGER),
+    },
   };
   return auth;
 }
 
 // Portfolio data belongs to this explicit status response, not every permission
 // check. Keep the existing browser response while avoiding it on scoped reads.
-export async function getAuthStatus(request) {
+export async function getAuthStatus(request, { includeCampaigns = true } = {}) {
   const auth = await getSessionIdentity(request);
-  auth.permissions = {
-    campaignPages: auth.authenticated && hasRequiredRole(auth.role, ROLE_CAMPAIGN_MANAGER),
-  };
-  if (!auth.authenticated) {
+  if (!auth.authenticated || !includeCampaigns) {
     return auth;
   }
   const accessibleCampaigns = await getAccessibleCampaignSummaries(auth);
@@ -815,10 +819,14 @@ export async function resolveScopedAccess(request, options = {}) {
     }
     const organizationMap = new Map(organizations.map((item) => [item.id, item]));
     const campaigns = await listCampaigns(requestedOrganization?.id || "");
-    const selected = campaigns.find((item) =>
+    const candidates = campaigns.filter((item) =>
       (!requestedCampaignId || [item.id, item.slug].includes(requestedCampaignId))
       && organizationMap.has(item.organizationId)
       && authorize(auth, "campaign_view", organizationMap.get(item.organizationId), item).ok);
+    if (options.requireUniqueCampaign && requestedCampaignId && candidates.length > 1) {
+      return { auth, error: failureResponse(409, "יש לציין ארגון עבור מזהה קמפיין שאינו ייחודי.") };
+    }
+    const selected = candidates[0];
     organization = selected ? organizationMap.get(selected.organizationId) : null;
     campaign = selected || null;
     if (!campaign) {
@@ -954,19 +962,16 @@ export async function getAdminDataset(request, scope = {}) {
   });
 }
 
-function buildPublicDatasetRows(rows = []) {
+function buildPublicDatasetRows(rows = [], { compact = false } = {}) {
   return rows.map((row) => ({
     id: row?.id || "",
     createdIso: row?.createdIso || "",
     date: row?.date || "",
     hour: Number(row?.hour || 0),
-    email: "",
-    donor: "מוסתר בצפייה ציבורית",
     ambassador: row?.ambassador || "",
     amount: Number(row?.amount || 0),
-    city: "",
     status: row?.status || "",
-    chargeResult: "",
+    ...(compact ? {} : { email: "", donor: "מוסתר בצפייה ציבורית", city: "", chargeResult: "" }),
   }));
 }
 
@@ -977,11 +982,13 @@ function buildPublicCampaignConfig(config = {}) {
   const donation = source.donation && typeof source.donation === "object" ? source.donation : {};
   const goals = source.goals && typeof source.goals === "object" ? source.goals : {};
 
-  // The public prize page needs campaign presentation and prize rules, never source secrets or ambassador PII.
+  // Campaign pages need presentation and prize rules, never source secrets or contact details.
   return {
     basics: {
       id: basics.id || "",
       organizationId: basics.organizationId || "",
+      organizationName: basics.organizationName || "",
+      organizationSlug: basics.organizationSlug || "",
       slug: basics.slug || "",
       campaignName: basics.campaignName || "",
       status: basics.status || "",
@@ -991,6 +998,9 @@ function buildPublicCampaignConfig(config = {}) {
       startTime: basics.startTime || "",
       endDate: basics.endDate || "",
       endTime: basics.endTime || "",
+      startAt: basics.startAt || "",
+      endAt: basics.endAt || "",
+      timeZone: basics.timeZone || "Asia/Jerusalem",
     },
     branding: {
       eyebrow: branding.eyebrow || "",
@@ -1013,6 +1023,10 @@ function buildPublicCampaignConfig(config = {}) {
       externalDonationUrl: donation.externalDonationUrl || "",
       trustNote: donation.trustNote || "",
       successHint: donation.successHint || "",
+    },
+    ambassadors: {
+      records: (Array.isArray(source.ambassadors?.records) ? source.ambassadors.records : [])
+        .map((record) => ({ fullName: record?.fullName || "", nickname: record?.nickname || "", personalTarget: Number(record?.personalTarget || 0), team: record?.team || "" })),
     },
     goals: {
       campaignGoal: Number(goals.campaignGoal || basics.target || 0),
@@ -1040,11 +1054,21 @@ export async function getPublicDataset(request, scope = {}) {
     campaignId: context.campaign.id,
     organization: context.organization,
     campaign: context.campaign,
-    rows: buildPublicDatasetRows(Array.isArray(context.dataset.rows) ? context.dataset.rows : []),
+    rows: buildPublicDatasetRows(Array.isArray(context.dataset.rows) ? context.dataset.rows : [], { compact: scope.compact }),
     meta: context.dataset.meta && typeof context.dataset.meta === "object" ? context.dataset.meta : {},
     sourceLabel: context.dataset.sourceLabel || "קובץ בסיס ציבורי",
     generatedAt: context.dataset.generatedAt || context.dataset.updatedAt || "",
     campaignConfig: buildPublicCampaignConfig(context.config),
+  });
+}
+
+export async function getCampaignView(request) {
+  const query = new URL(request.url).searchParams;
+  return getPublicDataset(request, {
+    organizationId: query.get("organizationId") || query.get("organization") || "",
+    campaignId: query.get("campaignId") || query.get("project") || "",
+    requireUniqueCampaign: true,
+    compact: true,
   });
 }
 
@@ -1203,8 +1227,7 @@ export async function loginManager({ email, password, request }) {
   });
   return successResponse(
     {
-      authenticated: true,
-      email: normalizedEmail,
+      ...buildSessionIdentity(admin, { expiresAt }),
       message: "הכניסה הצליחה. הדשבורד הניהולי נפתח.",
     },
     request.url,
@@ -1280,8 +1303,7 @@ export async function setupManagerPassword({ email, password, confirmPassword, r
   });
   return successResponse(
     {
-      authenticated: true,
-      email: normalizedEmail,
+      ...buildSessionIdentity(admin, { expiresAt }),
       message: "הסיסמה נשמרה והגישה לפאנל הניהול נפתחה.",
     },
     request.url,

@@ -1,13 +1,13 @@
 import { createGoodRaiseIntelligence } from '../../../../shared/intelligence/engine.mjs';
 import defaultCampaign from '../default-campaign.json';
-import { authConfig, getInitialPage, getCampaignRoute } from '../platform';
+import { authConfig, getInitialPage, getCampaignRoute, getCampaignViewEndpoint } from '../platform';
 import { migrateBrowserStorage } from '../storage';
 import { requestJson } from '../api';
 import { canAccessManagerPages, setSiteSession, logoutSiteSession } from '../../../../work/assets/site-header.js';
 
 /** Existing campaign controls, scoped to one React mount. Dynamic chart/table containers
  * are owned by this adapter until they are converted to individual React components. */
-export function mountDashboard(root, { bootstrap, signal, onReady, onError }) {
+export function mountDashboard(root, { bootstrap, signal, onReady, onError, session: initialSession = null, initialCampaignData = null }) {
   migrateBrowserStorage();
   const fetch = (input, init = {}) => window.fetch(input, { ...init, signal });
   const listen = (target, event, callback, options = {}) => target.addEventListener(event, callback, { ...options, signal });
@@ -948,10 +948,9 @@ function getAmbassadorRecordByFullName(fullName) {
 }
 
 function applyAmbassadorContextFromUrl() {
-  const url = new URL(window.location.href);
-  const segments = url.pathname.split("/").filter(Boolean);
-  const routeProjectSlug = normalizeUrlSlug(url.searchParams.get("project") || segments[0] || "");
-  const routeAmbassadorSlug = normalizeUrlSlug(url.searchParams.get("ambassador") || url.searchParams.get("nickname") || segments[1] || "");
+  const route = getCampaignRoute(window.location.href);
+  const routeProjectSlug = normalizeUrlSlug(route.projectSlug);
+  const routeAmbassadorSlug = normalizeUrlSlug(route.ambassadorSlug);
   if (!routeAmbassadorSlug) {
     return;
   }
@@ -1689,6 +1688,8 @@ function applyCampaignBuilderConfig(config, options = {}) {
     mediaType: branding.mediaType || state.campaignPage.mediaType,
     mediaUrl: branding.mediaUrl || state.campaignPage.mediaUrl,
     mediaAlt: branding.mediaAlt || state.campaignPage.mediaAlt,
+    campaignLogoUrl: branding.campaignLogoUrl || state.campaignPage.campaignLogoUrl,
+    organizationLogoUrl: branding.organizationLogoUrl || state.campaignPage.organizationLogoUrl,
     fontFamily: branding.fontFamily || state.campaignPage.fontFamily,
     theme: branding.theme || state.campaignPage.theme,
     amountCards: donation.presets || state.campaignPage.amountCards,
@@ -1775,9 +1776,7 @@ async function switchActiveCampaign(campaignId, options = {}) {
   persistActiveCampaignLegacyState();
   storeCampaignRegistry(state.campaignRegistry);
   if (canUseBackendAuth() && isManagerAuthenticated()) {
-    await loadProtectedManagerData(getActiveCampaignIdentity(nextRegistry, targetEntry.id), {
-      includeCampaignBuilder: state.ui.adminTab === "design",
-    });
+    await loadProtectedManagerData(getActiveCampaignIdentity(nextRegistry, targetEntry.id));
   }
   if (options.message) {
     setCampaignBuilderStatus(options.message, "success");
@@ -2289,17 +2288,6 @@ function buildScopedAdminEndpoint(kind, scope = getActiveCampaignIdentity()) {
   return getFallbackAdminEndpoint(kind);
 }
 
-function buildScopedPublicDatasetEndpoint(scope = getActiveCampaignIdentity()) {
-  const organizationId = String(scope?.organizationId || "").trim();
-  const campaignId = String(scope?.campaignId || "").trim();
-  if (!organizationId || !campaignId) {
-    return "";
-  }
-  const encodedOrganizationId = encodeURIComponent(organizationId);
-  const encodedCampaignId = encodeURIComponent(campaignId);
-  return buildAuthUrl(`/api/organizations/${encodedOrganizationId}/campaigns/${encodedCampaignId}/public-dataset`);
-}
-
 async function fetchPublicContext(options = {}) {
   if (!isManagerAuthenticated()) return null;
   const contextEndpoint = String(AUTH_CONFIG?.publicContextEndpoint || "").trim();
@@ -2612,7 +2600,7 @@ async function authRequest(endpoint, options = {}) {
   return result;
 }
 
-async function hydrateAuthSession() {
+async function hydrateAuthSession(session = null, campaignData = null) {
   clearSessionState();
   if (!canUseBackendAuth()) {
     state.auth.backendAvailable = false;
@@ -2621,11 +2609,18 @@ async function hydrateAuthSession() {
     return;
   }
   try {
-    const { response, payload } = await authRequest(AUTH_CONFIG.statusEndpoint);
+    const { response, payload } = session
+      ? { response: { ok: true }, payload: session }
+      : await authRequest(`${AUTH_CONFIG.statusEndpoint}?includeCampaigns=false`);
     state.auth.backendAvailable = response.ok;
     if (response.ok && payload?.authenticated && payload?.email) {
       setAuthenticatedSession(payload);
       if (!isManagerAuthenticated()) return;
+      if (["project", "prizes"].includes(getInitialPage(window.location.pathname, true))) {
+        if (campaignData) applyCampaignViewData(campaignData);
+        else await loadPublicDataset();
+        return;
+      }
       const publicScope = await fetchPublicContext();
       if (!publicScope) {
         state.auth.campaignAccessError = "הקמפיין המבוקש אינו זמין או שאין לך הרשאה לצפות בו.";
@@ -2634,7 +2629,7 @@ async function hydrateAuthSession() {
       const scope = publicScope;
       applyServerScope(payload, scope);
       try {
-        await loadProtectedManagerData(scope, { includeCampaignBuilder: false });
+        await loadProtectedManagerData(scope);
       } catch (error) {
         // Never leave an authenticated manager looking at embedded sample data.
         const loadedPublicDataset = await loadPublicDataset(scope).catch(() => false);
@@ -2683,46 +2678,28 @@ async function loadPublicDataset(scope = getActiveCampaignIdentity(), options = 
   if (!isManagerAuthenticated() || state.auth.campaignAccessError) return false;
   state.auth.publicDatasetStatus = "loading";
   state.auth.publicDatasetError = "";
-  const fetchDataset = async (effectiveScope) => {
-    const endpoint = buildScopedPublicDatasetEndpoint(effectiveScope);
-    if (!endpoint) {
-      return { ok: false, payload: {}, scope: effectiveScope };
-    }
-    const { response, payload } = await authRequest(endpoint);
-    return {
-      ok: response.ok && Array.isArray(payload?.rows) && !!payload?.meta,
-      payload,
-      scope: effectiveScope,
-    };
-  };
-
-  const requestedScope = scope && scope.organizationId && scope.campaignId ? scope : null;
-  const discoveredScope = options.preferRequestedScope
-    ? null
-    : await fetchPublicContext({ refresh: true });
-  if (!options.preferRequestedScope && getCampaignRoute(window.location.href).projectSlug && !discoveredScope) {
+  const endpoint = new URL(getCampaignViewEndpoint(window.location.href), window.location.origin);
+  if (options.preferRequestedScope && scope.organizationId && scope.campaignId) {
+    endpoint.search = new URLSearchParams({ organizationId: scope.organizationId, campaignId: scope.campaignId }).toString();
+  }
+  const { response, payload } = await authRequest(`${endpoint.pathname}${endpoint.search}`);
+  if (options.isCurrent && !options.isCurrent()) return false;
+  if (!response.ok || !Array.isArray(payload?.rows) || !payload?.meta) {
     state.auth.publicDatasetStatus = "unavailable";
-    state.auth.publicDatasetError = "הקמפיין המבוקש אינו זמין.";
+    state.auth.publicDatasetError = payload?.message || "טעינת הקמפיין נכשלה. נסו שוב.";
+    if (response.status === 401 || response.status === 403) {
+      clearSessionState();
+      setPage("admin");
+    }
     return false;
   }
-  const candidateScopes = [discoveredScope, requestedScope]
-    .filter((candidate, index, list) => candidate?.organizationId && candidate?.campaignId && list.findIndex((item) => item.organizationId === candidate.organizationId && item.campaignId === candidate.campaignId) === index);
-  let datasetResult = { ok: false, payload: {}, scope: requestedScope || discoveredScope || {} };
-  for (const candidateScope of candidateScopes) {
-    datasetResult = await fetchDataset(candidateScope);
-    if (datasetResult.ok) {
-      break;
-    }
-  }
-  if (!datasetResult.ok) {
-    state.auth.publicDatasetStatus = "unavailable";
-    state.auth.publicDatasetError = String(datasetResult.payload?.error || datasetResult.payload?.message || "מקור הנתונים הציבורי אינו זמין כרגע.").trim();
-    return false;
-  }
+  applyCampaignViewData(payload);
+  return true;
+}
 
-  const payload = datasetResult.payload;
-  applyServerScope(payload, datasetResult.scope);
-
+function applyCampaignViewData(payload) {
+  applyServerScope(payload);
+  state.auth.adminDatasetLoaded = false;
   state.rows = enrichRows(payload.rows, payload.meta);
   state.meta = payload.meta;
   state.sourceLabel = payload.sourceLabel || "קובץ בסיס ציבורי";
@@ -3172,7 +3149,7 @@ async function ensureCampaignBuilderConfigLoaded(scope = getActiveCampaignIdenti
   return hydrateCampaignBuilderConfig(scope);
 }
 
-async function loadProtectedManagerData(scope = getActiveCampaignIdentity(), options = {}) {
+async function loadProtectedManagerData(scope = getActiveCampaignIdentity()) {
   const dataset = loadAdminDataset(scope);
   // Builder snapshots can contain an older source copy. Apply the authoritative
   // source response last so loading design settings cannot switch the connector.
@@ -3268,13 +3245,21 @@ function setPage(page) {
   refreshAccessUi();
 }
 
-async function navigateToPage(page) {
-  setPage(page);
-  const publicPage = state.ui.page === "project" || state.ui.page === "prizes";
-  // Public pages must not keep an earlier in-memory snapshot after the source updates.
+let navigationRevision = 0;
+async function navigateToPage(page, { updateHistory = false } = {}) {
+  const revision = ++navigationRevision;
+  const publicPage = page === "project" || page === "prizes";
+  // Revalidate the selected campaign in one request without rebooting the app.
   if (publicPage) {
-    await loadPublicDataset().catch(() => false);
+    const loaded = await loadPublicDataset(getActiveCampaignIdentity(), { preferRequestedScope: updateHistory, isCurrent: () => revision === navigationRevision }).catch(() => false);
+    if (revision !== navigationRevision) return;
+    if (!loaded) { renderAll(); return; }
   }
+  if (updateHistory) {
+    const link = root.querySelector(`.site-header [data-page-target="${page}"]`);
+    window.history.pushState(null, "", link?.getAttribute("href") || `/${page}`);
+  }
+  setPage(page);
   renderAll();
 }
 
@@ -3296,7 +3281,7 @@ function setAdminTab(tab) {
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-selected", isActive ? "true" : "false");
   });
-  if (nextTab === "design") {
+  if (nextTab === "design" && state.ui.page === "admin") {
     if (isManagerAuthenticated() && !state.auth.campaignConfigLoaded) {
       setCampaignBuilderStatus("טוענים את הגדרות הקמפיין מהשרת...", "warning");
       ensureCampaignBuilderConfigLoaded()
@@ -3330,7 +3315,7 @@ function refreshAccessUi() {
       ? "אין לחשבון זה הרשאת מנהל. דף הפרויקט, הפרסים והניהול זמינים כרגע למנהלים בלבד."
       : "יש להיכנס עם חשבון מנהל מורשה כדי לצפות בדף הפרויקט, בפרסים ובדשבורד."), state.session ? "error" : "");
   }
-  if (hasAccess) {
+  if (hasAccess && isAdminPage) {
     setAdminTab(state.ui.adminTab);
   }
 }
@@ -7089,15 +7074,23 @@ function renderAll() {
 
 function bindEvents() {
   elements.navButtons.forEach((button) => {
-    if (button.tagName === "A") return;
-    listen(button, "click", async () => {
+    listen(button, "click", async (event) => {
       const targetPage = button.dataset.pageTarget || "prizes";
-      await navigateToPage(targetPage);
+      if (button.tagName === "A") {
+        if (targetPage === "admin" || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button) return;
+        event.preventDefault();
+      }
+      await navigateToPage(targetPage, { updateHistory: true });
       root.querySelector(".app-content").scrollIntoView({ block: "start" });
       if (targetPage === "admin" && !isManagerAuthenticated()) {
         elements.loginEmail.focus();
       }
     });
+  });
+  listen(window, "popstate", () => {
+    const page = getInitialPage(window.location.pathname, isManagerAuthenticated());
+    if (page === "admin") { window.location.reload(); return; }
+    void navigateToPage(page);
   });
 
   elements.adminTabButtons.forEach((button) => {
@@ -7118,7 +7111,7 @@ function bindEvents() {
         return;
       }
       if (action === "go-prizes") {
-        setPage("prizes");
+        void navigateToPage("prizes", { updateHistory: true });
         return;
       }
       if (action === "set-frequency") {
@@ -7717,7 +7710,7 @@ function bindEvents() {
       state.auth.backendAvailable = true;
 
       if (response.ok && payload?.authenticated && payload?.email) {
-        await hydrateAuthSession();
+        await hydrateAuthSession(payload);
         setSetupMode(false);
         elements.loginPassword.value = "";
         if (elements.loginPasswordConfirm) {
@@ -8123,14 +8116,14 @@ try {
   bindEvents();
   setPage(getInitialPage(window.location.pathname));
   renderAll();
-  await hydrateAuthSession();
+  await hydrateAuthSession(initialSession, initialCampaignData);
   // Campaign data is loaded only after the server confirms manager access.
-  if (isManagerAuthenticated() && !state.auth.adminDatasetLoaded) {
+  if (isManagerAuthenticated() && !state.auth.adminDatasetLoaded && state.auth.publicDatasetStatus === "pending") {
     await loadPublicDataset().catch(() => false);
   }
   applyAmbassadorContextFromUrl();
   setPage(getInitialPage(window.location.pathname, isManagerAuthenticated()));
-  setAdminTab(state.ui.adminTab);
+  if (state.ui.page === "admin") setAdminTab(state.ui.adminTab);
   setLoginMessage("");
   setImportMessage(getDefaultPrizeStatusMessage());
   renderSourceConfigControls();

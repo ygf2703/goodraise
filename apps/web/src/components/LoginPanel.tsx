@@ -12,10 +12,10 @@ export function LoginPanel() {
                 </div>
                 <div className="login-logos">
                   <div className="login-logo-frame">
-                    <img id="login-campaign-logo" alt="לוגו הקמפיין" />
+                    <img id="login-campaign-logo" src="/assets/goodraise-logo-transparent.png" alt="גודרייז" />
                   </div>
                   <div className="login-logo-frame">
-                    <img id="login-org-logo" alt="לוגו הארגון" />
+                    <img id="login-org-logo" src="/assets/goodraise-logo-transparent.png" alt="גודרייז" />
                   </div>
                 </div>
               </div>
@@ -45,7 +45,7 @@ export function LoginPanel() {
               </label>
               <div className="login-actions">
                 <button id="login-button" className="button-primary action-button" type="submit">כניסה לפאנל הניהול</button>
-                <button id="login-reset-button" className="button-ghost" type="button">איפוס סיסמה</button>
+                <button id="login-reset-button" className="button-ghost" type="button" hidden>איפוס סיסמה</button>
               </div>
               <div id="login-mode-hint" className="text-small text-muted">הגישה לנתוני הקמפיין זמינה למנהלים מורשים בלבד.</div>
               <div id="login-message" className="login-message text-small" aria-live="polite"></div>

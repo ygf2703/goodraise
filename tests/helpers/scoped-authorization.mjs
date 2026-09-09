@@ -27,12 +27,26 @@ export async function verifyScopedAuthorization({ repo, handleRequest, resolveSc
       await repo.saveCampaign({ id: `scope-campaign-${suffix}`, slug: "shared-slug", organizationId: `scope-org-${suffix}`, name: `Campaign ${suffix}` });
     }
     await repo.saveCampaign({ id: "scope-other-a", slug: "other-a", organizationId: "scope-org-a", name: "Other campaign" });
+    await repo.saveCampaignDataset("scope-org-a", "scope-campaign-a", {
+      rows: [{ id: "scope-row", date: "2026-09-01", createdIso: "2026-09-01T10:00", hour: 10, donor: "Private donor", email: "private@example.org", city: "Private city", ambassador: "Test ambassador", amount: 120, status: "success" }],
+      meta: { uniqueDates: ["2026-09-01"], projectDates: ["2026-09-01"], defaultFrom: "2026-09-01", defaultTo: "2026-09-01" },
+    });
+    await repo.saveCampaignConfig("scope-org-a", "scope-campaign-a", {
+      basics: { slug: "shared-slug", timeZone: "Asia/Jerusalem" },
+      branding: { campaignLogoUrl: "/campaign-logo.png" },
+      ambassadors: { records: [{ fullName: "Test ambassador", nickname: "test", personalTarget: 1000, team: "A", email: "ambassador@example.org", phone: "private" }] },
+      dataSource: { secret: "private" },
+    });
     for (const manager of managers) {
       const setup = await handleRequest(new Request("http://localhost/api/auth/setup", {
         method: "POST",
         body: JSON.stringify({ email: manager.email, password: "ScopeTest123!", confirmPassword: "ScopeTest123!" }),
       }));
       assert.equal(setup.status, 200, `setup ${manager.email}`);
+      const identity = await setup.json();
+      assert.equal(identity.role, manager.role, "login/setup supplies the checked identity without another status request");
+      assert.equal(identity.permissions.campaignPages, !["analyst", "viewer"].includes(manager.role));
+      assert.equal(identity.accessibleCampaigns, undefined, "login does not enumerate the portfolio");
       cookies.set(manager.email, setup.headers.get("set-cookie"));
     }
 
@@ -41,7 +55,8 @@ export async function verifyScopedAuthorization({ repo, handleRequest, resolveSc
       headers: email ? { cookie: cookies.get(email) || "" } : {},
     }));
     const pageDataset = "/api/organizations/scope-org-a/campaigns/scope-campaign-a/public-dataset";
-    for (const path of ["/api/public-context", pageDataset]) {
+    const campaignView = "/api/campaign-view?organizationId=scope-org-a&campaignId=scope-campaign-a";
+    for (const path of ["/api/public-context", pageDataset, campaignView]) {
       assert.equal((await pageRequest(null, path)).status, 401, `anonymous page data ${path}`);
       for (const email of ["scope-platform@example.org", "scope-org@example.org", "scope-manager@example.org", "scope-slug@example.org"]) {
         assert.equal((await pageRequest(email, path)).status, 200, `manager page data ${email} ${path}`);
@@ -55,6 +70,25 @@ export async function verifyScopedAuthorization({ repo, handleRequest, resolveSc
       }
     }
     assert.equal((await getAuthStatus(request(null))).permissions.campaignPages, false);
+    const lightweightStatus = await (await pageRequest("scope-manager@example.org", "/api/auth/status?includeCampaigns=false")).json();
+    assert.equal(lightweightStatus.permissions.campaignPages, true);
+    assert.equal(lightweightStatus.accessibleCampaigns, undefined);
+    const compactView = await (await pageRequest("scope-manager@example.org", campaignView)).json();
+    assert.equal(compactView.rows[0].amount, 120);
+    for (const key of ["email", "donor", "city"]) assert.equal(compactView.rows[0][key], undefined, `campaign view excludes ${key}`);
+    assert.ok(compactView.campaignConfig);
+    assert.deepEqual(compactView.campaignConfig.ambassadors.records, [{ fullName: "Test ambassador", nickname: "test", personalTarget: 1000, team: "A" }]);
+    assert.equal(compactView.campaignConfig.branding.campaignLogoUrl, "/campaign-logo.png");
+    assert.equal(compactView.campaignConfig.dataSource, undefined);
+    assert.equal(compactView.source, undefined);
+    for (const email of ["scope-platform@example.org", "scope-org@example.org"]) {
+      const legacySelection = await (await pageRequest(email, "/api/public-context")).json();
+      const selection = await (await pageRequest(email, "/api/campaign-view")).json();
+      assert.equal(selection.campaignId, legacySelection.campaignId, "unscoped navigation preserves campaign selection");
+      assert.equal(selection.organizationId, legacySelection.organizationId);
+    }
+    assert.equal((await pageRequest("scope-platform@example.org", "/api/campaign-view?project=shared-slug")).status, 409, "ambiguous slugs require an organization");
+    assert.equal((await pageRequest("scope-manager@example.org", "/api/campaign-view?organizationId=scope-org-b&campaignId=scope-campaign-b")).status, 403);
     assert.equal((await pageRequest("scope-manager@example.org", "/api/organizations/scope-org-b/campaigns/scope-campaign-b/public-dataset")).status, 403);
     assert.equal((await pageRequest("scope-unassigned@example.org", pageDataset)).status, 403);
     const managerContext = await (await pageRequest("scope-manager@example.org", "/api/public-context?project=shared-slug")).json();
@@ -100,6 +134,7 @@ export async function verifyScopedAuthorization({ repo, handleRequest, resolveSc
     process.env.GOODRAISE_MANAGER_EMAILS = JSON.stringify(managers);
     assert.equal((await scoped(manager.email)).error.status, 403, "changed assignments apply on the next request");
     assert.equal((await pageRequest(manager.email, pageDataset)).status, 403, "campaign page access follows reassignment");
+    assert.equal((await pageRequest(manager.email, campaignView)).status, 403);
     manager.isActive = false;
     process.env.GOODRAISE_MANAGER_EMAILS = JSON.stringify(managers);
     assert.equal((await scoped(manager.email, { campaignId: "scope-other-a" })).error.status, 401, "disabled managers cannot retain session access");
@@ -111,6 +146,7 @@ export async function verifyScopedAuthorization({ repo, handleRequest, resolveSc
     assert.equal(logout.status, 200);
     assert.equal((await scoped("scope-slug@example.org")).error.status, 401, "revoked sessions cannot retain access");
     assert.equal((await pageRequest("scope-slug@example.org", pageDataset)).status, 401);
+    assert.equal((await pageRequest("scope-slug@example.org", campaignView)).status, 401);
     assert.equal((await getAuthStatus(request("scope-slug@example.org"))).permissions.campaignPages, false);
   } finally {
     if (previousManagers === undefined) delete process.env.GOODRAISE_MANAGER_EMAILS;

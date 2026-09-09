@@ -1,34 +1,50 @@
 import { memo, useEffect, useState } from "react";
 import { DashboardLayout } from "./components/DashboardLayout";
 import bootstrap from "./generated/bootstrap.json";
+import { mountAuthGate, requestSession } from "./auth-gate";
+import { getCampaignViewEndpoint, getInitialPage } from "./platform";
+import { requestJson } from "./api";
 
 // The adapter owns the empty chart/table containers inside this fixed layout.
 // Memoization prevents React from reconciling those containers on status changes.
 const CampaignLayout = memo(DashboardLayout);
 
-export function App() {
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+export function App({ sessionRequest }: { sessionRequest?: ReturnType<typeof requestSession> } = {}) {
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("ready");
   useEffect(() => {
     const abort = new AbortController();
+    const gate = new AbortController();
     let dispose: (() => void) | undefined;
-    void import("./compat/dashboard-controller.js").then(({ mountDashboard }) => {
-      if (abort.signal.aborted) return;
-      const root = document.getElementById("goodraise-root");
-      if (!root) throw new Error("The application layout is missing.");
-      dispose = mountDashboard(root, {
-        bootstrap,
-        signal: abort.signal,
-        onReady: () => { if (!abort.signal.aborted) setStatus("ready"); },
-        onError: () => { if (!abort.signal.aborted) setStatus("error"); },
-      });
-    }).catch((error: unknown) => {
-      if (!abort.signal.aborted) {
-        console.error("application_start_failed", error);
-        setStatus("error");
-      }
+    const root = document.getElementById("goodraise-root");
+    if (!root) throw new Error("The application layout is missing.");
+    mountAuthGate(root, {
+      signal: gate.signal,
+      sessionRequest: sessionRequest || requestSession(abort.signal),
+      onReady: () => { if (!abort.signal.aborted) setStatus("ready"); },
+      onAuthenticated: async (session) => {
+        setStatus("loading");
+        const page = getInitialPage(window.location.pathname, true);
+        const [{ mountDashboard }, campaignData] = await Promise.all([
+          import("./compat/dashboard-controller.js"),
+          page === "project" || page === "prizes"
+            ? requestJson(getCampaignViewEndpoint(window.location.href), {}, abort.signal)
+            : Promise.resolve(null),
+        ]);
+        if (abort.signal.aborted) return;
+        if (campaignData && !campaignData.response.ok) throw new Error(String(campaignData.payload.message || "הקמפיין אינו זמין או שאין לך הרשאה לצפות בו."));
+        gate.abort();
+        dispose = mountDashboard(root, {
+          bootstrap,
+          session,
+          initialCampaignData: campaignData?.payload,
+          signal: abort.signal,
+          onReady: () => { if (!abort.signal.aborted) setStatus("ready"); },
+          onError: () => { if (!abort.signal.aborted) setStatus("error"); },
+        });
+      },
     });
-    return () => { abort.abort(); dispose?.(); };
-  }, []);
+    return () => { gate.abort(); abort.abort(); dispose?.(); };
+  }, [sessionRequest]);
 
   return <>
     {status !== "ready" && <div className="application-status" role="status" dir="rtl">
