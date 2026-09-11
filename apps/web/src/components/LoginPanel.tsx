@@ -14,9 +14,6 @@ export function LoginPanel() {
                   <div className="login-logo-frame">
                     <img id="login-campaign-logo" src="/assets/goodraise-logo-transparent.png" alt="גודרייז" />
                   </div>
-                  <div className="login-logo-frame">
-                    <img id="login-org-logo" src="/assets/goodraise-logo-transparent.png" alt="גודרייז" />
-                  </div>
                 </div>
               </div>
             </div>

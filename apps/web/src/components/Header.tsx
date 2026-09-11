@@ -10,6 +10,9 @@ export function Header({ loadSession = false }: { loadSession?: boolean } = {}) 
 
   return (<header id="site-header" className="site-header" ref={header} dir="rtl">
     <div className="site-header-inner">
+      <button className="site-header-toggle" type="button" aria-label="פתיחת תפריט" aria-controls="main-nav" aria-expanded="false">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
+      </button>
       <a className="site-header-brand" href="/" aria-label="גודרייז — דף הבית">
         <img src="/assets/goodraise-logo-transparent.png" width="980" height="330" alt="גודרייז" />
       </a>
@@ -31,9 +34,6 @@ export function Header({ loadSession = false }: { loadSession?: boolean } = {}) 
         <button data-site-audience="session" className="site-header-logout" type="button" hidden>התנתקות</button>
         <span className="site-header-error" role="status" hidden></span>
       </div>
-      <button className="site-header-toggle" type="button" aria-label="פתיחת תפריט" aria-controls="main-nav" aria-expanded="false">
-        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-      </button>
     </div>
   </header>);
 }
