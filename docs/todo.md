@@ -87,9 +87,17 @@ The initial flow is implemented. The CTA remains separate from login, and submit
 - [x] Use one shared, responsive footer across the homepage, public campaigns, campaign application, login, legal pages, and authenticated administration.
 - [x] Add public תנאי שימוש, מדיניות פרטיות, and הצהרת נגישות links to that footer and add a first accessibility statement at `/accessibility`.
 - [x] Add baseline accessibility improvements: skip-to-content navigation, semantic landmarks/headings, visible focus, accessible tab relationships/keyboard behavior, labelled authentication fields, table column scopes, reduced-motion support, and page-specific document titles.
-- [ ] Add the real accessibility contact name, email, phone, and any physical-service accessibility arrangements to `/accessibility` before opening the service publicly.
-- [ ] Run an independent Israeli Standard 5568 AA audit, including manual keyboard, screen-reader, zoom/reflow, mobile, form-error, chart/table, campaign-content and third-party payment-flow testing; record and remediate the findings.
-- [ ] Add automated accessibility checks for representative public and authenticated journeys to CI; automated checks supplement rather than replace the manual audit.
+- [ ] Confirm with the business/legal owner whether GoodRaise must appoint an accessibility coordinator and whether any statutory exemption applies; document the decision without treating an exemption as a product-quality target.
+- [ ] Assign an internal accessibility owner and publish a real contact name, monitored email, phone or another accessible contact route, and the expected process for acknowledging and resolving accessibility reports.
+- [ ] Confirm whether GoodRaise provides reception or service at a physical location. Publish the relevant accessibility arrangements—or clearly state that there is no public reception—on `/accessibility`.
+- [ ] Inventory downloadable files and generated exports. Bring public PDFs and other digital documents into scope under SI 5568 Part 2, or provide an equivalent accessible HTML alternative where permitted.
+- [ ] Define accessible campaign-content requirements for administrators: meaningful image alternative text, decorative-image handling, captions/transcripts for time-based media, descriptive links, readable copy, and no flashing content.
+- [ ] Include accessibility as a blocking payment-provider selection criterion and verify the complete hosted checkout, authentication challenge, error, cancellation, refund and recurring-payment journeys with keyboard and a screen reader.
+- [ ] Run an independent Israeli Standard 5568 AA audit across representative public and authenticated roles, including keyboard-only use, a current screen reader, 200% text resizing, narrow reflow, orientation, focus order, form errors, dialogs, charts/tables, campaign content and third-party flows.
+- [ ] Record every audit finding with severity and ownership, remediate it, retest it, and keep the public statement honest until the blocking findings are closed.
+- [ ] Add automated accessibility checks for representative homepage, archive, application, login, legal and authenticated journeys to CI; test keyboard focus and accessible names as well as static markup.
+- [ ] Add accessibility acceptance criteria to new-feature reviews and campaign publishing, including regression checks whenever shared navigation, templates, forms or provider integrations change.
+- [ ] Test and record the supported browser/screen-reader combinations, known limitations and available alternatives, then update the accessibility statement and its last-reviewed date after each material accessibility change and at a scheduled interval.
 - [ ] Replace full manager dataset downloads with paginated transaction APIs and server-side aggregate/read-model tables.
 - [ ] Measure production cold/warm API latency, database connection time, query time, payload size, and browser main-thread work.
 - [ ] Bind external ingestion credentials to explicit organizations/campaigns instead of relying on one server-wide key.
