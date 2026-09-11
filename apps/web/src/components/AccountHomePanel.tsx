@@ -33,7 +33,10 @@ export function AccountHomePanel() {
           <h2 id="site-access-title">משתמשים והרשאות</h2>
           <p>רק מנהלי האתר יכולים לאשר חשבונות ולשייך תפקידים לארגונים ולפרויקטים.</p>
         </div>
-        <button id="new-account-button" className="button-secondary action-button secondary" type="button">אישור משתמש חדש</button>
+        <div className="site-access-heading-actions">
+          <a className="button-secondary action-button secondary" href="/admin/applications">בקשות לקמפיינים</a>
+          <button id="new-account-button" className="button-secondary action-button secondary" type="button">אישור משתמש חדש</button>
+        </div>
       </div>
       <div id="account-management-status" className="status-note text-small" aria-live="polite"></div>
       <div className="site-access-layout">

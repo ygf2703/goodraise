@@ -52,6 +52,18 @@
   force = true
 
 [[redirects]]
+  from = "/start"
+  to = "/app.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/start/*"
+  to = "/app.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/admin/*"
   to = "/app.html"
   status = 200

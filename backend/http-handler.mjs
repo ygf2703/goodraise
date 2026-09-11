@@ -21,6 +21,12 @@ import {
   saveAdminCampaignConfig,
 } from "./services/campaign-store.mjs";
 import {
+  decideCampaignApplication,
+  getCampaignApplications,
+  submitCampaignApplication,
+  verifyCampaignApplication,
+} from "./services/campaign-application-store.mjs";
+import {
   appendAuditEvent,
   ensureMultiTenantMigration,
   getCampaignIdentity,
@@ -100,6 +106,11 @@ function matchPublicCompletedCampaignRoute(pathname) {
     organizationId: decodeURIComponent(match[1]),
     campaignId: decodeURIComponent(match[2]),
   };
+}
+
+function matchAdminApplicationDecisionRoute(pathname) {
+  const match = pathname.match(/^\/api\/admin\/applications\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/decision$/i);
+  return match ? { applicationId: match[1] } : null;
 }
 
 async function readRequestPayload(request) {
@@ -255,6 +266,14 @@ export default async (request) => {
     return getPublicCompletedCampaignIndexResponse(request);
   }
 
+  if (pathname === "/api/applications" && request.method === "POST") {
+    return submitCampaignApplication(request, await readRequestPayload(request));
+  }
+
+  if (pathname === "/api/applications/verify" && request.method === "POST") {
+    return verifyCampaignApplication(request, await readRequestPayload(request));
+  }
+
   const publicCompletedCampaign = matchPublicCompletedCampaignRoute(pathname);
   if (publicCompletedCampaign && request.method === "GET") {
     return getPublicCompletedCampaignResponse(
@@ -320,6 +339,19 @@ export default async (request) => {
   if (pathname === "/api/admin/accounts" && request.method === "POST") {
     const payload = await readRequestPayload(request);
     return saveManagedAccount(request, payload.user || payload);
+  }
+
+  if (pathname === "/api/admin/applications" && request.method === "GET") {
+    return getCampaignApplications(request);
+  }
+
+  const adminApplicationDecision = matchAdminApplicationDecisionRoute(pathname);
+  if (adminApplicationDecision && request.method === "POST") {
+    return decideCampaignApplication(
+      request,
+      adminApplicationDecision.applicationId,
+      await readRequestPayload(request),
+    );
   }
 
   if (pathname === "/api/admin/source-config" && request.method === "GET") {

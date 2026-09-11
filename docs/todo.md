@@ -5,48 +5,69 @@ Updated 2026-09-11. This is the current working backlog. Historical assessment d
 ## Now: finish the current production rollout
 
 - [ ] Take or confirm a recoverable production database snapshot before changing the schema.
-- [ ] Apply migrations `004_completed_campaign_snapshots.sql` and `005_account_memberships.sql` to the production Neon database.
+- [ ] Apply migrations `004_completed_campaign_snapshots.sql`, `005_account_memberships.sql`, and `006_campaign_applications.sql` to the production Neon database.
 - [ ] Verify both migration names and checksums in `goodraise.schema_migrations`.
-- [ ] Verify `campaign_public_snapshots`, `admin_memberships`, `admin_users.access_config_hash`, constraints, and indexes exist.
+- [ ] Verify `campaign_public_snapshots`, `admin_memberships`, `campaign_applications`, `campaign_application_events`, `admin_users.access_config_hash`, constraints, and indexes exist.
 - [ ] Backfill public snapshots for real campaigns that are already completed.
 - [ ] Keep the three scraped Giveback placeholder campaigns limited to development or staging; do not seed them into production.
 - [ ] Verify production `/api/health`, `/api/auth/status`, `/api/public/campaigns`, login, project selection, and completed-campaign pages.
+- [ ] Configure `GOODRAISE_PUBLIC_URL`, `GOODRAISE_EMAIL_MODE=resend`, `GOODRAISE_RESEND_API_KEY`, and `GOODRAISE_EMAIL_FROM`, then verify applicant, admin-notification, approval and rejection messages from a deploy preview.
 - [ ] Add an explicit migration stage to deployment so application code is not published against an older schema. Keep migrations transactional, checksummed, rehearsed, and independently observable.
 
-## Next: define the “start a project” flow
+## Campaign application flow
 
-This flow has not been implemented. The existing CTA is deliberately separate from login, and submitting a project request must not silently create an approved management account.
+The initial flow is implemented. The CTA remains separate from login, and submitting a project request does not create an approved management account.
 
 ### Product decisions
 
-- [ ] Decide who may submit: fully public applicants, invited applicants, or both.
-- [ ] Decide whether an applicant can save a draft. If so, define access without turning the form into self-registration (for example, a time-limited email link).
-- [ ] Define the minimum application fields: applicant/contact details, organization identity, campaign purpose, target, expected dates, source/payment needs, story, media, and consent.
-- [ ] Decide which organization/legal documents may be uploaded, their allowed formats and sizes, and how long rejected applications are retained.
-- [ ] Define application statuses and transitions. Proposed starting point: `draft → submitted → under_review → changes_requested → approved | rejected | withdrawn`.
-- [ ] Define who can review, request changes, approve, reject, reopen, and view application history. Site admins remain above all organizations.
-- [ ] Decide whether applicants can edit after submission and how resubmission/version history works.
-- [ ] Define email notifications for submission, change requests, approval, rejection, and the first approved-user invitation.
+- [x] Allow anyone to submit a campaign application publicly; submitting does not create an account or grant access.
+- [x] Require the applicant to verify their email before the application enters the admin review queue.
+- [x] Keep the first version to one submission without a server-side applicant draft.
+- [x] Collect only applicant contact, organization identity, campaign name/category/purpose/optional story, target, optional public links, external-provider readiness, and consent.
+- [x] Do not accept document uploads in the first version; use optional public links and decide rejected-application retention separately.
+- [x] Use `pending_email_verification → submitted → approved | rejected` in the first UI. The schema reserves later review/change/withdrawal states.
+- [x] Limit the review queue and decisions to site admins.
+- [x] Do not allow applicant editing after submission in the first version; a matching unverified resubmission refreshes the pending request and token.
+- [ ] Add a secure applicant edit/resubmission link if `changes_requested` is introduced later.
+- [x] Send applicant verification, post-verification admin notification, approval/first-login, and rejection emails.
+- [x] Notify all active site admins when an applicant verifies their email and the application becomes `submitted`; do not notify them for unverified submissions.
 - [ ] Define anti-spam, rate-limit, privacy, consent, and applicant identity-verification requirements.
-- [ ] Define what must be completed before approval versus during onboarding: payment provider, donation source, branding, ambassadors, prizes, campaign dates, and publication readiness.
+- [x] Keep campaign timing out of the public application; choose exact start/end dates during post-approval onboarding.
+- [x] Continue linking or synchronizing with an external donation provider rather than processing donations directly in GoodRaise.
+- [ ] Define what must be completed before approval versus during onboarding: external payment/donation provider setup, donation source, branding, ambassadors, prizes, campaign dates, and publication readiness.
+
+### Payment-provider integration
+
+- [ ] Select a payment provider that can securely collect one-time and recurring donations from campaign supporters using a provider-hosted checkout; GoodRaise must not collect or store card details.
+- [ ] Define the commercial and operational requirements: supported currencies/payment methods, Israeli receipts and tax needs, fees, payouts, refunds, cancellations, chargebacks, recurring donations, and supporter experience.
+- [ ] Design campaign-to-provider account ownership and onboarding, including whether each organization connects its own provider account or GoodRaise operates a platform/marketplace account.
+- [ ] Add server-side provider credentials and campaign/account mappings with encryption, rotation, revocation, least-privilege access, and no secrets in public forms or browser payloads.
+- [ ] Create provider checkout sessions server-side with campaign, amount, recurrence and return URLs validated by GoodRaise; never trust totals or campaign ownership supplied by the browser.
+- [ ] Add signed, replay-safe and idempotent provider webhooks for successful, failed, refunded, cancelled and disputed payments.
+- [ ] Reconcile provider transactions, fees, refunds and payouts against the GoodRaise donation ledger, with an admin-visible exception queue and audit trail.
+- [ ] Define consent, privacy, PCI-responsibility boundaries, terms, receipt ownership, data retention, monitoring and incident handling with legal/accounting review.
+- [ ] Test checkout success/cancellation, duplicate and out-of-order webhooks, retries, recurring lifecycle events, refunds, chargebacks, cross-campaign isolation and provider outages in the provider sandbox before production.
 
 ### Approval and onboarding contract
 
-- [ ] Specify the exact atomic result of approval: create or select the organization, create the campaign, approve the applicant's email, and assign the initial `organization_admin` membership.
-- [ ] Define duplicate handling when the organization, email, or proposed campaign already exists.
-- [ ] Send the approved applicant through first-login password setup; never accept a password in the public application form.
-- [ ] Open the new campaign in `draft` status and route the new organization admin to a guided setup checklist.
+- [x] Approval creates or selects the organization, creates the campaign, approves the applicant's email, and assigns the initial `organization_admin` membership atomically in PostgreSQL.
+- [x] Generate collision-resistant organization/campaign identities from the application reference; preserve existing user passwords/memberships and let the reviewer attach an existing organization.
+- [x] Send the approved applicant through first-login password setup; never accept a password in the public application form.
+- [ ] Add a guided setup checklist for the new `draft` campaign; approval already creates and links the draft.
 - [ ] Define the minimum conditions for moving from `draft` to `live`, who authorizes that transition, and whether a preview link is available before launch.
 - [ ] Record reviewer decisions, approval side effects, invitations, and lifecycle transitions in an audit trail.
 
 ### Implementation after product approval
 
-- [ ] Add relational application, applicant, review-event, attachment-metadata, and invitation records through a numbered migration.
-- [ ] Add the public application page and validated submission API.
-- [ ] Add applicant draft/resubmission access only if the selected product flow requires it.
-- [ ] Add a site-admin review queue and application detail screen.
-- [ ] Implement approval as one idempotent database transaction with explicit duplicate protection.
-- [ ] Add invitation delivery and first-login onboarding.
+- [x] Add relational application and review-event records through migration `006_campaign_applications.sql`; attachments and standalone invitation records are not needed in the first version.
+- [x] Add the public one-page application and validated submission API.
+- [x] Add hashed, expiring email-verification tokens and a verification endpoint that atomically moves an application into the admin review queue.
+- [x] Omit applicant drafts from the first version.
+- [x] Add a site-admin review queue with application details and approve/reject actions.
+- [x] Add transactional email delivery with provider idempotency keys, local outbox capture, failure logging, and admin-notification diagnostics.
+- [x] Implement approval as one idempotent PostgreSQL transaction with row locking and explicit account/organization handling.
+- [ ] Add external donation-provider onboarding and configuration without collecting provider credentials in the public application form.
+- [x] Deliver the first-login link after approval; the existing first login performs password setup.
 - [ ] Add audit logging, retention/deletion jobs, monitoring, and operational documentation.
 - [ ] Test authorization, state transitions, concurrent approval, retries, duplicate submissions, malicious input, attachment limits, and tenant isolation.
 - [ ] Validate the complete public submission → admin review → approval → password setup → draft campaign journey in staging before production.
@@ -72,4 +93,3 @@ This flow has not been implemented. The existing CTA is deliberately separate fr
 - [ ] Finalize organization-specific legal, privacy, participation, and data-retention content.
 - [ ] Add campaign-specific social metadata/server rendering if public discovery and sharing require it.
 - [ ] Continue extracting new UI behavior from the compatibility controller into typed React components.
-

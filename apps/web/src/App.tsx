@@ -6,6 +6,9 @@ import { getCampaignViewEndpoint, getInitialPage } from "./platform";
 import { requestJson } from "./api";
 import { PublicArchivePage } from "./components/PublicArchivePage";
 import type { PublicArchiveRoute } from "./platform";
+import type { CampaignApplicationRoute } from "./platform";
+import { CampaignApplicationPage, CampaignApplicationVerificationPage } from "./components/CampaignApplicationPage";
+import { AdminApplicationsPage } from "./components/AdminApplicationsPage";
 
 // The adapter owns the empty chart/table containers inside this fixed layout.
 // Memoization prevents React from reconciling those containers on status changes.
@@ -56,11 +59,18 @@ function ManagerApplication({ sessionRequest }: { sessionRequest?: ReturnType<ty
   </>;
 }
 
-export function App({ sessionRequest, archiveRoute }: {
+export function App({ sessionRequest, archiveRoute, applicationRoute }: {
   sessionRequest?: ReturnType<typeof requestSession>;
   archiveRoute?: PublicArchiveRoute;
+  applicationRoute?: never;
+} | {
+  sessionRequest?: ReturnType<typeof requestSession>;
+  archiveRoute?: never;
+  applicationRoute?: CampaignApplicationRoute;
 } = {}) {
-  return archiveRoute
-    ? <PublicArchivePage route={archiveRoute} />
-    : <ManagerApplication sessionRequest={sessionRequest} />;
+  if (archiveRoute) return <PublicArchivePage route={archiveRoute} />;
+  if (applicationRoute === "start") return <CampaignApplicationPage />;
+  if (applicationRoute === "verify") return <CampaignApplicationVerificationPage />;
+  if (applicationRoute === "admin") return <AdminApplicationsPage />;
+  return <ManagerApplication sessionRequest={sessionRequest} />;
 }

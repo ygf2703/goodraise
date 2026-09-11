@@ -1,6 +1,6 @@
 # API contracts
 
-Updated 2026-09-10. This is the shared Node contract, implemented by [route dispatch](../backend/http-handler.mjs) and [application boundary](../backend/app.ts), used by local and Netlify adapters. There is no OpenAPI specification or versioned API prefix.
+Updated 2026-09-11. This is the shared Node contract, implemented by [route dispatch](../backend/http-handler.mjs) and [application boundary](../backend/app.ts), used by local and Netlify adapters. There is no OpenAPI specification or versioned API prefix.
 
 ## Conventions and access
 
@@ -24,6 +24,8 @@ Account emails are case-insensitive: setup/login input is trimmed and lowercased
 | GET | `/api/public-context` | Viewer+ in an assigned scope | Legacy selected organization/campaign context |
 | GET | `/api/public/campaigns?limit=8` | Public | Cached cards for completed campaigns; maximum 100 |
 | GET | `/api/public/campaigns/:organization/:campaign` | Public | One cached, sanitized completed-campaign snapshot |
+| POST | `/api/applications` | Public | Minimal campaign application; creates/refreshes an unverified request and sends the applicant verification message |
+| POST | `/api/applications/verify` | Public with token | `{token}`; verifies the applicant email, moves the request to `submitted`, and notifies active site admins |
 | GET | `/api/auth/status` | Public/session-aware | `authenticated`, identity/role/scope/accessible campaign metadata when signed in |
 | POST | `/api/auth/login` | Approved active account | `{email, password}`; cookie or setup-required/error response |
 | POST | `/api/auth/setup` | Allowed account without password | `{email, password, confirmPassword}`; creates password and session |
@@ -31,6 +33,8 @@ Account emails are case-insensitive: setup/login input is trimmed and lowercased
 | POST | `/api/auth/change-password` | Signed-in account | `{currentPassword, newPassword, confirmPassword}` |
 | GET | `/api/admin/accounts` | Site admin | Approved users, password/activity state, memberships and available organizations/campaigns |
 | POST | `/api/admin/accounts` | Site admin | Creates or replaces an account's active/site-admin/membership state; new users set a password at first login |
+| GET | `/api/admin/applications` | Site admin | Verified application review queue plus organizations available for optional attachment |
+| POST | `/api/admin/applications/:id/decision` | Site admin | `{action: "approve" | "reject", reviewNote?, organizationId?}`; approval creates the campaign/account contract atomically in PostgreSQL |
 | GET | `/api/organizations/:organizationId/campaigns` | Organization access | `{organizationId, campaigns}` |
 | POST | `/api/organizations/:organizationId/campaigns` | Organization admin+ | Campaign snapshot or `{config: snapshot}`; `201`, registry-shaped config |
 | GET | C | Campaign manager+ in scope | `{config: registry, activeCampaign, portfolio, updatedAt, updatedBy, message}` |
@@ -47,7 +51,11 @@ Account emails are case-insensitive: setup/login input is trimmed and lowercased
 
 Auth status returns memberships plus accessible campaign summaries carrying the effective `accessRole`. The browser uses them for direct single-project routing and for active/completed project sections. A campaign membership also permits the assigned campaign to appear in an organization campaign list; organization admins see every campaign in their organization.
 
-There are no general delete endpoints, payment endpoint, hosted password-recovery endpoint, or paginated dataset query in this route inventory. Account approval is site-admin-only and does not send email or prove mailbox ownership.
+There are no general delete endpoints, payment endpoint, hosted password-recovery endpoint, or paginated dataset query in this route inventory. Manual account approval at `/api/admin/accounts` remains site-admin-only and does not itself prove mailbox ownership; the campaign-application flow performs its own applicant email verification.
+
+Public application input contains contact details, organization identity, campaign name/category/purpose/story, target, optional public links, external-provider readiness and consent. It deliberately excludes campaign dates, passwords and provider secrets. Verification tokens are random, stored only as hashes, expire after 24 hours and are consumed through a POST action from `/start/verify`. Unverified applications never appear in the admin queue. Public submissions have a hidden bot trap and a bounded per-email/client submission window; this is abuse mitigation, not a replacement for an edge/distributed rate limiter at higher traffic.
+
+PostgreSQL approval locks the application row and creates or selects the organization, campaign/config/source/empty dataset, approved user and organization membership in one transaction. Repeated approval is idempotent. Existing users retain their password and other memberships. Rejection requires a reviewer note. Applicant verification, site-admin notification and decision mail use provider idempotency keys; provider failures are logged and surfaced through stored notification diagnostics or the decision response.
 
 Completed-campaign endpoints are anonymous and aggregate-only. They return public cache headers, a Netlify CDN policy and an ETag; matching `If-None-Match` requests receive `304`. The index cache is refreshed from persisted snapshots at most every five minutes per Node instance. Detail requests use the same warmed in-memory snapshot and never fall back to the donation ledger.
 

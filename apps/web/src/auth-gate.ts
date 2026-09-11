@@ -34,7 +34,9 @@ export function mountAuthGate(root: HTMLElement, options: {
   let busy = false;
   let disposeAccountHome: (() => void) | undefined;
   migrateBrowserStorage();
-  try { email.value = localStorage.getItem("goodraise.last-admin-email") || ""; } catch { /* Optional remembered email. */ }
+  const requestedEmail = new URLSearchParams(window.location.search).get("email") || "";
+  try { email.value = requestedEmail || localStorage.getItem("goodraise.last-admin-email") || ""; }
+  catch { email.value = requestedEmail; }
 
   const showMessage = (text: string, error = false) => {
     message.textContent = text;

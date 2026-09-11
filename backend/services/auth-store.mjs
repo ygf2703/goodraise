@@ -1007,6 +1007,15 @@ async function listAllAdminRecords(store) {
   });
 }
 
+/** Server-only recipient lookup used by operational notifications. */
+export async function listActiveSiteAdminEmails() {
+  const records = await listAllAdminRecords(getPersistence());
+  return records
+    .filter((record) => record.isActive !== false && normalizeRole(record.role, ROLE_VIEWER) === ROLE_PLATFORM_ADMIN)
+    .map((record) => normalizeEmail(record.email))
+    .filter(Boolean);
+}
+
 async function canonicalizeManagedMemberships(rawMemberships) {
   if (!Array.isArray(rawMemberships)) throw new Error("רשימת ההרשאות אינה תקינה.");
   const allowedRoles = new Set([ROLE_ORGANIZATION_ADMIN, ROLE_CAMPAIGN_MANAGER, ROLE_ANALYST, ROLE_VIEWER]);

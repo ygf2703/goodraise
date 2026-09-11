@@ -33,6 +33,9 @@ The default address is `http://127.0.0.1:8767`. Development uses Vite middleware
 | `GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON` / `_JSON_PATH` | Private Sheets credentials |
 | `OPENAI_API_KEY`, `GOODRAISE_AI_MODEL` | Optional question provider; deterministic answers work without a key |
 | `GOODRAISE_PRELAUNCH_RESET_ENABLED` | Keep false unless reset operation is deliberately configured |
+| `GOODRAISE_PUBLIC_URL` | Canonical public origin used in verification, review and first-login email links |
+| `GOODRAISE_EMAIL_MODE` | Optional `outbox` for local capture or `resend` for hosted delivery |
+| `GOODRAISE_RESEND_API_KEY`, `GOODRAISE_EMAIL_FROM` | Server-only production transactional-email credentials/sender |
 
 The old manager/source environment names are accepted through compatibility readers. New setup should use only the names above. Cookie transport uses HTTPS detection/Netlify runtime; local loopback development uses HTTP.
 
@@ -54,9 +57,11 @@ npm run db:migrate
 
 `005_account_memberships.sql` adds per-user organization/campaign memberships and an access-configuration hash used to avoid rewriting unchanged configured accounts on each session read. It backfills legacy single-scope roles. Apply it before deploying the account selector or site-admin user management.
 
+`006_campaign_applications.sql` adds the public application record, hashed and expiring email-verification state, approval references, notification diagnostics and append-only review events. Apply it before exposing `/start` or `/admin/applications`. Local development writes messages to `work/data/goodraise-email-outbox-dev.json`; production requires the configured email provider and never returns verification URLs in the public response.
+
 Apply migration 003 **before deploying the updated SQL authentication code**. Rehearse against a restored database copy and retain a backup. New code refuses SQL authentication if the constraint is missing, preventing duplicate account seeding against legacy mixed-case records. The previous code already normalizes writes and accepts lowercase values, so the schema change can precede code deployment. If the migration reports a collision, resolve the account ownership explicitly; do not automatically merge credentials or permissions. The GoodRaise Neon production database was migrated on 2026-09-09 after a snapshot and rehearsal; see the [rollout record](database-rollout-2026-09-09.md). Other databases still require their own migration check.
 
-Migrations do not migrate SQLite users, move Blobs into SQL, import donations, or reconcile campaign identities from existing deployments. Existing runtime SQL definitions remain for compatibility; do not rely on request-time DDL for routine deployment. The runtime DDL escape hatch is not a replacement for running migrations 003, 004 and 005 during deployment.
+Migrations do not migrate SQLite users, move Blobs into SQL, import donations, or reconcile campaign identities from existing deployments. Existing runtime SQL definitions remain for compatibility; do not rely on request-time DDL for routine deployment. The runtime DDL escape hatch is not a replacement for running migrations 003–006 during deployment.
 
 With a configured database and existing campaign:
 

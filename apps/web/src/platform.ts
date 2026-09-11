@@ -4,6 +4,8 @@ export type PublicArchiveRoute =
   | { kind: "index" }
   | { kind: "detail"; organizationId: string; campaignId: string };
 
+export type CampaignApplicationRoute = "start" | "verify" | "admin";
+
 // Both transports expose exactly the same relative URLs and session cookie.
 export const authConfig = {
   mode: "backend",
@@ -23,7 +25,16 @@ export const authConfig = {
   sourceConfigEndpoint: "/api/admin/source-config",
   sourceRefreshEndpoint: "/api/admin/source-refresh",
   accountsEndpoint: "/api/admin/accounts",
+  applicationsEndpoint: "/api/admin/applications",
 };
+
+export function getCampaignApplicationRoute(pathname: string): CampaignApplicationRoute | null {
+  const path = pathname.replace(/\/$/, "");
+  if (path === "/start") return "start";
+  if (path === "/start/verify") return "verify";
+  if (path === "/admin/applications") return "admin";
+  return null;
+}
 
 export function getCampaignViewEndpoint(address: string): string {
   const url = new URL(address);

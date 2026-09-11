@@ -23,14 +23,15 @@ export function Header({ loadSession = false }: { loadSession?: boolean } = {}) 
         <a data-site-audience="public" href="/#footer">בואו נדבר</a>
         <a data-site-audience="analyst" data-page-target="admin" href="/admin" hidden>דשבורד ניהולי</a>
         <a data-site-audience="session" href="/admin" hidden>הפרויקטים שלי</a>
+        <a data-site-audience="site-admin" href="/admin/applications" hidden>בקשות לקמפיינים</a>
         <a data-site-audience="site-admin" href="/admin/users" hidden>משתמשים והרשאות</a>
         <a data-site-audience="manager" data-page-target="project" href="/project" hidden>דף הפרויקט</a>
         <a data-site-audience="manager" data-page-target="prizes" href="/prizes" hidden>פרסים ותחרות</a>
-        <a data-site-audience="guest" className="site-header-mobile-login" href="/login">כניסה למערכת</a>
+        <a data-site-audience="guest" className="site-header-mobile-login" href="/login" hidden>כניסה למערכת</a>
       </nav>
       <div className="site-header-actions">
-        <a data-site-audience="guest" className="site-header-login" href="/login">כניסה</a>
-        <a data-site-audience="guest" className="site-header-cta" href="/#footer">מתחילים לגייס <span aria-hidden="true">←</span></a>
+        <a data-site-audience="guest" className="site-header-login" href="/login" hidden>כניסה</a>
+        <a data-site-audience="guest" className="site-header-cta" href="/start" hidden>מתחילים לגייס <span aria-hidden="true">←</span></a>
         <button data-site-audience="session" className="site-header-logout" type="button" hidden>התנתקות</button>
         <span className="site-header-error" role="status" hidden></span>
       </div>

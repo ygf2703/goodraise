@@ -15,13 +15,15 @@ cp .env.example .env
 npm run dev
 ```
 
-Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; placeholder copy and image areas can be replaced there. React and the API share this origin. `/login`, `/admin`, `/admin/users`, `/campaigns`, `/rules`, `/privacy`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
+Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; placeholder copy and image areas can be replaced there. React and the API share this origin. `/start`, `/login`, `/admin`, `/admin/users`, `/admin/applications`, `/campaigns`, `/rules`, `/privacy`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
 
 The build writes the landing page to `dist/index.html` as the default homepage. The React application shell is `dist/app.html`; application routes rewrite to this file. Legacy campaign query links at `/` and `/index.html` use a query-aware rewrite to preserve their campaign and ambassador context.
 
 All pages share the landing-page header. See the [navigation migration map](docs/navigation-migration.md) for the existing destinations retained during the gradual page migration.
 
 Accounts cannot self-register. A site admin approves the email and assigns one or more organization/campaign memberships; the user's first login then enters password setup. `/admin` opens the assigned-project selector when there are multiple projects, opens the only project directly when there is one, and shows a clear no-project state when there are none. Active and completed projects are separated. Site admins manage approvals and memberships at `/admin/users`.
+
+Anyone may submit the one-page campaign application at `/start`. It creates only a pending application. The application enters `/admin/applications` and triggers the site-admin notification only after the applicant verifies their email. Approval creates or selects the organization, opens an isolated draft campaign, approves the applicant account with `organization_admin` access, and emails the first-login link. No payment-provider credentials or exact campaign timing are collected publicly.
 
 Roles are scoped per membership: `viewer`, `analyst`, `campaign_manager`, and organization-wide `organization_admin`; `platform_admin` is global. One account can have different roles in different organizations or projects. Without a database URL, the same Node services use local JSON files for a development/demo dataset. PostgreSQL is required for ledger ingestion, manual contributions, and relational ambassador registration imports. There is no separate local backend implementation.
 
@@ -41,7 +43,7 @@ npm run import:campaign -- --file work/source.csv --organization example-org --c
 
 The import updates the ledger and its dashboard snapshot; duplicate event IDs are not added again. Browser CSV uploads remain local analysis inputs. See [development](docs/development.md) for the distinction and deployment configuration.
 
-After migrations 004 and 005, create persisted public snapshots for campaigns that were already completed before this feature was deployed:
+After migrations 004 and 005, create persisted public snapshots for campaigns that were already completed before this feature was deployed. Migration 006 adds campaign applications, review state, hashed email-verification tokens, and application events:
 
 ```sh
 npm run backfill:completed-campaigns

@@ -37,7 +37,7 @@ try {
   client = database.getPgClient('goodraise_test');
   await client.connect();
   const migrations = await client.query('SELECT name FROM goodraise.schema_migrations');
-  assert.equal(migrations.rowCount, 5);
+  assert.equal(migrations.rowCount, 6);
   await verifyEmailNormalizationMigration(client);
   const repo = await import('../backend/services/campaign-repositories.mjs');
   const ingest = await import('../backend/services/postgres-ingest.mjs');
@@ -70,6 +70,53 @@ try {
   const setup = await handleRequest(new Request('http://localhost/api/auth/setup', { method: 'POST', body: JSON.stringify({ email: 'sql-manager@example.org', password: 'DatabaseTest123!', confirmPassword: 'DatabaseTest123!' }) }));
   assert.equal(setup.status, 200);
   const cookie = setup.headers.get('set-cookie');
+  const applicationSubmission = await handleRequest(new Request('http://localhost/api/applications', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      applicantName: 'SQL Applicant', applicantEmail: 'sql-applicant@example.org', applicantPhone: '+972 50 123 4567',
+      organizationName: 'SQL Applicant Organization', organizationType: 'community', campaignName: 'SQL Applicant Campaign',
+      category: 'קהילה ועזרה הדדית', purpose: 'A verified SQL application purpose', story: '', targetAmount: 50000,
+      publicLink: 'https://example.org/sql-campaign', externalProviderStatus: 'needs_setup', consentAccepted: true,
+    }),
+  }));
+  assert.equal(applicationSubmission.status, 201);
+  const applicationSubmissionPayload = await applicationSubmission.json();
+  const applicationToken = new URL(applicationSubmissionPayload.developmentVerificationUrl).searchParams.get('token');
+  const applicationVerification = await handleRequest(new Request('http://localhost/api/applications/verify', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: applicationToken }),
+  }));
+  assert.equal(applicationVerification.status, 200);
+  const applicationQueue = await handleRequest(new Request('http://localhost/api/admin/applications', { headers: { cookie } }));
+  assert.equal(applicationQueue.status, 200);
+  const applicationQueuePayload = await applicationQueue.json();
+  const sqlApplication = applicationQueuePayload.applications.find((item) => item.referenceCode === applicationSubmissionPayload.referenceCode);
+  assert.ok(sqlApplication);
+  const applicationApproval = await handleRequest(new Request(`http://localhost/api/admin/applications/${sqlApplication.id}/decision`, {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve', organizationId: 'org-sql' }),
+  }));
+  assert.equal(applicationApproval.status, 200);
+  const approvedApplication = (await applicationApproval.json()).application;
+  assert.equal(approvedApplication.approvedOrganizationId, 'org-sql');
+  const repeatedApproval = await handleRequest(new Request(`http://localhost/api/admin/applications/${sqlApplication.id}/decision`, {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'approve', organizationId: 'org-sql' }),
+  }));
+  assert.equal(repeatedApproval.status, 200);
+  assert.deepEqual((await repeatedApproval.json()).application, approvedApplication);
+  const persistedApproval = await client.query(`
+    SELECT a.status, o.app_id AS organization_id, c.app_id AS campaign_id, u.email, m.role
+    FROM goodraise.campaign_applications a
+    JOIN goodraise.organizations o ON o.id = a.approved_organization_id
+    JOIN goodraise.campaigns c ON c.id = a.approved_campaign_id
+    JOIN goodraise.admin_users u ON u.id = a.approved_admin_user_id
+    JOIN goodraise.admin_memberships m ON m.admin_user_id = u.id AND m.organization_id = o.id
+    WHERE a.id = $1::uuid
+  `, [approvedApplication.id]);
+  assert.deepEqual(persistedApproval.rows[0], {
+    status: 'approved', organization_id: approvedApplication.approvedOrganizationId,
+    campaign_id: approvedApplication.approvedCampaignId, email: 'sql-applicant@example.org', role: 'organization_admin',
+  });
+  assert.equal((await client.query('SELECT COUNT(*)::int AS count FROM goodraise.campaigns WHERE app_id = $1', [approvedApplication.approvedCampaignId])).rows[0].count, 1);
   const response = await handleRequest(new Request('http://localhost/api/organizations/org-sql/campaigns/alpha/dataset', { headers: { cookie } }));
   assert.equal(response.status, 200);
   assert.equal((await response.json()).rows.length, 3);

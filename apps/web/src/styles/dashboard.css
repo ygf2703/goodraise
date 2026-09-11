@@ -3271,3 +3271,636 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 .application-status { position: fixed; z-index: 100; bottom: 16px; left: 16px; max-width: calc(100vw - 64px); padding: 12px 20px; border-radius: 12px; background: #111d4a; color: white; font: 600 16px Assistant, sans-serif; box-shadow: 0 8px 28px #111d4a30; }
+
+#goodraise-root .site-access-heading-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .site-access-heading-actions a {
+  text-decoration: none;
+}
+
+#goodraise-application-root {
+  --application-navy: #102d4c;
+  --application-blue: #075eb5;
+  --application-blue-dark: #08457f;
+  --application-yellow: #ffd629;
+  --application-border: #dce5ed;
+  --application-muted: #566b80;
+  min-height: 100vh;
+  color: #25384b;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255, 214, 41, 0.2), transparent 25rem),
+    linear-gradient(180deg, #f9fbfd, #eef4f8);
+  font-family: "Assistant", Arial, sans-serif;
+}
+
+#goodraise-application-root,
+#goodraise-application-root * {
+  box-sizing: border-box;
+}
+
+#goodraise-application-root [hidden] {
+  display: none !important;
+}
+
+#goodraise-application-root button,
+#goodraise-application-root input,
+#goodraise-application-root select,
+#goodraise-application-root textarea {
+  font: inherit;
+}
+
+#goodraise-application-root .application-page-main,
+#goodraise-application-root .application-verification-page,
+#goodraise-application-root .admin-applications-main {
+  width: min(1000px, calc(100% - 40px));
+  margin-inline: auto;
+  padding: 64px 0 96px;
+}
+
+#goodraise-application-root .application-intro {
+  max-width: 800px;
+  margin: 0 auto 36px;
+  text-align: center;
+}
+
+#goodraise-application-root .application-intro > span,
+#goodraise-application-root .admin-applications-heading span {
+  color: var(--application-blue);
+  font-weight: 800;
+}
+
+#goodraise-application-root .application-intro h1,
+#goodraise-application-root .admin-applications-heading h1,
+#goodraise-application-root .application-success h1 {
+  margin: 8px 0 14px;
+  color: var(--application-navy);
+  font-size: clamp(2.2rem, 6vw, 4rem);
+  line-height: 1.08;
+}
+
+#goodraise-application-root .application-intro > p,
+#goodraise-application-root .admin-applications-heading p {
+  margin: 0;
+  color: var(--application-muted);
+  font-size: 1.15rem;
+  line-height: 1.7;
+}
+
+#goodraise-application-root .application-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 28px;
+}
+
+#goodraise-application-root .application-steps strong {
+  padding: 12px 8px;
+  border: 1px solid var(--application-border);
+  border-radius: 999px;
+  color: var(--application-navy);
+  background: rgba(255, 255, 255, 0.75);
+  font-size: 0.9rem;
+}
+
+#goodraise-application-root .application-form,
+#goodraise-application-root .application-success,
+#goodraise-application-root .admin-application-card {
+  border: 1px solid var(--application-border);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(16, 45, 76, 0.09);
+}
+
+#goodraise-application-root .application-form {
+  display: grid;
+  gap: 0;
+  padding: clamp(22px, 5vw, 48px);
+}
+
+#goodraise-application-root .application-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 30px 0;
+  border: 0;
+  border-bottom: 1px solid var(--application-border);
+}
+
+#goodraise-application-root .application-form fieldset:first-child {
+  padding-top: 0;
+}
+
+#goodraise-application-root .application-form legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 20px;
+  color: var(--application-navy);
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+#goodraise-application-root .application-form legend span {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--application-yellow);
+  font-size: 1rem;
+}
+
+#goodraise-application-root .application-fields {
+  display: grid;
+  gap: 18px;
+}
+
+#goodraise-application-root .application-fields--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#goodraise-application-root .application-fields--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#goodraise-application-root .application-field-wide {
+  grid-column: 1 / -1;
+}
+
+#goodraise-application-root .application-form label,
+#goodraise-application-root .admin-application-review label {
+  display: grid;
+  gap: 7px;
+  color: var(--application-navy);
+  font-weight: 700;
+}
+
+#goodraise-application-root label small {
+  color: var(--application-muted);
+  font-weight: 500;
+}
+
+#goodraise-application-root .application-form input,
+#goodraise-application-root .application-form select,
+#goodraise-application-root .application-form textarea,
+#goodraise-application-root .admin-application-review textarea,
+#goodraise-application-root .admin-application-review select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 13px;
+  border: 1px solid #bccbd8;
+  border-radius: 9px;
+  color: #182b3d;
+  background: #fff;
+  outline: none;
+}
+
+#goodraise-application-root .application-form textarea,
+#goodraise-application-root .admin-application-review textarea {
+  resize: vertical;
+}
+
+#goodraise-application-root .application-form input:focus,
+#goodraise-application-root .application-form select:focus,
+#goodraise-application-root .application-form textarea:focus,
+#goodraise-application-root .admin-application-review textarea:focus,
+#goodraise-application-root .admin-application-review select:focus {
+  border-color: var(--application-blue);
+  box-shadow: 0 0 0 3px rgba(7, 94, 181, 0.12);
+}
+
+#goodraise-application-root .application-field-help {
+  margin: 14px 0 0;
+  color: var(--application-muted);
+  line-height: 1.6;
+}
+
+#goodraise-application-root .application-consent {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  margin-top: 28px;
+  color: #31485e;
+  line-height: 1.6;
+}
+
+#goodraise-application-root .application-consent input {
+  width: 20px;
+  min-height: 20px;
+  margin-top: 3px;
+}
+
+#goodraise-application-root .application-consent a,
+#goodraise-application-root .application-secondary-link,
+#goodraise-application-root .admin-application-card a {
+  color: var(--application-blue);
+}
+
+#goodraise-application-root .application-honeypot {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+}
+
+#goodraise-application-root .application-submit {
+  justify-self: center;
+  min-height: 52px;
+  margin-top: 22px;
+  padding: 11px 30px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--application-blue);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+#goodraise-application-root .application-submit:hover:not(:disabled) {
+  background: var(--application-blue-dark);
+}
+
+#goodraise-application-root .application-submit:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+#goodraise-application-root .application-form-message {
+  min-height: 24px;
+  margin-top: 16px;
+  color: var(--application-blue);
+  text-align: center;
+}
+
+#goodraise-application-root .application-form-message.is-error,
+#goodraise-application-root .admin-applications-message.is-error {
+  color: #a32828;
+}
+
+#goodraise-application-root .application-submit-note {
+  margin: 10px 0 0;
+  color: var(--application-muted);
+  text-align: center;
+}
+
+#goodraise-application-root .application-success {
+  max-width: 680px;
+  margin-inline: auto;
+  padding: clamp(30px, 6vw, 58px);
+  text-align: center;
+}
+
+#goodraise-application-root .application-verification-page {
+  display: grid;
+  align-items: start;
+  min-height: calc(100vh - 90px);
+}
+
+#goodraise-application-root .application-success h2 {
+  margin: 12px 0;
+  color: var(--application-navy);
+  font-size: 2.2rem;
+}
+
+#goodraise-application-root .application-success p {
+  color: var(--application-muted);
+  font-size: 1.08rem;
+  line-height: 1.7;
+}
+
+#goodraise-application-root .application-success-mark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-inline: auto;
+  border-radius: 50%;
+  color: var(--application-navy);
+  background: var(--application-yellow);
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+#goodraise-application-root .application-secondary-link {
+  display: inline-block;
+  margin-top: 18px;
+  font-weight: 700;
+}
+
+#goodraise-application-root .development-verification {
+  padding: 12px;
+  border-radius: 8px;
+  background: #eef7ff;
+}
+
+#goodraise-application-root .admin-applications-main {
+  width: min(1180px, calc(100% - 40px));
+}
+
+#goodraise-application-root .admin-applications-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 26px;
+}
+
+#goodraise-application-root .admin-applications-heading h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+#goodraise-application-root .admin-applications-heading > a {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border: 1px solid var(--application-border);
+  border-radius: 8px;
+  color: var(--application-navy);
+  background: #fff;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+#goodraise-application-root .admin-application-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+#goodraise-application-root .admin-application-filters button {
+  padding: 9px 18px;
+  border: 1px solid var(--application-border);
+  border-radius: 999px;
+  color: var(--application-navy);
+  background: #fff;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#goodraise-application-root .admin-application-filters button.is-active {
+  border-color: var(--application-navy);
+  color: #fff;
+  background: var(--application-navy);
+}
+
+#goodraise-application-root .admin-applications-message {
+  min-height: 26px;
+  margin-bottom: 12px;
+  color: var(--application-blue);
+}
+
+#goodraise-application-root .admin-applications-list {
+  display: grid;
+  gap: 20px;
+}
+
+#goodraise-application-root .admin-application-card {
+  overflow: hidden;
+}
+
+#goodraise-application-root .admin-application-card > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: start;
+  padding: 24px;
+  border-bottom: 1px solid var(--application-border);
+}
+
+#goodraise-application-root .admin-application-card h2,
+#goodraise-application-root .admin-application-card h3,
+#goodraise-application-root .admin-application-card p {
+  margin: 0;
+}
+
+#goodraise-application-root .admin-application-card h2 {
+  margin-top: 8px;
+  color: var(--application-navy);
+  font-size: 1.65rem;
+}
+
+#goodraise-application-root .admin-application-card header p {
+  margin-top: 4px;
+  color: var(--application-muted);
+}
+
+#goodraise-application-root .admin-application-card header > strong {
+  color: var(--application-navy);
+  font-size: 1.5rem;
+  white-space: nowrap;
+}
+
+#goodraise-application-root .admin-application-status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #6e5700;
+  background: #fff2ad;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+#goodraise-application-root .admin-application-status.is-approved {
+  color: #17633a;
+  background: #dff5e8;
+}
+
+#goodraise-application-root .admin-application-status.is-rejected {
+  color: #8b2a2a;
+  background: #fbe4e4;
+}
+
+#goodraise-application-root .admin-application-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 24px;
+  gap: 18px;
+  border-bottom: 1px solid var(--application-border);
+}
+
+#goodraise-application-root .admin-application-details div {
+  min-width: 0;
+}
+
+#goodraise-application-root .admin-application-details dt {
+  margin-bottom: 5px;
+  color: var(--application-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+#goodraise-application-root .admin-application-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+#goodraise-application-root .admin-application-copy,
+#goodraise-application-root .admin-application-review,
+#goodraise-application-root .admin-application-decision {
+  padding: 24px;
+}
+
+#goodraise-application-root .admin-application-copy {
+  display: grid;
+  gap: 8px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+#goodraise-application-root .admin-application-copy h3:not(:first-child) {
+  margin-top: 10px;
+}
+
+#goodraise-application-root .admin-application-links {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+#goodraise-application-root .admin-application-review {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: end;
+  background: #f7fafc;
+}
+
+#goodraise-application-root .admin-application-review > div {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+#goodraise-application-root .admin-application-review-fields {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(280px, 1.3fr);
+  gap: 14px;
+}
+
+#goodraise-application-root .admin-application-review button {
+  min-height: 46px;
+  padding: 9px 17px;
+  border-radius: 8px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+#goodraise-application-root .admin-application-review .approve {
+  border: 1px solid var(--application-blue);
+  color: #fff;
+  background: var(--application-blue);
+}
+
+#goodraise-application-root .admin-application-review .reject {
+  border: 1px solid #bd4b4b;
+  color: #9b3030;
+  background: #fff;
+}
+
+#goodraise-application-root .admin-application-decision {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--application-border);
+  background: #f7fafc;
+}
+
+#goodraise-application-root .admin-application-decision a {
+  margin-inline-start: auto;
+  font-weight: 800;
+}
+
+#goodraise-application-root .admin-application-warning {
+  margin: 0 24px 20px;
+  padding: 10px 13px;
+  border-radius: 8px;
+  color: #8b2a2a;
+  background: #fff2f2;
+}
+
+#goodraise-application-root .admin-applications-empty {
+  padding: 40px;
+  border: 1px dashed #b8c8d5;
+  border-radius: 16px;
+  color: var(--application-muted);
+  background: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+
+#goodraise-application-root .admin-applications-session {
+  color: var(--application-muted);
+  text-align: center;
+}
+
+@media (max-width: 800px) {
+  #goodraise-application-root .application-page-main,
+  #goodraise-application-root .application-verification-page,
+  #goodraise-application-root .admin-applications-main {
+    padding-top: 40px;
+  }
+
+  #goodraise-application-root .application-steps,
+  #goodraise-application-root .application-fields--three,
+  #goodraise-application-root .application-fields--two,
+  #goodraise-application-root .admin-application-details {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  #goodraise-application-root .admin-application-review {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-application-root .admin-application-review-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  #goodraise-application-root .application-page-main,
+  #goodraise-application-root .application-verification-page,
+  #goodraise-application-root .admin-applications-main {
+    width: min(100% - 24px, 1000px);
+    padding: 28px 0 64px;
+  }
+
+  #goodraise-application-root .application-steps,
+  #goodraise-application-root .application-fields--three,
+  #goodraise-application-root .application-fields--two,
+  #goodraise-application-root .admin-application-details {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-application-root .application-field-wide {
+    grid-column: auto;
+  }
+
+  #goodraise-application-root .application-intro h1 {
+    font-size: 2.35rem;
+  }
+
+  #goodraise-application-root .admin-applications-heading,
+  #goodraise-application-root .admin-application-card > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #goodraise-application-root .admin-application-card header > strong {
+    font-size: 1.25rem;
+  }
+
+  #goodraise-application-root .admin-application-review > div,
+  #goodraise-application-root .admin-application-review button {
+    width: 100%;
+  }
+}
