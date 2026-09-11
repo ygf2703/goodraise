@@ -1,6 +1,6 @@
 # Architecture
 
-Updated 2026-09-09 for the Node.js/React platform migration and SQL read improvements. This describes the local implementation; it is not evidence of a production deployment.
+Updated 2026-09-10 for the Node.js/React platform migration, membership access and completed-campaign archive. This describes the local implementation; it is not evidence of a production deployment.
 
 GoodRaise models `organization → campaign → configuration, sources, donations, ambassadors, analytics`. It has one Node application boundary used by local development, the standalone server, and Netlify. The browser is a React application built by Vite. TypeScript is the default for new application code; established JavaScript logic is retained inside those platforms. Direct campaign URLs resolve an explicit public context, and reject unknown/ambiguous identifiers.
 
@@ -46,13 +46,13 @@ Exact versions are locked in `package-lock.json`. There is no Python application
 
 ## Frontend ownership
 
-`App.tsx` owns startup status and the controller lifecycle. Eleven TSX layout components define the header, public pages, manager shell, login, insights/design panels, and manual-contribution dialog. `main.tsx` hydrates the same shell rendered by `scripts/build.tsx`; direct links have initial HTML before JavaScript runs. This preserves the previous no-index policy. Campaign-specific social metadata and SSR of live donation data are not implemented.
+`App.tsx` owns startup status and the controller lifecycle. Thirteen TSX components define the header, public/archive pages, account selector, manager shell, login, insights/design panels, and manual-contribution dialog. `main.tsx` hydrates the same shell rendered by `scripts/build.tsx`; direct links have initial HTML before JavaScript runs. This preserves the previous no-index policy. Campaign-specific social metadata and SSR of live donation data are not implemented.
 
 The compatibility controller in `apps/web/src/compat/dashboard-controller.js` retains calculations, imports, filters, designer behavior, and imperative rendering of dynamic chart/table/project containers. This is intentional reuse during the platform change, not a claim that every interaction is an idiomatic React component. The fixed layout is memoized; React must not reconcile controller-owned children. Listeners use the mount's abort signal, requests are aborted on unmount, and timers are cleared. New dynamic features should use React components and explicit data/state contracts rather than expanding this adapter.
 
 CSS, JavaScript and media are separate assets. The controller is dynamically imported. No donor rows are embedded in the HTML or browser bootstrap JSON. Protected seed data stays under `netlify/data/`; the browser requests public redacted data or the authenticated dataset.
 
-Startup binds navigation immediately, restores the session, and reads the persisted dataset. Loading a manager page does not force an external API/Sheets refresh. Dataset loading can overlap settings loading; builder settings are applied before the authoritative source configuration so a stale source copy in the builder cannot override it. Explicit refresh and the configured session timer still fetch the source. Hosted schedules remain disabled.
+Startup binds navigation immediately, restores the session, and loads the account's accessible campaign summaries. One project routes directly, multiple projects render the active/completed selector, and no projects render an empty assignment state. Loading a manager page does not force an external API/Sheets refresh. Dataset loading can overlap settings loading; builder settings are applied before the authoritative source configuration so a stale source copy in the builder cannot override it. Explicit refresh and the configured session timer still fetch the source. Hosted schedules remain disabled.
 
 ## Backend ownership
 
@@ -60,23 +60,26 @@ Startup binds navigation immediately, restores the session, and reads the persis
 | --- | --- |
 | `backend/app.ts` | Shared response boundary, known validation errors, request timing |
 | `backend/http-handler.mjs` | Auth, legacy admin aliases and scoped route dispatch |
-| `auth-store.mjs` | Allowlist, passwords, cookies, sessions, public/protected reads |
-| `authorization.mjs` | Role and organization/campaign assignment policy |
+| `auth-store.mjs` | Approved accounts, passwords, sessions, memberships, site-admin account management and protected projections |
+| `authorization.mjs` | Effective per-scope role and action policy |
 | `campaign-store.mjs` | Authorized campaign configuration and creation |
 | `campaign-repositories.mjs` | Records, scope context, dataset windows, audits and migration markers |
 | `platform-store.mjs` | Blobs or development JSON adapter and legacy auth-store migration |
 | `source-store.mjs` / `source-sync.mjs` | Source mapping, Sheets authentication, refresh, checksums and reconciliation |
 | `postgres-ingest.mjs` | Ledger/raw imports, idempotency, manual matches, registrations and snapshots |
 | `insight-assistant.mjs` | Server aggregates, deterministic answers, optional provider call |
+| `public-campaign-archive.mjs` | Persisted completed-campaign snapshots, process cache and anonymous archive responses |
 | `prelaunch-reset.mjs` | Disabled-by-default reset runner and completion flags |
 
 Service files are under `backend/services/`. Netlify owns transport packaging, not business logic. Both local and hosted requests run the same authorization, source, question and ingestion code. Differences are credentials, storage configuration and hosting limits.
 
-Session identity lookup is separate from the auth-status portfolio response. Scoped authorization resolves just the requested organization and campaign, using two bounded SQL identity lookups and the shared role/assignment policy. Legacy routes without full scope select from identity records. Authorization does not load donation snapshots or cache permissions between requests. Explicit status and campaign-registry responses still build portfolios; they are not part of the permission check.
+An organization/site admin changing a campaign to `completed` calculates successful funds and unique successful donors once, stores only a sanitized public snapshot, and updates the process cache. Application initialization warms persisted snapshots into that cache; its normal refresh window is five minutes. Anonymous archive requests never read the campaign dataset or transaction ledger. Responses also carry browser/CDN cache policies and ETags. Operational write services reject completed campaigns, while permitted public copy/media edits refresh the snapshot without recalculating frozen totals.
+
+Session identity lookup loads only the current account and its indexed membership rows. It is separate from the auth-status portfolio response. Scoped authorization resolves just the requested organization and campaign, using two bounded SQL identity lookups and the shared effective-role policy. Legacy routes without full scope select from identity records. Authorization does not load donation snapshots or cache permissions between requests. Explicit status and campaign-registry responses still build portfolios; they are not part of the permission check.
 
 Campaign context uses one scoped SQL join. Portfolio summaries first read identities and apply the shared permission policy, then batch-read only amounts and summary metadata for allowed campaigns. Configuration registries omit operational dataset/source joins. Summary number conversion and summation stay in the existing JavaScript model to preserve behavior. These are query/transfer improvements, not a new stored aggregate model.
 
-Account emails are normalized on input and constrained to lowercase storage by migration 003. SQL auth refuses to run before that migration, preventing equality lookups or seeding against unnormalized legacy accounts. Account seeding reads current configuration but only upserts the requested account, skipping unchanged values. Session expiry cleanup retains its existing behavior.
+Account emails are normalized on input and constrained to lowercase storage by migration 003. SQL auth refuses to run before migrations 003 and 005, preventing equality lookups against unnormalized accounts or access without the membership table. Configured account seeding reads current configuration but only replaces memberships when its access hash changes. Site-admin managed accounts use the same records and sessions. Session expiry cleanup retains its existing behavior.
 
 ## Storage and compatibility
 
@@ -88,4 +91,4 @@ New browser keys, cookies, DOM IDs and environment variables use `goodraise`/`GO
 
 ## Engineering limits
 
-The platform migration does not eliminate all scaling work: SQL summaries still enumerate identities and extract stored amounts, complete datasets still go to managers, and browser analytics still scan/sort rows. The React compatibility adapter and JS services need incremental typing/component extraction. Public campaign publication policy, manager onboarding hardening, tenant isolation at the database level, and complete SQL ownership of auxiliary state remain separate work items. See [engineering assessment](engineering-assessment.md).
+The platform migration does not eliminate all scaling work: SQL summaries still enumerate identities and extract stored amounts, complete datasets still go to campaign managers, and browser analytics still scan/sort rows. The React compatibility adapter and JS services need incremental typing/component extraction. Verified-email invitations, tenant isolation at the database level, and complete SQL ownership of auxiliary state remain separate work items. See [engineering assessment](engineering-assessment.md).

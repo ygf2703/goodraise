@@ -24,6 +24,8 @@
     "verify:hygiene": "node --import tsx scripts/verify-hygiene.ts",
     "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate-db.ts",
     "import:campaign": "node --env-file-if-exists=.env --import tsx scripts/import-campaign.ts",
+    "backfill:completed-campaigns": "node --env-file-if-exists=.env --import tsx scripts/backfill-completed-campaigns.mjs",
+    "seed:completed-placeholders": "node --env-file-if-exists=.env --import tsx scripts/seed-completed-campaign-placeholders.mjs",
     "test:postgres": "node --import tsx tests/postgres.integration.mjs"
   },
   "dependencies": {

@@ -7,7 +7,7 @@ Updated 2026-09-08. Use Node.js 24 for development, tests and deployment. Python
 ```sh
 npm ci
 cp .env.example .env
-# Edit GOODRAISE_MANAGER_EMAILS before first login.
+# Edit GOODRAISE_MANAGER_EMAILS with the initial site admins before first login.
 npm run dev
 ```
 
@@ -36,7 +36,7 @@ The default address is `http://127.0.0.1:8767`. Development uses Vite middleware
 
 The old manager/source environment names are accepted through compatibility readers. New setup should use only the names above. Cookie transport uses HTTPS detection/Netlify runtime; local loopback development uses HTTP.
 
-First login for an allowlisted email enters password setup. This preserves the existing onboarding policy; it does not prove mailbox ownership. Keep manager allowlists controlled. There is no unauthenticated local password-reset endpoint in the shared Node application.
+First login for an approved email enters password setup. Initial site admins can be seeded through `GOODRAISE_MANAGER_EMAILS`; after login they approve additional users and assign memberships at `/admin/users`. Approval does not prove mailbox ownership, so keep the account list controlled. There is no unauthenticated local password-reset endpoint in the shared Node application.
 
 ## Database workflow
 
@@ -50,9 +50,13 @@ npm run db:migrate
 
 `003_normalize_admin_email.sql` also normalizes existing account emails to trimmed lowercase and adds a storage constraint. It preserves account UUIDs, password hashes and session references. Case/whitespace collisions cause the transaction to fail without merging accounts. The migration has a five-second lock timeout so it fails instead of waiting indefinitely on a busy account table.
 
+`004_completed_campaign_snapshots.sql` adds the sanitized, persisted read model used by the public completed-campaign archive. Apply it before running the archive backfill or deploying the public archive routes.
+
+`005_account_memberships.sql` adds per-user organization/campaign memberships and an access-configuration hash used to avoid rewriting unchanged configured accounts on each session read. It backfills legacy single-scope roles. Apply it before deploying the account selector or site-admin user management.
+
 Apply migration 003 **before deploying the updated SQL authentication code**. Rehearse against a restored database copy and retain a backup. New code refuses SQL authentication if the constraint is missing, preventing duplicate account seeding against legacy mixed-case records. The previous code already normalizes writes and accepts lowercase values, so the schema change can precede code deployment. If the migration reports a collision, resolve the account ownership explicitly; do not automatically merge credentials or permissions. The GoodRaise Neon production database was migrated on 2026-09-09 after a snapshot and rehearsal; see the [rollout record](database-rollout-2026-09-09.md). Other databases still require their own migration check.
 
-Migrations do not migrate SQLite users, move Blobs into SQL, import donations, or reconcile campaign identities from existing deployments. Existing runtime SQL definitions remain for compatibility; do not rely on request-time DDL for routine deployment. The runtime DDL escape hatch does not apply migration 003.
+Migrations do not migrate SQLite users, move Blobs into SQL, import donations, or reconcile campaign identities from existing deployments. Existing runtime SQL definitions remain for compatibility; do not rely on request-time DDL for routine deployment. The runtime DDL escape hatch is not a replacement for running migrations 003, 004 and 005 during deployment.
 
 With a configured database and existing campaign:
 
@@ -61,6 +65,14 @@ npm run import:campaign -- --file work/source.csv --organization example-org --c
 ```
 
 This calls the same batch ingestion service used by the source pipeline, preserving event identities and updating the dashboard snapshot. The CLI is additive/updating; it does not delete records absent from the CSV. Sheets full-snapshot refresh has a separate replacement policy that preserves manual matches. Browser CSV and comparison uploads are temporary analysis inputs and do not invoke this CLI or persist the ledger.
+
+After applying migration 004, backfill public archive snapshots for campaigns already in `completed` status:
+
+```sh
+npm run backfill:completed-campaigns
+```
+
+The command skips existing snapshots. Pass `-- --rebuild-financials` only when an authorized site operator deliberately wants to replace frozen amounts and unique-supporter totals. New completed campaigns are snapshotted automatically when an organization/site admin closes them. The archive cache is warmed during application initialization and updated immediately when a campaign closes or its allowed public copy/media changes.
 
 Build preparation writes full seed rows to `netlify/data/admin-dataset.json` outside `dist/`. Public bootstrap rows are empty. Existing campaign records prevent automatic legacy seed initialization from replacing their datasets.
 

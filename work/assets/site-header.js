@@ -30,9 +30,16 @@ export function mountSiteHeader(header, { loadSession = true } = {}) {
   function renderSession(session) {
     const manager = canAccessManagerPages(session);
     const authenticated = Boolean(session?.authenticated && session?.email);
+    const analyst = Boolean(authenticated && session?.permissions?.analytics === true);
+    const siteAdmin = Boolean(authenticated && session?.permissions?.siteAdmin === true);
     header.querySelectorAll("[data-site-audience]").forEach((element) => {
       const audience = element.dataset.siteAudience;
-      element.hidden = audience === "manager" ? !manager : audience === "session" ? !authenticated : audience === "public" ? manager : authenticated;
+      element.hidden = audience === "manager" ? !manager
+        : audience === "analyst" ? !analyst
+        : audience === "site-admin" ? !siteAdmin
+          : audience === "session" ? !authenticated
+            : audience === "public" ? manager
+              : authenticated;
     });
     closeMenu();
   }

@@ -1,6 +1,7 @@
 import {
   changeManagerPassword,
   getAdminDataset,
+  getManagedAccounts,
   getAuthStatus,
   getPublicContext,
   getCampaignView,
@@ -10,6 +11,7 @@ import {
   loginManager,
   logoutManager,
   resolveScopedAccess,
+  saveManagedAccount,
   setupManagerPassword,
 } from "./services/auth-store.mjs";
 import {
@@ -21,8 +23,14 @@ import {
 import {
   appendAuditEvent,
   ensureMultiTenantMigration,
+  getCampaignIdentity,
   listCampaignSummaries,
 } from "./services/campaign-repositories.mjs";
+import {
+  getPublicCompletedCampaignIndexResponse,
+  getPublicCompletedCampaignResponse,
+  warmPublicCampaignArchiveCache,
+} from "./services/public-campaign-archive.mjs";
 import {
   getAdminSourceConfig,
   saveAdminSourceConfig,
@@ -38,6 +46,11 @@ import {
 } from "./services/postgres-ingest.mjs";
 
 const JSON_METHODS = new Set(["POST", "PUT", "PATCH"]);
+const completedCampaignCacheWarmup = warmPublicCampaignArchiveCache().catch((error) => {
+  console.error("completed_campaign_cache_warmup_failed", {
+    message: error instanceof Error ? error.message : "Unknown archive cache error",
+  });
+});
 
 // Audit history is useful, but an unavailable audit store must never block a
 // successful database operation such as importing an ambassador directory.
@@ -80,6 +93,15 @@ function matchOrganizationRoute(pathname, suffix = "") {
   };
 }
 
+function matchPublicCompletedCampaignRoute(pathname) {
+  const match = pathname.match(/^\/api\/public\/campaigns\/([^/]+)\/([^/]+)$/);
+  if (!match) return null;
+  return {
+    organizationId: decodeURIComponent(match[1]),
+    campaignId: decodeURIComponent(match[2]),
+  };
+}
+
 async function readRequestPayload(request) {
   if (!JSON_METHODS.has(request.method)) {
     return {};
@@ -102,6 +124,9 @@ async function importCampaignAmbassadors(request, payload, scope) {
   });
   if (access.error) {
     return access.error;
+  }
+  if (access.campaign.status === "completed") {
+    return jsonResponse(409, { message: "קמפיין שהסתיים נעול לייבוא שגרירים." });
   }
   try {
     const result = await importAmbassadorRegistrations({
@@ -150,6 +175,9 @@ async function addCampaignManualContribution(request, payload, scope) {
   });
   if (access.error) {
     return access.error;
+  }
+  if (access.campaign.status === "completed") {
+    return jsonResponse(409, { message: "קמפיין שהסתיים נעול להוספת תרומות." });
   }
 
   try {
@@ -200,6 +228,7 @@ async function addCampaignManualContribution(request, payload, scope) {
 }
 
 export default async (request) => {
+  await completedCampaignCacheWarmup;
   await ensureMultiTenantMigration();
   const url = new URL(request.url);
   const { pathname } = url;
@@ -220,6 +249,19 @@ export default async (request) => {
 
   if (pathname === "/api/public-context" && request.method === "GET") {
     return getPublicContext(request);
+  }
+
+  if (pathname === "/api/public/campaigns" && request.method === "GET") {
+    return getPublicCompletedCampaignIndexResponse(request);
+  }
+
+  const publicCompletedCampaign = matchPublicCompletedCampaignRoute(pathname);
+  if (publicCompletedCampaign && request.method === "GET") {
+    return getPublicCompletedCampaignResponse(
+      request,
+      publicCompletedCampaign.organizationId,
+      publicCompletedCampaign.campaignId,
+    );
   }
 
   if (pathname === "/api/campaign-view" && request.method === "GET") {
@@ -269,6 +311,15 @@ export default async (request) => {
 
   if (pathname === "/api/admin/dataset" && request.method === "GET") {
     return getAdminDataset(request);
+  }
+
+  if (pathname === "/api/admin/accounts" && request.method === "GET") {
+    return getManagedAccounts(request);
+  }
+
+  if (pathname === "/api/admin/accounts" && request.method === "POST") {
+    const payload = await readRequestPayload(request);
+    return saveManagedAccount(request, payload.user || payload);
   }
 
   if (pathname === "/api/admin/source-config" && request.method === "GET") {
@@ -321,6 +372,13 @@ export default async (request) => {
       return jsonResponse(apiKeyValidation.status, { message: apiKeyValidation.message });
     }
     try {
+      const identity = await getCampaignIdentity(scopedIngest.organizationId, scopedIngest.campaignId);
+      if (!identity.campaign) {
+        return jsonResponse(404, { message: "Organization or campaign was not found." });
+      }
+      if (identity.campaign.status === "completed") {
+        return jsonResponse(409, { message: "Completed campaigns are locked for new transactions." });
+      }
       const payload = await readRequestPayload(request);
       const result = await ingestCampaignRecord({
         organizationIdentifier: scopedIngest.organizationId,

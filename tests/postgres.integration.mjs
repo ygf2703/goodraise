@@ -37,7 +37,7 @@ try {
   client = database.getPgClient('goodraise_test');
   await client.connect();
   const migrations = await client.query('SELECT name FROM goodraise.schema_migrations');
-  assert.equal(migrations.rowCount, 3);
+  assert.equal(migrations.rowCount, 5);
   await verifyEmailNormalizationMigration(client);
   const repo = await import('../backend/services/campaign-repositories.mjs');
   const ingest = await import('../backend/services/postgres-ingest.mjs');
@@ -73,12 +73,34 @@ try {
   const response = await handleRequest(new Request('http://localhost/api/organizations/org-sql/campaigns/alpha/dataset', { headers: { cookie } }));
   assert.equal(response.status, 200);
   assert.equal((await response.json()).rows.length, 3);
+  const completedCampaign = await repo.getCampaign('org-sql', 'alpha');
+  await repo.saveCampaign({ ...completedCampaign, status: 'completed' });
+  await repo.saveCampaignConfig('org-sql', 'alpha', { basics: { id: 'alpha', campaignName: 'alpha' }, branding: { subtitle: 'Completed SQL campaign', storyMarkdown: 'Public SQL story' }, goals: {} });
+  const archive = await import('../backend/services/public-campaign-archive.mjs');
+  const archived = await archive.publishCompletedCampaignSnapshot('org-sql', 'alpha');
+  assert.equal(archived.totals.raised, 200);
+  assert.equal(archived.totals.supporterCount, 3, 'manual contributions count their entered donor once');
+  const publicArchive = await handleRequest(new Request('http://localhost/api/public/campaigns/sql/alpha'));
+  assert.equal(publicArchive.status, 200);
+  assert.equal((await publicArchive.json()).campaign.story, 'Public SQL story');
+  assert.match(publicArchive.headers.get('cache-control'), /public/);
   const { resolveScopedAccess, getAuthStatus } = await import('../backend/services/auth-store.mjs');
   await verifyPostgresAuthorizationQueries({ repo, handleRequest, resolveScopedAccess, cookie });
   await verifyPostgresReadQueries({ repo, handleRequest, cookie });
   await verifyScopedAuthorization({ repo, handleRequest, resolveScopedAccess, getAuthStatus });
   await verifySqlEmailAndSeeding({ client, handleRequest, getAuthStatus });
   await verifyEmailMigrationGuard({ database, run });
+  await assert.rejects(
+    ingest.ingestCampaignRecord({ ...scope, payload: record('d', 40) }),
+    (error) => error?.status === 409,
+    'completed campaigns reject new operational transactions',
+  );
+  const stillFrozen = await archive.publishCompletedCampaignSnapshot('org-sql', 'alpha');
+  assert.equal(stillFrozen.totals.raised, 200, 'completed financial totals stay frozen on ordinary snapshot refresh');
+  assert.equal(stillFrozen.totals.supporterCount, 3);
+  const rebuiltArchive = await archive.publishCompletedCampaignSnapshot('org-sql', 'alpha', { rebuildFinancials: true });
+  assert.equal(rebuiltArchive.totals.raised, 200);
+  assert.equal(rebuiltArchive.totals.supporterCount, 3);
   await ingest.clearCampaignOperationalData({ ...scope });
   assert.equal((await repo.getCampaignDataset('org-sql', 'alpha')).rows.length, 0);
   assert.equal((await repo.getCampaignDataset('org-sql', 'beta')).rows[0].amount, 200);

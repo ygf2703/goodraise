@@ -2,18 +2,16 @@ import { requestJson } from "./api";
 import { authConfig, getInitialPage } from "./platform";
 import { migrateBrowserStorage } from "./storage";
 import { canAccessManagerPages, logoutSiteSession, setSiteSession } from "../../../work/assets/site-header.js";
+import { getProjectDestination, mountAccountHome, type AccountSession } from "./account-home";
 
-export interface ManagerSession {
-  authenticated: boolean;
-  email?: string;
-  permissions?: { campaignPages: boolean };
+export interface ManagerSession extends AccountSession {
   message?: string;
   code?: string;
   setupRequired?: boolean;
 }
 
 export function requestSession(signal?: AbortSignal) {
-  return requestJson<ManagerSession>(`${authConfig.statusEndpoint}?includeCampaigns=false`, {}, signal);
+  return requestJson<ManagerSession>(authConfig.statusEndpoint, {}, signal);
 }
 
 /** Bind the login form immediately; campaign code and data load only after authorization. */
@@ -34,6 +32,7 @@ export function mountAuthGate(root: HTMLElement, options: {
   let setup = false;
   let revision = 0;
   let busy = false;
+  let disposeAccountHome: (() => void) | undefined;
   migrateBrowserStorage();
   try { email.value = localStorage.getItem("goodraise.last-admin-email") || ""; } catch { /* Optional remembered email. */ }
 
@@ -49,7 +48,7 @@ export function mountAuthGate(root: HTMLElement, options: {
     }
     confirmation.required = enabled;
     password.autocomplete = enabled ? "new-password" : "current-password";
-    button.textContent = enabled ? "שמירת סיסמה וכניסה" : "כניסה לפאנל הניהול";
+    button.textContent = enabled ? "שמירת סיסמה וכניסה" : "כניסה לחשבון";
   };
   const currentPage = () => getInitialPage(window.location.pathname, true);
   const showShell = (session: ManagerSession | null) => {
@@ -61,19 +60,76 @@ export function mountAuthGate(root: HTMLElement, options: {
     }
     element("session-status").textContent = session?.authenticated ? `מחובר/ת: ${session.email}` : "מצב ניהול: אורח/ת";
     element("logout-button").hidden = !session?.authenticated;
+    element("account-home").hidden = true;
     if (session?.authenticated && !canAccessManagerPages(session)) {
-      showMessage("אין לחשבון זה הרשאת מנהל. דף הפרויקט, הפרסים והניהול זמינים כרגע למנהלים בלבד.", true);
+      showMessage("החשבון פעיל, אך עדיין לא שויך אליו פרויקט.", true);
     }
     options.onReady();
   };
-  const acceptSession = async (session: ManagerSession) => {
+  const showAccountHome = (session: ManagerSession) => {
+    element("admin-lock").hidden = true;
+    element("admin-content").hidden = true;
+    element("account-home").hidden = false;
+    disposeAccountHome?.();
+    disposeAccountHome = mountAccountHome(root, session, signal);
+    options.onReady();
+  };
+  const campaignScopeWasRequested = () => {
+    const query = new URLSearchParams(window.location.search);
+    return ["organizationId", "campaignId", "project"].some((key) => query.has(key));
+  };
+  const accountHomeWasRequested = () => {
+    const path = window.location.pathname.replace(/\/$/, "");
+    return path === "/login" || path === "/admin/users" || (path === "/admin" && !campaignScopeWasRequested());
+  };
+  const withPortfolio = async (session: ManagerSession) => {
+    if (Array.isArray(session.accessibleCampaigns)) return session;
+    const { response, payload } = await requestSession(signal);
+    return response.ok && payload.authenticated ? payload : session;
+  };
+  const acceptSession = async (initialSession: ManagerSession) => {
     if (signal.aborted) return;
+    let session = initialSession;
     showShell(session);
-    if (!canAccessManagerPages(session) || ["rules", "privacy"].includes(currentPage())) return;
+    if (!session.authenticated) {
+      const path = window.location.pathname.replace(/\/$/, "");
+      if (!["/login", "/rules", "/privacy"].includes(path)) {
+        const returnTo = `${window.location.pathname}${window.location.search}`;
+        window.location.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+      }
+      return;
+    }
+    if (["rules", "privacy"].includes(currentPage())) return;
     busy = true;
     button.disabled = true;
-    showMessage("הכניסה הצליחה. טוענים את העמוד…");
-    try { await options.onAuthenticated(session); }
+    showMessage("הכניסה הצליחה. טוענים את הפרויקטים…");
+    try {
+      session = await withPortfolio(session);
+      setSiteSession(session);
+      const campaigns = session.accessibleCampaigns || [];
+      const requestedReturnTo = new URLSearchParams(window.location.search).get("returnTo") || "";
+      if (window.location.pathname.replace(/\/$/, "") === "/login" && requestedReturnTo.startsWith("/") && !requestedReturnTo.startsWith("//")) {
+        window.location.replace(requestedReturnTo);
+        return;
+      }
+      if (window.location.pathname.replace(/\/$/, "") === "/admin/users" && !session.permissions?.siteAdmin) {
+        window.location.replace("/admin");
+        return;
+      }
+      if (accountHomeWasRequested()) {
+        if (campaigns.length === 1 && !session.permissions?.siteAdmin && window.location.pathname !== "/admin/users") {
+          window.location.replace(getProjectDestination(campaigns[0]));
+          return;
+        }
+        showAccountHome(session);
+        return;
+      }
+      if (!canAccessManagerPages(session)) {
+        showAccountHome(session);
+        return;
+      }
+      await options.onAuthenticated(session);
+    }
     catch (error) {
       if (!signal.aborted) {
         options.onReady();
@@ -130,4 +186,5 @@ export function mountAuthGate(root: HTMLElement, options: {
   }).catch(() => {
     if (!signal.aborted && !revision) showMessage("לא ניתן לבדוק את החיבור כרגע. אפשר לנסות להיכנס.", true);
   });
+  return () => disposeAccountHome?.();
 }

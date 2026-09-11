@@ -4,6 +4,7 @@ import { SourceConfigValidationError, validateSourceConfig } from "./source-secu
 import {
   appendAuditEvent,
   ensureMultiTenantMigration,
+  getCampaignIdentity,
   getCampaignSource,
   listCampaigns,
   saveCampaignDataset,
@@ -125,6 +126,15 @@ export async function syncCampaignSourceOnce({
   force = false,
 }) {
   await ensureMultiTenantMigration();
+  const identity = await getCampaignIdentity(organizationId, campaignId);
+  if (identity.campaign?.status === "completed") {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "campaign_completed",
+      message: "קמפיין שהסתיים נעול לסנכרון נתונים.",
+    };
+  }
   const sourceConfig = await getCampaignSource(organizationId, campaignId);
   const normalized = normalizeSourceConfig(sourceConfig);
   await validateSourceConfig(normalized);
@@ -309,6 +319,9 @@ export async function refreshAdminSource(request, scope = {}) {
   if (access.error) {
     return access.error;
   }
+  if (access.campaign.status === "completed") {
+    return jsonResponse(409, { message: "קמפיין שהסתיים נעול לסנכרון נתונים." });
+  }
 
   try {
     const result = await syncCampaignSourceOnce({
@@ -386,6 +399,10 @@ export async function runScheduledGoogleSheetsSync({ triggeredBy = "scheduled-go
   };
 
   for (const campaign of campaigns) {
+    if (campaign.status === "completed") {
+      summary.skippedCampaigns += 1;
+      continue;
+    }
     const sourceConfig = await getCampaignSource(campaign.organizationId, campaign.id);
     const normalized = normalizeSourceConfig(sourceConfig);
     if (!isGoogleSheetsSyncEnabled(normalized)) {

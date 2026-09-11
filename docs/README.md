@@ -21,6 +21,7 @@ The [target architecture](target-architecture.md) records the chosen direction a
 | --- | --- |
 | Organization | Tenant grouping campaigns and manager access |
 | Campaign | Its own brand, goals, dates, source, prizes and dataset |
+| Membership | One approved user's role in an organization or specific campaign |
 | Ledger | Relational transactions and donor/ambassador/reward relationships |
 | Dataset snapshot | Denormalized rows/meta read by the browser |
 | Builder draft | Campaign configuration, separate from donations and source state |
@@ -38,6 +39,8 @@ The [target architecture](target-architecture.md) records the chosen direction a
 | Route/authorization | `backend/http-handler.mjs`, `backend/services/authorization.mjs` |
 | Campaign configuration | `campaign-store.mjs`, repository mapping and browser snapshot helpers |
 | Stale totals | Source mapping → ingestion ledger → snapshot → dataset API → browser date/filter scope |
+| Completed campaign archive | `backend/services/public-campaign-archive.mjs`, homepage carousel and `PublicArchivePage.tsx` |
+| Existing-user access | `auth-store.mjs`, `authorization.mjs`, `account-home.ts`, and `/admin/users` |
 | SQL schema | New numbered file in `db/migrations/` |
 | Local/hosted backend behavior | The same `backend/` services; adapters stay thin |
 

@@ -1,6 +1,6 @@
 # API contracts
 
-Updated 2026-09-08. This is the shared Node contract, implemented by [route dispatch](../backend/http-handler.mjs) and [application boundary](../backend/app.ts), used by local and Netlify adapters. There is no OpenAPI specification or versioned API prefix.
+Updated 2026-09-10. This is the shared Node contract, implemented by [route dispatch](../backend/http-handler.mjs) and [application boundary](../backend/app.ts), used by local and Netlify adapters. There is no OpenAPI specification or versioned API prefix.
 
 ## Conventions and access
 
@@ -8,7 +8,7 @@ Use JSON bodies and `Content-Type: application/json`. Session-protected browser 
 
 In the table below, **C** means `/api/organizations/:organizationId/campaigns/:campaignId`. Prefer identifiers returned by auth/campaign APIs. The SQL ingestion resolver accepts UUIDs, application IDs, or slugs; do not assume identical identifier handling in every route.
 
-Role ordering is `viewer < analyst < campaign_manager < organization_admin < platform_admin`, with organization/campaign assignment checks in addition to role. See [multi-tenancy](multi-tenancy.md). Ingest uses a configured API key instead of a manager session.
+Role ordering is `viewer < analyst < campaign_manager < organization_admin < platform_admin`. Roles below platform admin come from membership records and are evaluated for the requested organization/campaign; the same account may have different roles in different scopes. See [multi-tenancy](multi-tenancy.md). Ingest uses a configured API key instead of a user session.
 
 Protected scoped routes validate the session and resolve the requested organization/campaign directly before reading operational data. This permission check does not load campaign summaries, configuration or donation datasets. Application IDs and slugs resolve to canonical identities; route scope takes precedence over query parameters. A missing explicit campaign returns `404`, and an existing campaign outside the user's permissions returns `403`, without falling back to another campaign. Legacy routes with incomplete scope select a viewable campaign from identity records, then enforce the requested action's role.
 
@@ -21,29 +21,35 @@ Account emails are case-insensitive: setup/login input is trimmed and lowercased
 | Method | Route | Access | Body / result |
 | --- | --- | --- | --- |
 | GET | `/api/health` | Public | Runtime/persistence counts and metadata; performs store reads/seeding |
-| GET | `/api/public-context` | Public | Selected organization/campaign and `datasetRecordCount` |
+| GET | `/api/public-context` | Viewer+ in an assigned scope | Legacy selected organization/campaign context |
+| GET | `/api/public/campaigns?limit=8` | Public | Cached cards for completed campaigns; maximum 100 |
+| GET | `/api/public/campaigns/:organization/:campaign` | Public | One cached, sanitized completed-campaign snapshot |
 | GET | `/api/auth/status` | Public/session-aware | `authenticated`, identity/role/scope/accessible campaign metadata when signed in |
-| POST | `/api/auth/login` | Allowed manager | `{email, password}`; cookie or setup-required/error response |
+| POST | `/api/auth/login` | Approved active account | `{email, password}`; cookie or setup-required/error response |
 | POST | `/api/auth/setup` | Allowed account without password | `{email, password, confirmPassword}`; creates password and session |
 | POST | `/api/auth/logout` | Session-aware | Deletes session and expires cookie |
-| POST | `/api/auth/change-password` | Signed-in manager | `{currentPassword, newPassword, confirmPassword}` |
+| POST | `/api/auth/change-password` | Signed-in account | `{currentPassword, newPassword, confirmPassword}` |
+| GET | `/api/admin/accounts` | Site admin | Approved users, password/activity state, memberships and available organizations/campaigns |
+| POST | `/api/admin/accounts` | Site admin | Creates or replaces an account's active/site-admin/membership state; new users set a password at first login |
 | GET | `/api/organizations/:organizationId/campaigns` | Organization access | `{organizationId, campaigns}` |
 | POST | `/api/organizations/:organizationId/campaigns` | Organization admin+ | Campaign snapshot or `{config: snapshot}`; `201`, registry-shaped config |
-| GET | C | Viewer+ in scope | `{config: registry, activeCampaign, portfolio, updatedAt, updatedBy, message}` |
-| POST, PUT | C | Campaign manager+; creation needs organization admin+ | `{config: snapshotOrRegistry}`; save result |
-| GET | C`/dataset` | Analyst+ in scope | Full scoped rows/meta and organization/campaign |
-| GET | C`/public-dataset` | Public | Redacted rows/meta and whitelisted campaign presentation config |
+| GET | C | Campaign manager+ in scope | `{config: registry, activeCampaign, portfolio, updatedAt, updatedBy, message}` |
+| POST, PUT | C | Campaign manager+; creation and lifecycle changes need organization admin+ | `{config: snapshotOrRegistry}`; save result |
+| GET | C`/dataset` | Analyst+ in scope | Scoped rows/meta; analyst donor/contact fields are masked, managers receive full rows |
+| GET | C`/public-dataset` | Viewer+ in scope | Viewer receives aggregate totals/ambassador totals and no donation rows; analyst+ receives redacted rows |
 | GET | C`/source` | Campaign manager+ | Source config with dedicated bearer token redacted |
 | POST, PUT | C`/source` | Campaign manager+ | `{config: sourceConfig}` |
 | POST | C`/source/refresh` | Campaign manager+ | Fetches/persists data; returns summary, then client reads dataset |
 | POST | C`/ambassadors/import` | Campaign manager+; SQL required | `{records: [...], sourceLabel?}`; counts and skipped row indices |
 | POST | C`/manual-contributions` | Campaign manager+; SQL required | `{enteredBy, amount, attributedAt?, requestId?}`; `201` created / `200` existing |
 | POST | C`/ingest` | Ingest API key; SQL required | Single donation record or wrapped record; `201` created / `200` duplicate |
-| POST | C`/insights/questions` | Campaign manager+ | `{question}`; answer and server data scope |
+| POST | C`/insights/questions` | Analyst+ | `{question}`; answer and server data scope |
 
-The role threshold for `campaign_list` is viewer, but the organization-level authorization call has no explicit campaign. Non-organization-admin roles can therefore be denied by the scope policy. For assigned-campaign navigation, the browser also receives accessible campaigns from auth status.
+Auth status returns memberships plus accessible campaign summaries carrying the effective `accessRole`. The browser uses them for direct single-project routing and for active/completed project sections. A campaign membership also permits the assigned campaign to appear in an organization campaign list; organization admins see every campaign in their organization.
 
-There are no general delete endpoints, manager invitation endpoint, payment endpoint, hosted password-recovery endpoint, or paginated dataset query in this route inventory.
+There are no general delete endpoints, payment endpoint, hosted password-recovery endpoint, or paginated dataset query in this route inventory. Account approval is site-admin-only and does not send email or prove mailbox ownership.
+
+Completed-campaign endpoints are anonymous and aggregate-only. They return public cache headers, a Netlify CDN policy and an ETag; matching `If-None-Match` requests receive `304`. The index cache is refreshed from persisted snapshots at most every five minutes per Node instance. Detail requests use the same warmed in-memory snapshot and never fall back to the donation ledger.
 
 ## Campaign configuration
 
@@ -72,6 +78,8 @@ Example shape for creating a development campaign in an existing organization:
 ```
 
 The config response is a registry with `activeCampaignId` and `campaigns`, not simply the saved snapshot. Existing clients should preserve this envelope. Config saving normalizes the supplied snapshot; it is not a generic JSON Merge Patch contract. A newly created campaign receives a separate source record and empty dataset. Existing configuration saves preserve operational source/data, while updating configured project-window metadata.
+
+Changing lifecycle status requires organization admin or site admin. Once status is `completed`, ordinary manager saves can update only the campaign name and public branding/copy/media fields. Target, dates, source, donations, ambassador imports, goals and competition configuration remain frozen; operational write endpoints return `409`. Reopening is an explicit organization/site-admin lifecycle change.
 
 ## Source configuration and refresh
 

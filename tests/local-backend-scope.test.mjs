@@ -214,8 +214,12 @@ function buildPlatformStore({
     "campaign-dataset:org-alpha:alpha-2": {
       organizationId: "org-alpha",
       campaignId: "alpha-2",
-      rows: [{ id: "a2-1", donor: "Alpha Two", ambassador: "Dana A2", amount: 2000 }],
-      meta: { rowCount: 1, projectDates: ["2026-08-24"], uniqueDates: ["2026-08-24"] },
+      rows: [
+        { id: "a2-1", donor: "Alpha Two", email: "alpha@example.org", ambassador: "Dana A2", amount: 2000, status: "success" },
+        { id: "a2-2", donor: "Alpha Two", email: "ALPHA@example.org", ambassador: "Dana A2", amount: 500, status: "success" },
+        { id: "a2-3", donor: "Failed Donor", email: "failed@example.org", ambassador: "Dana A2", amount: 700, status: "failed" },
+      ],
+      meta: { rowCount: 3, projectDates: ["2026-08-24"], uniqueDates: ["2026-08-24"] },
       sourceLabel: "alpha-2.csv",
       generatedAt: "2026-08-12T10:00:00.000Z",
       updatedAt: "2026-08-12T10:00:00.000Z",
@@ -396,6 +400,53 @@ test("local backend enforces campaign scope and returns scoped payloads", { conc
     assert.equal(campaignConfig.response.status, 200);
     assert.equal(campaignConfig.payload.activeCampaign.campaignId, "alpha-1");
     assert.equal(campaignConfig.payload.config.activeCampaignId, "alpha-1");
+
+    const completedConfig = buildCampaignConfig({
+      organizationId: "org-alpha",
+      organizationSlug: "alpha",
+      organizationName: "Organization Alpha",
+      campaignId: "alpha-2",
+      campaignSlug: "alpha-2",
+      campaignName: "Alpha 2",
+      target: 250000,
+    });
+    completedConfig.basics.status = "completed";
+    completedConfig.branding = {
+      title: "Public Alpha 2",
+      subtitle: "A completed public campaign",
+      storyMarkdown: "The public story",
+      mediaType: "image",
+      mediaUrl: "/assets/completed.jpg",
+    };
+    const completedSave = await requestJson(`${baseUrl}/api/organizations/org-alpha/campaigns/alpha-2`, {
+      method: "POST", cookie: orgAdminCookie, body: { config: completedConfig },
+    });
+    assert.equal(completedSave.response.status, 200);
+
+    const publicIndex = await requestJson(`${baseUrl}/api/public/campaigns?limit=8`);
+    assert.equal(publicIndex.response.status, 200);
+    assert.match(publicIndex.response.headers.get("cache-control"), /public/);
+    assert.ok(publicIndex.response.headers.get("etag"));
+    assert.equal(publicIndex.payload.items.length, 1);
+    assert.equal(publicIndex.payload.items[0].totals.raised, 2500, "failed payments are excluded from archived totals");
+    assert.equal(publicIndex.payload.items[0].totals.supporterCount, 1, "supporters are unique normalized donors");
+    assert.doesNotMatch(JSON.stringify(publicIndex.payload), /alpha@example|Failed Donor|Dana A2/i, "public archive cards contain no row-level identities");
+
+    const publicDetailUrl = `${baseUrl}/api/public/campaigns/alpha/alpha-2`;
+    const publicDetail = await requestJson(publicDetailUrl);
+    assert.equal(publicDetail.response.status, 200);
+    assert.equal(publicDetail.payload.campaign.name, "Public Alpha 2", "the editable public title is used by the archive");
+    assert.equal(publicDetail.payload.campaign.story, "The public story");
+    assert.equal(publicDetail.payload.totals.supporterCount, 1);
+    const unchanged = await fetch(publicDetailUrl, { headers: { "if-none-match": publicDetail.response.headers.get("etag") } });
+    assert.equal(unchanged.status, 304);
+
+    completedConfig.basics.status = "live";
+    const reopened = await requestJson(`${baseUrl}/api/organizations/org-alpha/campaigns/alpha-2`, {
+      method: "POST", cookie: orgAdminCookie, body: { config: completedConfig },
+    });
+    assert.equal(reopened.response.status, 200);
+    assert.equal((await requestJson(publicDetailUrl)).response.status, 404, "reopened campaigns leave the public archive");
   } finally {
     if (serverProcess && !serverProcess.killed) {
       serverProcess.kill("SIGTERM");

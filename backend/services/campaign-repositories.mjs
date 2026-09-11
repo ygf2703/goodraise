@@ -34,6 +34,7 @@ const PLATFORM_DEV_STORE_PATH = resolve(DATA_DIR, "goodraise-platform-dev.json")
 const LEGACY_CAMPAIGN_STORE_PATH = resolve(DATA_DIR, "netlify-campaign-config-dev.json");
 const LEGACY_SOURCE_STORE_PATH = resolve(DATA_DIR, "netlify-source-config-dev.json");
 const LEGACY_DATASET_PATH = resolve(ROOT_DIR, "netlify", "data", "admin-dataset.json");
+const DEFAULT_CAMPAIGN_PATH = resolve(ROOT_DIR, "apps", "web", "src", "default-campaign.json");
 const STORE_NAME = "goodraise-platform";
 const MIGRATION_KEY = "migration:legacy-registry-v2";
 const LEGACY_CAMPAIGN_KEY = "campaign-config";
@@ -83,9 +84,20 @@ CREATE TABLE IF NOT EXISTS goodraise.campaign_datasets (
   UNIQUE (campaign_id)
 );
 
+CREATE TABLE IF NOT EXISTS goodraise.campaign_public_snapshots (
+  id UUID PRIMARY KEY,
+  organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+  campaign_id UUID NOT NULL REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  completed_at TIMESTAMPTZ NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (campaign_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_campaign_configs_campaign ON goodraise.campaign_configs(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_campaign_sources_campaign ON goodraise.campaign_sources(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_campaign_datasets_campaign ON goodraise.campaign_datasets(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_public_snapshots_completed ON goodraise.campaign_public_snapshots(completed_at DESC);
 `;
 
 let postgresSchemaPromise = null;
@@ -108,6 +120,10 @@ function campaignSourceKey(organizationId, campaignId) {
 
 function campaignDatasetKey(organizationId, campaignId) {
   return `campaign-dataset:${organizationId}:${campaignId}`;
+}
+
+function campaignPublicSnapshotKey(organizationId, campaignId) {
+  return `campaign-public-snapshot:${organizationId}:${campaignId}`;
 }
 
 function auditKey() {
@@ -228,6 +244,88 @@ async function readLegacyDataset() {
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
+  }
+}
+
+async function buildFreshLocalDemoEntry(dataset) {
+  let presentation = {};
+  try {
+    presentation = JSON.parse(await readFile(DEFAULT_CAMPAIGN_PATH, "utf8"));
+  } catch {}
+  const meta = dataset?.meta && typeof dataset.meta === "object" ? dataset.meta : {};
+  const startDate = String(meta.defaultFrom || meta.minDate || "").slice(0, 10);
+  const endDate = String(meta.defaultTo || meta.maxDate || "").slice(0, 10);
+  const snapshot = {
+    organization: {
+      id: "goodraise-demo",
+      slug: "goodraise-demo",
+      name: "GoodRaise Demo",
+      status: "active",
+    },
+    basics: {
+      id: "demo-campaign",
+      organizationId: "goodraise-demo",
+      organizationSlug: "goodraise-demo",
+      organizationName: "GoodRaise Demo",
+      slug: "demo-campaign",
+      campaignName: String(presentation.title || "קמפיין לדוגמה"),
+      status: "live",
+      target: 100000,
+      currency: "ILS",
+      startDate,
+      endDate,
+    },
+    branding: {
+      eyebrow: presentation.eyebrow || "GoodRaise",
+      title: presentation.title || "קמפיין לדוגמה",
+      subtitle: presentation.subtitle || "",
+      storyMarkdown: presentation.storyMarkdown || "",
+      primaryCtaLabel: presentation.primaryCtaLabel || "",
+      secondaryCtaLabel: presentation.secondaryCtaLabel || "",
+      mediaType: presentation.mediaType || "image",
+      mediaUrl: presentation.mediaUrl || "",
+      mediaAlt: presentation.mediaAlt || "",
+      campaignLogoUrl: presentation.campaignLogoUrl || "",
+      organizationLogoUrl: presentation.organizationLogoUrl || "",
+      fontFamily: presentation.fontFamily || "Assistant",
+      theme: presentation.theme || {},
+    },
+    donation: {
+      presets: Array.isArray(presentation.amountCards) ? cloneJson(presentation.amountCards) : [],
+      showRecurring: presentation.showRecurring !== false,
+      externalDonationUrl: presentation.externalDonationUrl || "",
+      trustNote: presentation.trustNote || "",
+      successHint: presentation.successHint || "",
+    },
+    goals: { campaignGoal: 100000 },
+  };
+  return normalizeCampaignSnapshot(snapshot, {
+    id: "demo-campaign",
+    name: snapshot.basics.campaignName,
+    slug: "demo-campaign",
+    updatedAt: dataset?.generatedAt || isoNow(),
+  });
+}
+
+async function persistMigratedCampaign(entry, legacySource, legacyDataset) {
+  await saveOrganization(entry.organization);
+  await saveCampaign(entry.campaign);
+  await saveCampaignConfig(entry.organization.id, entry.campaign.id, entry.config, entry.config?.meta?.lastSavedBy || "");
+  await saveCampaignSource(
+    entry.organization.id,
+    entry.campaign.id,
+    normalizeSourceConfig(legacySource || defaultSourceConfig()),
+    entry.config?.meta?.lastSavedBy || "",
+  );
+  if (legacyDataset) {
+    await saveCampaignDataset(
+      entry.organization.id,
+      entry.campaign.id,
+      buildDatasetSeed(legacyDataset, {
+        organizationId: entry.organization.id,
+        campaignId: entry.campaign.id,
+      }),
+    );
   }
 }
 
@@ -989,10 +1087,140 @@ export async function listCampaignDatasets(organizationId = "") {
   });
 }
 
+export async function getCampaignPublicSnapshot(organizationId, campaignId) {
+  if (!usesPostgresCampaignStore()) {
+    const store = getStore();
+    return (await store.getJSON(campaignPublicSnapshotKey(organizationId, campaignId))) || null;
+  }
+  return withPostgresClient(async (client) => {
+    const row = await getStoredPayload(client, "campaign_public_snapshots", organizationId, campaignId);
+    return row?.payload || null;
+  });
+}
+
+export async function listCampaignPublicSnapshots() {
+  if (!usesPostgresCampaignStore()) {
+    const store = getStore();
+    const items = await store.listJSON("campaign-public-snapshot:");
+    return items.map((item) => cloneJson(item.value));
+  }
+  return withPostgresClient(async (client) => {
+    const result = await client.query(`
+      SELECT payload
+      FROM goodraise.campaign_public_snapshots
+      ORDER BY completed_at DESC, updated_at DESC
+    `);
+    return result.rows.map((row) => row.payload);
+  });
+}
+
+export async function saveCampaignPublicSnapshot(organizationId, campaignId, snapshot) {
+  const payload = cloneJson(snapshot || {});
+  if (!usesPostgresCampaignStore()) {
+    const store = getStore();
+    await store.setJSON(campaignPublicSnapshotKey(organizationId, campaignId), payload);
+    return payload;
+  }
+  return withPostgresClient(async (client) => {
+    const { organizationRow, campaignRow } = await getCampaignScopeRows(client, organizationId, campaignId);
+    if (!organizationRow || !campaignRow) {
+      throw new Error(`Missing campaign scope for ${organizationId}/${campaignId}.`);
+    }
+    const completedAt = payload.completedAt || payload.updatedAt || isoNow();
+    const updatedAt = payload.updatedAt || isoNow();
+    const result = await client.query(`
+      INSERT INTO goodraise.campaign_public_snapshots (
+        id, organization_id, campaign_id, payload, completed_at, updated_at
+      ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)
+      ON CONFLICT (campaign_id) DO UPDATE SET
+        payload = EXCLUDED.payload,
+        completed_at = EXCLUDED.completed_at,
+        updated_at = EXCLUDED.updated_at
+      RETURNING payload
+    `, [randomUUID(), organizationRow.id, campaignRow.id, payload, completedAt, updatedAt]);
+    return result.rows[0]?.payload || payload;
+  });
+}
+
+export async function deleteCampaignPublicSnapshot(organizationId, campaignId) {
+  if (!usesPostgresCampaignStore()) {
+    const store = getStore();
+    await store.delete(campaignPublicSnapshotKey(organizationId, campaignId));
+    return;
+  }
+  await withPostgresClient(async (client) => {
+    const { campaignRow } = await getCampaignScopeRows(client, organizationId, campaignId);
+    if (campaignRow) {
+      await client.query("DELETE FROM goodraise.campaign_public_snapshots WHERE campaign_id = $1::uuid", [campaignRow.id]);
+    }
+  });
+}
+
+function isSuccessfulDatasetRow(row) {
+  const status = String(row?.status || "").trim().toLowerCase();
+  return status === "success" || row?.chargedSuccess === true || row?.charged_success === true;
+}
+
+function localSupporterKey(row) {
+  const email = normalizeEmail(row?.email || "");
+  if (email) return `email:${email}`;
+  const donor = String(row?.donor || row?.fullName || row?.full_name || "").trim().toLowerCase();
+  if (donor) return `name:${donor}`;
+  const id = String(row?.donorId || row?.donor_id || row?.id || "").trim();
+  return id ? `id:${id}` : "";
+}
+
+export async function getCampaignPublicTotals(organizationId, campaignId) {
+  if (!usesPostgresCampaignStore()) {
+    const dataset = await getCampaignDataset(organizationId, campaignId);
+    const successfulRows = (Array.isArray(dataset?.rows) ? dataset.rows : []).filter(isSuccessfulDatasetRow);
+    const supporters = new Set(successfulRows.map(localSupporterKey).filter(Boolean));
+    return {
+      raised: successfulRows.reduce((sum, row) => sum + Number(row?.amount || 0), 0),
+      supporterCount: supporters.size,
+    };
+  }
+  return withPostgresClient(async (client) => {
+    const { campaignRow } = await getCampaignScopeRows(client, organizationId, campaignId);
+    if (!campaignRow) return { raised: 0, supporterCount: 0 };
+    const result = await client.query(`
+      SELECT
+        COALESCE(SUM(total_amount) FILTER (WHERE charged_success IS TRUE), 0)::float8 AS raised,
+        COUNT(DISTINCT donor_id) FILTER (WHERE charged_success IS TRUE AND donor_id IS NOT NULL)::int AS supporter_count
+      FROM goodraise.transactions
+      WHERE campaign_id = $1::uuid
+    `, [campaignRow.id]);
+    return {
+      raised: Number(result.rows[0]?.raised || 0),
+      supporterCount: Number(result.rows[0]?.supporter_count || 0),
+    };
+  });
+}
+
 export async function ensureMultiTenantMigration() {
   const store = getStore();
   const existingMigration = await store.getJSON(MIGRATION_KEY);
   if (existingMigration?.completedAt) {
+    // Older fresh local runs could persist a zero-campaign marker even though
+    // prepare:assets had produced a usable demo dataset. Repair only that exact
+    // development state; never seed a configured PostgreSQL database.
+    if (!usesPostgresCampaignStore() && existingMigration.migratedCampaigns === 0 && !(await listCampaigns()).length) {
+      const legacyDataset = await readLegacyDataset();
+      if (legacyDataset) {
+        const entry = await buildFreshLocalDemoEntry(legacyDataset);
+        await persistMigratedCampaign(entry, null, legacyDataset);
+        const repaired = {
+          ...existingMigration,
+          activeCampaignId: entry.campaign.id,
+          migratedOrganizations: 1,
+          migratedCampaigns: 1,
+          localDemoSeeded: true,
+          repairedAt: isoNow(),
+        };
+        await store.setJSON(MIGRATION_KEY, repaired);
+        return repaired;
+      }
+    }
     return existingMigration;
   }
 
@@ -1013,31 +1241,18 @@ export async function ensureMultiTenantMigration() {
   const legacySource = await readLegacySourceConfig();
   const legacyDataset = await readLegacyDataset();
   const parsedLegacy = parseLegacyCampaignRegistry(legacyRegistry || {});
+  if (!parsedLegacy.entries.length && !usesPostgresCampaignStore() && legacyDataset) {
+    const entry = await buildFreshLocalDemoEntry(legacyDataset);
+    parsedLegacy.entries.push(entry);
+    parsedLegacy.activeCampaignId = entry.campaign.id;
+  }
 
   const migratedOrganizations = new Map();
   let migratedCampaigns = 0;
 
   for (const entry of parsedLegacy.entries) {
     migratedOrganizations.set(entry.organization.id, entry.organization);
-    await saveOrganization(entry.organization);
-    await saveCampaign(entry.campaign);
-    await saveCampaignConfig(entry.organization.id, entry.campaign.id, entry.config, entry.config?.meta?.lastSavedBy || "");
-    await saveCampaignSource(
-      entry.organization.id,
-      entry.campaign.id,
-      normalizeSourceConfig(legacySource || defaultSourceConfig()),
-      entry.config?.meta?.lastSavedBy || "",
-    );
-    if (legacyDataset) {
-      await saveCampaignDataset(
-        entry.organization.id,
-        entry.campaign.id,
-        buildDatasetSeed(legacyDataset, {
-          organizationId: entry.organization.id,
-          campaignId: entry.campaign.id,
-        }),
-      );
-    }
+    await persistMigratedCampaign(entry, legacySource, legacyDataset);
     migratedCampaigns += 1;
   }
 

@@ -1043,6 +1043,12 @@ async function resolveScope(client, organizationIdentifier, campaignIdentifier) 
   return result.rows[0] || null;
 }
 
+function assertCampaignAcceptsOperationalWrites(scope) {
+  if (String(scope?.campaign_status || "").toLowerCase() === "completed") {
+    throw new IngestHttpError(409, "Completed campaigns are locked for operational changes.");
+  }
+}
+
 async function backfillExistingCanonicalEventKeys(client, campaignId) {
   const result = await client.query(
     `
@@ -1521,6 +1527,7 @@ export async function ingestCampaignRecord({ organizationIdentifier, campaignIde
     if (!scope) {
       throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
     }
+    assertCampaignAcceptsOperationalWrites(scope);
     await backfillExistingCanonicalEventKeys(client, scope.campaign_id);
     const existingTransaction = await findExistingTransactionByCanonicalKey(client, scope.campaign_id, canonicalEventKey);
     if (existingTransaction) {
@@ -1901,6 +1908,7 @@ export async function ingestCampaignRecords({
     if (!scope) {
       throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
     }
+    assertCampaignAcceptsOperationalWrites(scope);
 
     // A Google Sheet may be polled by the Netlify scheduler and an open manager
     // session at the same time. Only one writer may import a campaign at once;
@@ -2118,6 +2126,7 @@ export async function importAmbassadorRegistrations({
     if (!scope) {
       throw new IngestHttpError(404, "Organization or campaign was not found in PostgreSQL.");
     }
+    assertCampaignAcceptsOperationalWrites(scope);
 
     for (const [ambassadorKey, record] of normalizedByKey) {
       const registeredAt = parseTimestamp(record.registeredAtRaw);

@@ -1,6 +1,6 @@
 # GoodRaise
 
-GoodRaise is a platform for organizations running fundraising campaigns: campaign pages, ambassador links and prizes, manager dashboards, source imports, and campaign intelligence. Campaign pages and prizes currently require a signed-in manager account.
+GoodRaise is a platform for organizations running fundraising campaigns: campaign pages, ambassador links and prizes, manager dashboards, source imports, campaign intelligence, and a public archive of completed campaigns. Private project pages require an approved account; completed campaign summaries are also public and read-only.
 
 The application uses **one Node.js backend and one React frontend**. TypeScript covers the React components, application/API boundary, database pool, and new tooling. Existing JavaScript services and campaign controls are reused. Python is no longer required to build, run, test, or import data.
 
@@ -11,17 +11,19 @@ Use Node.js 24 (`.nvmrc`; validated with 24.20.0).
 ```sh
 npm ci
 cp .env.example .env
-# Set GOODRAISE_MANAGER_EMAILS in .env to your authorized manager email.
+# Set GOODRAISE_MANAGER_EMAILS in .env to the initial authorized site admins.
 npm run dev
 ```
 
-Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; placeholder copy and image areas can be replaced there. React and the API share this origin. `/admin`, `/rules`, `/privacy`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
+Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; placeholder copy and image areas can be replaced there. React and the API share this origin. `/login`, `/admin`, `/admin/users`, `/campaigns`, `/rules`, `/privacy`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
 
 The build writes the landing page to `dist/index.html` as the default homepage. The React application shell is `dist/app.html`; application routes rewrite to this file. Legacy campaign query links at `/` and `/index.html` use a query-aware rewrite to preserve their campaign and ambassador context.
 
 All pages share the landing-page header. See the [navigation migration map](docs/navigation-migration.md) for the existing destinations retained during the gradual page migration.
 
-First login for an allowlisted manager enters password setup. Without a database URL, the same Node services use local JSON files for a development/demo dataset. PostgreSQL is required for ledger ingestion, manual contributions, and relational ambassador registration imports. There is no separate local backend implementation.
+Accounts cannot self-register. A site admin approves the email and assigns one or more organization/campaign memberships; the user's first login then enters password setup. `/admin` opens the assigned-project selector when there are multiple projects, opens the only project directly when there is one, and shows a clear no-project state when there are none. Active and completed projects are separated. Site admins manage approvals and memberships at `/admin/users`.
+
+Roles are scoped per membership: `viewer`, `analyst`, `campaign_manager`, and organization-wide `organization_admin`; `platform_admin` is global. One account can have different roles in different organizations or projects. Without a database URL, the same Node services use local JSON files for a development/demo dataset. PostgreSQL is required for ledger ingestion, manual contributions, and relational ambassador registration imports. There is no separate local backend implementation.
 
 ## PostgreSQL
 
@@ -38,6 +40,20 @@ npm run import:campaign -- --file work/source.csv --organization example-org --c
 ```
 
 The import updates the ledger and its dashboard snapshot; duplicate event IDs are not added again. Browser CSV uploads remain local analysis inputs. See [development](docs/development.md) for the distinction and deployment configuration.
+
+After migrations 004 and 005, create persisted public snapshots for campaigns that were already completed before this feature was deployed:
+
+```sh
+npm run backfill:completed-campaigns
+```
+
+New snapshots are created automatically when an organization or site admin changes a campaign to `completed`. The homepage carousel and `/campaigns` archive read only these sanitized snapshots. Completed totals, source data and competition data are frozen; campaign managers may still update public copy and media.
+
+For local UI development, seed the three tracked Giveback-based placeholder snapshots without touching PostgreSQL:
+
+```sh
+npm run seed:completed-placeholders
+```
 
 ## Build and validate
 

@@ -43,4 +43,51 @@ export interface BootstrapData {
   prizes: PrizeModel;
 }
 
+export interface PublicCampaignOrganization {
+  id: string;
+  slug: string;
+  name: string;
+  logoUrl: string;
+}
+
+export interface PublicCompletedCampaignCard {
+  organization: PublicCampaignOrganization;
+  campaign: {
+    id: string;
+    slug: string;
+    name: string;
+    status: "completed";
+    description: string;
+    mediaType: "image" | "video";
+    mediaUrl: string;
+    mediaAlt: string;
+    campaignLogoUrl: string;
+  };
+  totals: {
+    raised: number;
+    target: number;
+    progressPercent: number;
+    supporterCount: number;
+    currency: string;
+  };
+  startAt: string;
+  endAt: string;
+  completedAt: string;
+  href: string;
+  revision: number;
+  updatedAt: string;
+}
+
+export interface PublicCompletedCampaign extends PublicCompletedCampaignCard {
+  schemaVersion: number;
+  publishedAt: string;
+  campaign: PublicCompletedCampaignCard["campaign"] & { story: string };
+}
+
+export interface PublicCompletedCampaignIndex {
+  items: PublicCompletedCampaignCard[];
+  total: number;
+  hasMore: boolean;
+}
+
 export type Page = "project" | "prizes" | "rules" | "privacy" | "admin";

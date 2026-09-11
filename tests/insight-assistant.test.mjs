@@ -111,13 +111,13 @@ test("insight assistant includes the full ambassador totals list for fundraising
   assert.equal(context.ambassadorTotalsTruncated, false);
 });
 
-test("insight question endpoint is campaign-scoped and manager-authorized", async () => {
+test("insight question endpoint is campaign-scoped and analyst-authorized", async () => {
   const authFunction = await readFile(new URL("../backend/http-handler.mjs", import.meta.url), "utf8");
   const authorization = await readFile(new URL("../backend/services/authorization.mjs", import.meta.url), "utf8");
 
   assert.match(authFunction, /matchScopedCampaignRoute\(pathname, "\/insights\/questions"\)/);
   assert.match(authFunction, /answerCampaignInsightQuestion\(request, payload, scopedInsightQuestion\)/);
-  assert.match(authorization, /insight_query: ROLE_CAMPAIGN_MANAGER/);
+  assert.match(authorization, /insight_query: ROLE_ANALYST/);
 });
 
 test("dashboard places the insight assistant beneath the campaign summary and before manual matching", async () => {

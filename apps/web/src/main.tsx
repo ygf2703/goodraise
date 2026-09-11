@@ -1,10 +1,12 @@
-import { hydrateRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { App } from "./App";
 import "./styles/dashboard.css";
 import { requestSession } from "./auth-gate";
+import { getPublicArchiveRoute } from "./platform";
 
-// Start identity lookup before React hydration and before campaign code is needed.
-const sessionRequest = requestSession();
+const archiveRoute = getPublicArchiveRoute(window.location.pathname);
+// Public archive pages never wait for or request a manager session.
+const sessionRequest = archiveRoute ? undefined : requestSession();
 const fonts = document.getElementById("site-fonts") as HTMLLinkElement | null;
 if (fonts) {
   if (fonts.sheet) fonts.media = "all";
@@ -13,4 +15,5 @@ if (fonts) {
 
 const root = document.getElementById("app");
 if (!root) throw new Error("The application root is missing.");
-hydrateRoot(root, <App sessionRequest={sessionRequest} />);
+if (archiveRoute) createRoot(root).render(<App archiveRoute={archiveRoute} />);
+else hydrateRoot(root, <App sessionRequest={sessionRequest} />);

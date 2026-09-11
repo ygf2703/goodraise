@@ -1,6 +1,7 @@
 import { LoginPanel } from './LoginPanel';
 import { InsightsPanel } from './InsightsPanel';
 import { DesignPanel } from './DesignPanel';
+import { AccountHomePanel } from './AccountHomePanel';
 
 export function AdminPage() {
   return (<section id="page-admin" className="page-shell is-active">
@@ -9,6 +10,7 @@ export function AdminPage() {
           <button id="logout-button" className="button-ghost" type="button" hidden>התנתקות</button>
         </div>
         <LoginPanel />
+        <AccountHomePanel />
 
         <div id="admin-content" className="admin-content" hidden>
           <div className="dashboard-shell">

@@ -2334,6 +2334,7 @@ async function fetchPublicContext(options = {}) {
 }
 
 function applyServerScope(payload = {}, fallbackScope = getActiveCampaignIdentity()) {
+  const hasSummaries = Array.isArray(payload?.accessibleCampaigns) || Array.isArray(payload?.portfolio);
   const summaries = Array.isArray(payload?.accessibleCampaigns)
     ? payload.accessibleCampaigns
     : Array.isArray(payload?.portfolio)
@@ -2363,7 +2364,7 @@ function applyServerScope(payload = {}, fallbackScope = getActiveCampaignIdentit
     organizationId,
     campaignId,
   };
-  state.auth.accessibleCampaigns = summaries;
+  if (hasSummaries) state.auth.accessibleCampaigns = summaries;
   syncActiveCampaignRegistryWithScope(state.auth.currentScope);
   // Real links also retain the selected campaign when opened in another tab.
   root.querySelectorAll(".site-header [data-page-target]").forEach((link) => {
@@ -2590,6 +2591,42 @@ function isManagerAuthenticated() {
   return canAccessManagerPages(state.session);
 }
 
+const ACCESS_ROLE_ORDER = { viewer: 1, analyst: 2, campaign_manager: 3, organization_admin: 4, platform_admin: 5 };
+
+function getCurrentAccessRole() {
+  if (state.session?.permissions?.siteAdmin) return "platform_admin";
+  const scope = getActiveCampaignIdentity();
+  const summary = state.auth.accessibleCampaigns.find((item) =>
+    [item.organizationId, item.organizationSlug].includes(scope.organizationId)
+    && [item.campaignId, item.campaignSlug].includes(scope.campaignId));
+  return String(summary?.accessRole || state.session?.role || "viewer").trim().toLowerCase();
+}
+
+function hasCurrentAccessRole(minimumRole) {
+  return (ACCESS_ROLE_ORDER[getCurrentAccessRole()] || 0) >= (ACCESS_ROLE_ORDER[minimumRole] || 0);
+}
+
+function canAnalyzeCampaign() {
+  return hasCurrentAccessRole("analyst");
+}
+
+function canManageCampaign() {
+  return hasCurrentAccessRole("campaign_manager");
+}
+
+function canManageOrganization() {
+  return hasCurrentAccessRole("organization_admin");
+}
+
+function getActiveCampaignStatus() {
+  const scope = getActiveCampaignIdentity();
+  const summary = state.auth.accessibleCampaigns.find((item) =>
+    [item.organizationId, item.organizationSlug].includes(scope.organizationId)
+    && [item.campaignId, item.campaignSlug].includes(scope.campaignId));
+  const registryEntry = getCampaignRegistryActiveEntry();
+  return String(summary?.status || registryEntry?.config?.basics?.status || state.campaignBuilder?.basics?.status || "").trim().toLowerCase();
+}
+
 async function authRequest(endpoint, options = {}) {
   const result = await requestJson(endpoint, options, signal);
   if (result.response.status === 401 && state.session) {
@@ -2615,6 +2652,7 @@ async function hydrateAuthSession(session = null, campaignData = null) {
     state.auth.backendAvailable = response.ok;
     if (response.ok && payload?.authenticated && payload?.email) {
       setAuthenticatedSession(payload);
+      if (Array.isArray(payload.accessibleCampaigns)) state.auth.accessibleCampaigns = payload.accessibleCampaigns;
       if (!isManagerAuthenticated()) return;
       if (["project", "prizes"].includes(getInitialPage(window.location.pathname, true))) {
         if (campaignData) applyCampaignViewData(campaignData);
@@ -2700,7 +2738,31 @@ async function loadPublicDataset(scope = getActiveCampaignIdentity(), options = 
 function applyCampaignViewData(payload) {
   applyServerScope(payload);
   state.auth.adminDatasetLoaded = false;
-  state.rows = enrichRows(payload.rows, payload.meta);
+  const summaryRows = Array.isArray(payload?.summary?.ambassadorTotals)
+    ? payload.summary.ambassadorTotals.map((item, index) => ({
+        id: `aggregate-ambassador-${index + 1}`,
+        createdIso: String(payload.generatedAt || ""),
+        date: String(payload.meta?.defaultTo || payload.meta?.maxDate || ""),
+        hour: 0,
+        ambassador: String(item?.ambassador || ""),
+        amount: Number(item?.amount || 0),
+        status: "success",
+      }))
+    : [];
+  const representedAmount = summaryRows.reduce((sum, row) => sum + row.amount, 0);
+  const unassignedAmount = Math.max(0, Number(payload?.summary?.raised || 0) - representedAmount);
+  if (unassignedAmount > 0) {
+    summaryRows.push({
+      id: "aggregate-unassigned",
+      createdIso: String(payload.generatedAt || ""),
+      date: String(payload.meta?.defaultTo || payload.meta?.maxDate || ""),
+      hour: 0,
+      ambassador: "ללא שיוך",
+      amount: unassignedAmount,
+      status: "success",
+    });
+  }
+  state.rows = enrichRows(payload.rows.length ? payload.rows : summaryRows, payload.meta);
   state.meta = payload.meta;
   state.sourceLabel = payload.sourceLabel || "קובץ בסיס ציבורי";
   state.datasetFreshnessAt = String(payload.generatedAt || payload.meta?.fetchedAt || payload.meta?.dataThroughAt || "").trim();
@@ -3150,6 +3212,11 @@ async function ensureCampaignBuilderConfigLoaded(scope = getActiveCampaignIdenti
 }
 
 async function loadProtectedManagerData(scope = getActiveCampaignIdentity()) {
+  if (!canAnalyzeCampaign()) return loadPublicDataset(scope, { preferRequestedScope: true });
+  if (!canManageCampaign()) {
+    await loadPublicDataset(scope, { preferRequestedScope: true });
+    return loadAdminDataset(scope);
+  }
   const dataset = loadAdminDataset(scope);
   // Builder snapshots can contain an older source copy. Apply the authoritative
   // source response last so loading design settings cannot switch the connector.
@@ -3226,6 +3293,7 @@ function setPage(page) {
   if (["project", "prizes"].includes(nextPage) && (!isManagerAuthenticated() || state.auth.campaignAccessError)) {
     nextPage = "admin";
   }
+  if (nextPage === "admin" && isManagerAuthenticated() && !canAnalyzeCampaign()) nextPage = "project";
   state.ui.page = nextPage;
   const pageMap = {
     project: elements.pageProject,
@@ -3264,7 +3332,7 @@ async function navigateToPage(page, { updateHistory = false } = {}) {
 }
 
 function setAdminTab(tab) {
-  const nextTab = tab === "design" ? "design" : "insights";
+  const nextTab = tab === "design" && canManageCampaign() ? "design" : "insights";
   state.ui.adminTab = nextTab;
   const panelMap = {
     insights: elements.adminTabPanelInsights,
@@ -3305,11 +3373,22 @@ function refreshAccessUi() {
   const isManager = isManagerAuthenticated();
   const hasAccess = isManager && !state.auth.campaignAccessError;
   const isAdminPage = state.ui.page === "admin";
+  const isCompleted = getActiveCampaignStatus() === "completed";
   elements.sessionStatus.textContent = state.session ? `מחובר/ת: ${state.session.email}` : "מצב ניהול: אורח/ת";
   elements.sessionStatus.hidden = !isAdminPage;
   elements.logoutButton.hidden = !state.session;
   elements.adminLock.hidden = hasAccess;
   elements.adminContent.hidden = !hasAccess;
+  root.querySelectorAll('[data-requires-role="campaign_manager"]').forEach((item) => {
+    item.hidden = !canManageCampaign() || isCompleted;
+  });
+  [elements.goalTotal, elements.goalDaily].forEach((element) => {
+    if (element) element.disabled = isCompleted;
+  });
+  if (elements.resetWorkingData) elements.resetWorkingData.hidden = isCompleted;
+  elements.adminTabButtons.forEach((button) => {
+    if (button.dataset.adminTabTarget === "design") button.hidden = !canManageCampaign();
+  });
   if (isAdminPage && !hasAccess) {
     setLoginMessage(state.auth.campaignAccessError || (state.session
       ? "אין לחשבון זה הרשאת מנהל. דף הפרויקט, הפרסים והניהול זמינים כרגע למנהלים בלבד."
@@ -6156,7 +6235,9 @@ function renderCampaignDesigner(force = false) {
   const builderStatus = getCampaignBuilderStatus();
   const directoryStatus = getAmbassadorDirectoryStatus();
   const directoryRows = state.ambassadorDirectory || [];
-  const currentStep = Math.max(1, Math.min(9, Number(state.ui.campaignBuilderStep || 1)));
+  const campaignIsCompleted = getActiveCampaignStatus() === "completed";
+  const requestedStep = Math.max(1, Math.min(9, Number(state.ui.campaignBuilderStep || 1)));
+  const currentStep = campaignIsCompleted && requestedStep !== 2 && !(requestedStep === 1 && canManageOrganization()) ? 2 : requestedStep;
   state.ui.campaignBuilderStep = currentStep;
   const campaignRegistryOptions = campaignRegistry.campaigns
     .map((item) => {
@@ -6745,7 +6826,9 @@ function renderCampaignDesigner(force = false) {
 
   elements.campaignDesignerPanel.innerHTML = `
     <div class="campaign-settings-panel">
-      <div class="settings-panel-note">Campaign Builder שומר את כל שכבת ההקמה של הקמפיין: פרטים עסקיים, מיתוג, תרומות, שגרירים, פרסים והרשאות. הזרימה מיועדת לעבודה חוזרת של ארגונים ולא להגדרה חד-פעמית בלבד.</div>
+      <div class="settings-panel-note">${campaignIsCompleted
+        ? "הקמפיין הסתיים. הסכומים והמידע התפעולי נעולים; אפשר לעדכן רק טקסט ומדיה ציבוריים. שינוי סטטוס זמין למנהל/ת הארגון."
+        : "Campaign Builder שומר את כל שכבת ההקמה של הקמפיין: פרטים עסקיים, מיתוג, תרומות, שגרירים, פרסים והרשאות. הזרימה מיועדת לעבודה חוזרת של ארגונים ולא להגדרה חד-פעמית בלבד."}</div>
       <div class="campaign-settings-grid">
         <label class="form-label">
           קמפיין פעיל
@@ -6765,14 +6848,18 @@ function renderCampaignDesigner(force = false) {
       <div class="settings-actions">
         <div class="settings-status" data-builder-status${builderStatus.tone !== "neutral" ? ` data-tone="${escapeAttribute(builderStatus.tone)}"` : ""}>${escapeHtml(builderStatus.message)}</div>
         <div class="project-hero-actions">
-          <button class="button-ghost" type="button" data-builder-action="create-campaign">קמפיין חדש</button>
+          <button class="button-ghost" type="button" data-builder-action="create-campaign"${canManageOrganization() ? "" : " hidden"}>קמפיין חדש</button>
           <button class="button-secondary" type="button" data-builder-action="save-now">שמירת טיוטה</button>
-          <button class="button-ghost" type="button" data-builder-action="duplicate-campaign">שכפול קמפיין</button>
+          <button class="button-ghost" type="button" data-builder-action="duplicate-campaign"${canManageOrganization() ? "" : " hidden"}>שכפול קמפיין</button>
           <button class="button-ghost" type="button" data-project-action="open-project-preview">תצוגה מקדימה</button>
         </div>
       </div>
       <div class="data-toolbar metric-toolbar" aria-label="שלבי ה־Campaign Builder">
-        ${steps.map((label, index) => `<button class="metric-toggle${currentStep === index + 1 ? " is-active" : ""}" type="button" data-builder-step="${index + 1}">${index + 1}. ${escapeHtml(label)}</button>`).join("")}
+        ${steps.map((label, index) => {
+          const step = index + 1;
+          const unavailableForCompleted = campaignIsCompleted && step !== 2 && !(step === 1 && canManageOrganization());
+          return `<button class="metric-toggle${currentStep === step ? " is-active" : ""}" type="button" data-builder-step="${step}"${unavailableForCompleted ? " disabled" : ""}>${step}. ${escapeHtml(label)}</button>`;
+        }).join("")}
       </div>
       <div class="signal-grid">
         <section class="analysis-card">
@@ -6811,13 +6898,20 @@ function renderCampaignDesigner(force = false) {
       <div class="settings-actions">
         <div class="settings-status" data-settings-status${statusState.tone !== "neutral" ? ` data-tone="${escapeAttribute(statusState.tone)}"` : ""}>${escapeHtml(statusState.message)}</div>
         <div class="project-hero-actions">
-          <button class="button-ghost" type="button" data-builder-action="prev-step"${currentStep === 1 ? " disabled" : ""}>הקודם</button>
-          <button class="button-secondary" type="button" data-builder-action="next-step"${currentStep === steps.length ? " disabled" : ""}>הבא</button>
-          <button class="button-ghost" type="button" data-project-action="reset-campaign-settings">איפוס</button>
+          <button class="button-ghost" type="button" data-builder-action="prev-step"${currentStep === 1 || (campaignIsCompleted && !canManageOrganization()) ? " disabled" : ""}>הקודם</button>
+          <button class="button-secondary" type="button" data-builder-action="next-step"${currentStep === steps.length || (campaignIsCompleted && currentStep === 2) ? " disabled" : ""}>הבא</button>
+          <button class="button-ghost" type="button" data-project-action="reset-campaign-settings"${campaignIsCompleted ? " disabled" : ""}>איפוס</button>
         </div>
       </div>
     </div>
   `;
+  const lifecycleStatus = elements.campaignDesignerPanel.querySelector('[data-builder-setting="basics.status"]');
+  if (lifecycleStatus) lifecycleStatus.disabled = !canManageOrganization();
+  if (campaignIsCompleted && currentStep === 1) {
+    elements.campaignDesignerPanel.querySelectorAll("input, select, textarea").forEach((control) => {
+      if (control !== lifecycleStatus && !control.matches('[data-campaign-registry="active-id"]')) control.disabled = true;
+    });
+  }
   elements.campaignDesignerPanel.dataset.ready = "true";
 }
 
@@ -6827,6 +6921,7 @@ function renderProjectPage() {
   }
 
   const settings = state.campaignPage;
+  const campaignIsCompleted = getActiveCampaignStatus() === "completed";
   const prizeRows = getPrizeScopeRows();
   const totalRaised = sumAmount(prizeRows);
   const latestCreated = getLatestCreatedIso(prizeRows);
@@ -7007,6 +7102,17 @@ function renderProjectPage() {
       </div>
     </section>
   `;
+  if (campaignIsCompleted) {
+    const primaryAction = elements.projectPageRoot.querySelector('[data-project-action="scroll-donation"]');
+    if (primaryAction) primaryAction.hidden = true;
+    const mediaBadge = elements.projectPageRoot.querySelector(".project-media-badge");
+    if (mediaBadge) mediaBadge.textContent = "הקמפיין הסתיים";
+    const donationPanel = elements.projectPageRoot.querySelector("#project-donation-panel");
+    if (donationPanel) donationPanel.innerHTML = `
+      <div class="section-header"><div><h3>הקמפיין הסתיים</h3>
+      <div class="text-small text-muted">העמוד נשמר לצפייה בלבד. לא ניתן לבצע תרומות או פעולות חדשות בקמפיין שהסתיים.</div></div></div>
+    `;
+  }
 }
 
 function runRenderStep(label, callback) {

@@ -22,7 +22,7 @@ export function createApplicationServer() {
       if (!file.startsWith(output + sep) && file !== output) { response.writeHead(403); response.end(); return; }
       const entry = await stat(file).catch(() => null);
       if (entry?.isDirectory()) file = resolve(file, "index.html");
-      else if (!entry && /^\/(?:[^/.]+(?:\/[^/.]+)?\/?)?$/.test(path)) file = resolve(output, pageDocument);
+      else if (!entry && (/^\/(?:[^/.]+(?:\/[^/.]+)?\/?)?$/.test(path) || /^\/campaigns\/[^/.]+\/[^/.]+\/?$/.test(path))) file = resolve(output, pageDocument);
       const content = await readFile(file).catch(() => null);
       if (!content) { response.writeHead(404); response.end("Not found"); return; }
       response.writeHead(200, {

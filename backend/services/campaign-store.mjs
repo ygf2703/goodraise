@@ -15,6 +15,7 @@ import {
   buildCampaignContext,
   ensureMultiTenantMigration,
   getCampaign,
+  getCampaignConfig,
   getOrganization,
   listCampaignSummaries,
   saveCampaign,
@@ -23,6 +24,10 @@ import {
   saveCampaignSource,
   saveOrganization,
 } from "./campaign-repositories.mjs";
+import {
+  publishCompletedCampaignSnapshot,
+  unpublishCompletedCampaignSnapshot,
+} from "./public-campaign-archive.mjs";
 
 function cloneJson(value) {
   return JSON.parse(JSON.stringify(value ?? null));
@@ -210,7 +215,12 @@ async function requireOrganizationAccess(request, organizationId, action, unauth
   }
 
   return {
-    auth: baseAccess.auth,
+    auth: {
+      ...baseAccess.auth,
+      accountRole: baseAccess.auth.role,
+      role: authorization.effectiveRole || baseAccess.auth.role,
+      effectiveRole: authorization.effectiveRole || baseAccess.auth.role,
+    },
     organization,
   };
 }
@@ -284,6 +294,14 @@ async function createOrUpdateScopedCampaign({ auth, organization, campaignId, sn
     });
   }
   await syncCampaignDatasetProjectWindow(organization.id, savedCampaign, now);
+
+  // A completed campaign becomes a small immutable public record. Later copy or
+  // media edits refresh presentation fields while retaining its frozen totals.
+  if (savedCampaign.status === "completed") {
+    await publishCompletedCampaignSnapshot(organization.id, savedCampaign.id);
+  } else if (existingCampaign?.status === "completed") {
+    await unpublishCompletedCampaignSnapshot(organization.id, savedCampaign.id);
+  }
 
   return {
     campaign: savedCampaign,
@@ -377,7 +395,7 @@ export async function createOrganizationCampaign(request, organizationId, rawCon
 export async function getAdminCampaignConfig(request, scope = {}) {
   await ensureMultiTenantMigration();
   const access = await resolveScopedAccess(request, {
-    action: "campaign_view",
+    action: "campaign_config_view",
     organizationId: scope.organizationId,
     campaignId: scope.campaignId,
     unauthorizedMessage: "נדרשת התחברות מנהל כדי לטעון את הגדרות הקמפיין.",
@@ -409,6 +427,43 @@ function extractRequestedScope(rawConfig, fallback = {}) {
     organizationId: fallback.organizationId,
     campaignId: targetEntry?.id || fallback.campaignId,
   });
+}
+
+const COMPLETED_PRESENTATION_FIELDS = [
+  "eyebrow",
+  "projectDatesLabel",
+  "title",
+  "subtitle",
+  "storyMarkdown",
+  "mediaType",
+  "mediaUrl",
+  "mediaAlt",
+  "campaignLogoUrl",
+  "organizationLogoUrl",
+  "fontFamily",
+  "theme",
+];
+
+function mergeCompletedCampaignPresentation(existingConfig, requestedConfig) {
+  const existing = cloneJson(existingConfig || {});
+  const requestedBasics = requestedConfig?.basics && typeof requestedConfig.basics === "object" ? requestedConfig.basics : {};
+  const requestedBranding = requestedConfig?.branding && typeof requestedConfig.branding === "object" ? requestedConfig.branding : {};
+  const branding = { ...(existing.branding || {}) };
+  for (const field of COMPLETED_PRESENTATION_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(requestedBranding, field)) {
+      branding[field] = cloneJson(requestedBranding[field]);
+    }
+  }
+  return {
+    ...existing,
+    basics: {
+      ...(existing.basics || {}),
+      ...(Object.prototype.hasOwnProperty.call(requestedBasics, "campaignName")
+        ? { campaignName: String(requestedBasics.campaignName || "").trim() }
+        : {}),
+    },
+    branding,
+  };
 }
 
 export async function saveAdminCampaignConfig(request, rawConfig, scope = {}) {
@@ -447,7 +502,26 @@ export async function saveAdminCampaignConfig(request, rawConfig, scope = {}) {
   });
   const activeCampaignId = String(candidate.activeCampaignId || access.campaign.id).trim();
   const targetEntry = campaigns.find((item) => String(item?.id || "").trim() === activeCampaignId) || campaigns[0] || null;
-  const snapshot = targetEntry?.config && typeof targetEntry.config === "object" ? cloneJson(targetEntry.config) : cloneJson(candidate);
+  let snapshot = targetEntry?.config && typeof targetEntry.config === "object" ? cloneJson(targetEntry.config) : cloneJson(candidate);
+  const nextStatus = normalizeSnapshotScope(snapshot, {
+    organizationId: access.organization.id,
+    campaignId: access.campaign.id,
+  }).status;
+  if (nextStatus !== access.campaign.status) {
+    const lifecycleAuthorization = authorize(
+      { ...access.auth, authenticated: true },
+      "campaign_lifecycle_update",
+      access.organization,
+      access.campaign,
+    );
+    if (!lifecycleAuthorization.ok) {
+      return jsonResponse(lifecycleAuthorization.status, { message: lifecycleAuthorization.message });
+    }
+  }
+  if (access.campaign.status === "completed" && nextStatus === "completed") {
+    const existingConfig = await getCampaignConfig(access.organization.id, access.campaign.id);
+    snapshot = mergeCompletedCampaignPresentation(existingConfig, snapshot);
+  }
   const saved = await createOrUpdateScopedCampaign({
     auth: access.auth,
     organization: access.organization,

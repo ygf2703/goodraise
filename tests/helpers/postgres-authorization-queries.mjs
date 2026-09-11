@@ -46,7 +46,10 @@ export async function verifyPostgresAuthorizationQueries({ repo, handleRequest, 
   const identity = await traceQueries(() => handleRequest(new Request("http://localhost/api/auth/status?includeCampaigns=false", { headers: { cookie } })));
   assert.equal(identity.result.status, 200);
   assert.equal((await identity.result.json()).permissions.campaignPages, true);
-  assert.ok(!identity.statements.some(({ text }) => /goodraise\.(?:campaigns|campaign_datasets|campaign_configs|campaign_sources|transactions)\b/.test(text)), "header/login identity checks do not read campaigns or payloads");
+  assert.ok(!identity.statements.some(({ text }) => /goodraise\.(?:campaign_datasets|campaign_configs|campaign_sources|transactions)\b/.test(text)), "header/login identity checks do not read campaign payloads");
+  const membershipReads = identity.statements.filter(({ text }) => /FROM goodraise\.admin_memberships\b/.test(text));
+  assert.equal(membershipReads.length, 1, "header/login identity reads only the current user's memberships");
+  assert.match(membershipReads[0].text, /WHERE m\.admin_user_id = \$1::uuid/);
   const view = await traceQueries(() => handleRequest(new Request("http://localhost/api/campaign-view?organizationId=org-sql&campaignId=alpha", { headers: { cookie } })));
   assert.equal(view.result.status, 200);
   const viewPayload = await view.result.json();

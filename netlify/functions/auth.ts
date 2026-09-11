@@ -6,6 +6,8 @@ export const config = {
   path: [
     "/api/health",
     "/api/public-context",
+    "/api/public/campaigns",
+    "/api/public/campaigns/*",
     "/api/campaign-view",
     "/api/auth/status",
     "/api/auth/login",
@@ -13,6 +15,7 @@ export const config = {
     "/api/auth/logout",
     "/api/auth/change-password",
     "/api/admin/dataset",
+    "/api/admin/accounts",
     "/api/admin/campaign-config",
     "/api/admin/source-config",
     "/api/admin/source-refresh",

@@ -39,6 +39,7 @@ All tables are under the `goodraise` schema.
 | `campaign_configs` | One JSONB `payload` per campaign, revision and update metadata |
 | `campaign_sources` | One JSONB source configuration per campaign, secret-present flag and update metadata |
 | `campaign_datasets` | One JSONB rows/meta snapshot per campaign, row count and generation/update timestamps |
+| `campaign_public_snapshots` | Sanitized completed-campaign read model, completion timestamp and update timestamp |
 | `import_batches` | Source filename/checksum, raw columns/counts, import metadata; unique campaign/checksum |
 | `transactions` | Amount, occurrence time/raw time, payment status, raw JSON, canonical/source keys; links campaign, batch, donor, ambassador, reward, currency |
 | `transactions_csv_raw` | Source-column parity including Hebrew/spaced column names, row number and optional transaction link |
@@ -46,7 +47,8 @@ All tables are under the `goodraise` schema.
 | `ambassadors` | Campaign-scoped identity plus name/email, nickname, registration/contact/consent metadata |
 | `rewards` | Campaign-scoped imported reward identity/details |
 | `currencies` | Currency code/name lookup |
-| `admin_users` | Unique trimmed lowercase email (migration 003), password hash, role, organization/campaign scope metadata, activity timestamps |
+| `admin_users` | Unique trimmed lowercase email (migration 003), password hash, global/legacy role fields, access hash and activity timestamps |
+| `admin_memberships` | User-to-organization/project role assignments; organization admins have a null campaign, other roles target one campaign |
 | `admin_sessions` | User reference, session token, creation and expiry timestamps |
 | `schema_migrations` | Applied migration name/checksum and timestamp |
 
@@ -61,7 +63,8 @@ Teams, competition prizes, builder permissions metadata, and the builder ambassa
 | State | Node with SQL | Hosted without SQL | Development without SQL |
 | --- | --- | --- | --- |
 | Organizations/campaigns/config/source/dataset | PostgreSQL | `goodraise-platform` Blobs | `goodraise-platform-dev.json` |
-| Managers/sessions | PostgreSQL | `goodraise-auth` Blobs, legacy reads supported | `netlify-auth-dev.json` |
+| Completed-campaign public snapshots | PostgreSQL | `goodraise-platform` Blobs | `goodraise-platform-dev.json` |
+| Users/memberships/sessions | PostgreSQL | `goodraise-auth` Blobs, legacy reads supported | `netlify-auth-dev.json` |
 | Auth limits and auth audit | Blobs or development JSON | Same | Same auth JSON file |
 | Campaign audit/migration/reset flags | Blobs or development JSON | Same | Platform JSON file |
 | Ledger/raw imports/registrations | PostgreSQL | Unavailable | Unavailable |
@@ -70,7 +73,7 @@ Teams, competition prizes, builder permissions metadata, and the builder ambassa
 
 Development files live under `GOODRAISE_DATA_DIR` or `work/data`. There is no SQLite runtime. Auth store migration reads the old physical namespace and prevents deleted sessions from being restored. Auxiliary-state consolidation into SQL remains separate work.
 
-Key/value campaign records use `organization:{org}`, `campaign:{org}:{campaign}`, `campaign-config:{org}:{campaign}`, `campaign-source:{org}:{campaign}` and `campaign-dataset:{org}:{campaign}`. File mutations are serialized and atomic in one Node process; this is not cross-process locking.
+Key/value campaign records use `organization:{org}`, `campaign:{org}:{campaign}`, `campaign-config:{org}:{campaign}`, `campaign-source:{org}:{campaign}`, `campaign-dataset:{org}:{campaign}` and `campaign-public-snapshot:{org}:{campaign}`. File mutations are serialized and atomic in one Node process; this is not cross-process locking.
 
 ## Dashboard dataset contract
 
@@ -105,6 +108,8 @@ The dataset is a denormalized view for the browser, not the complete relational 
 ```
 
 The public projection blanks email, city, and charge result, replaces the donor name, and retains ID, time, amount, ambassador, and status. It is redacted row-level data, not an aggregate-only API.
+
+The completed-campaign archive uses a stricter boundary than that legacy projection. Its snapshot contains only organization/campaign presentation, final successful amount, goal, percentage, unique successful-donor count, currency and dates. It never stores donation rows, donor/ambassador identities, source configuration, prizes or analytics. Ordinary copy/media edits regenerate presentation while retaining frozen financial totals; `npm run backfill:completed-campaigns -- --rebuild-financials` is the explicit site-operator recalculation path.
 
 `buildCampaignContext()` preserves stored dataset `projectDates` when available; builder/campaign dates fill in only when those dates are absent. Saving campaign configuration explicitly updates dataset window metadata via `syncCampaignDatasetProjectWindow()`. Snapshot precedence is covered by the campaign-date and assistant regression tests; configuration saves deliberately update that window.
 

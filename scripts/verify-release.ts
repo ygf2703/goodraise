@@ -13,7 +13,7 @@ function walk(node: { attrs?: { name: string; value: string }[]; childNodes?: un
   for (const child of node.childNodes || []) walk(child as Parameters<typeof walk>[0]);
 }
 walk(document);
-for (const id of ["app", "goodraise-root", "page-project", "page-prizes", "page-rules", "page-privacy", "page-admin", "login-form", "csv-upload", "compare-upload", "prize-upload", "export-filtered"]) {
+for (const id of ["app", "goodraise-root", "page-project", "page-prizes", "page-rules", "page-privacy", "page-admin", "login-form", "account-home", "site-access-management", "managed-account-form", "csv-upload", "compare-upload", "prize-upload", "export-filtered"]) {
   assert.ok(ids.has(id), `Missing React workflow: ${id}`);
 }
 assert.doesNotMatch(html, /__INITIAL_|__AUTH_CONFIG__|data:image\/.*?;base64|yellow-dashboard/);
@@ -29,6 +29,8 @@ assert.doesNotMatch(landing, /__LANDING_|__GOODRAISE_|__SITE_HEADER__|data:image
 const homepage = await readFile(resolve(output, "index.html"), "utf8");
 assert.equal(homepage, landing, "The default index document must be the landing page.");
 assert.match(homepage, /id="hero-title"/);
+assert.doesNotMatch(homepage, /href="\/admin"[^>]*>מתחילים/);
+assert.match(homepage, /href="\/login"[^>]*>כניסה למערכת/);
 assert.doesNotMatch(homepage, /id="goodraise-root"/);
 const appHeaders = html.match(/<header\b[\s\S]*?<\/header>/g) || [];
 const homeHeaders = homepage.match(/<header\b[\s\S]*?<\/header>/g) || [];
@@ -36,9 +38,12 @@ assert.equal(appHeaders.length, 1, "The application must render one shared site 
 assert.deepEqual(appHeaders, homeHeaders, "The homepage and application must use the same header.");
 assert.ok(ids.has("session-status") && ids.has("logout-button"), "Manager account controls must remain available.");
 assert.doesNotMatch(appHeaders[0], /topbar-campaign-logo|topbar-logo/);
-for (const page of ["project", "prizes", "admin"]) {
+for (const page of ["project", "prizes"]) {
   assert.match(appHeaders[0], new RegExp(`<a[^>]*data-site-audience="manager"[^>]*data-page-target="${page}"[^>]*hidden`), `Hide ${page} navigation until manager authorization.`);
 }
+assert.match(appHeaders[0], /<a[^>]*data-site-audience="analyst"[^>]*data-page-target="admin"[^>]*hidden/, "Hide dashboard navigation until analyst authorization.");
+assert.match(appHeaders[0], /<a[^>]*data-site-audience="session"[^>]*href="\/admin"[^>]*hidden/, "Hide the account portfolio until authentication.");
+assert.match(appHeaders[0], /<a[^>]*data-site-audience="site-admin"[^>]*href="\/admin\/users"[^>]*hidden/, "Hide account management until site-admin authorization.");
 const footer = html.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || "";
 assert.doesNotMatch(footer, /data-page-target="(?:project|prizes|admin)"/);
 assert.match(footer, /data-page-target="rules"/);

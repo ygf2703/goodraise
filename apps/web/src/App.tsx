@@ -4,12 +4,14 @@ import bootstrap from "./generated/bootstrap.json";
 import { mountAuthGate, requestSession } from "./auth-gate";
 import { getCampaignViewEndpoint, getInitialPage } from "./platform";
 import { requestJson } from "./api";
+import { PublicArchivePage } from "./components/PublicArchivePage";
+import type { PublicArchiveRoute } from "./platform";
 
 // The adapter owns the empty chart/table containers inside this fixed layout.
 // Memoization prevents React from reconciling those containers on status changes.
 const CampaignLayout = memo(DashboardLayout);
 
-export function App({ sessionRequest }: { sessionRequest?: ReturnType<typeof requestSession> } = {}) {
+function ManagerApplication({ sessionRequest }: { sessionRequest?: ReturnType<typeof requestSession> } = {}) {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("ready");
   useEffect(() => {
     const abort = new AbortController();
@@ -17,7 +19,7 @@ export function App({ sessionRequest }: { sessionRequest?: ReturnType<typeof req
     let dispose: (() => void) | undefined;
     const root = document.getElementById("goodraise-root");
     if (!root) throw new Error("The application layout is missing.");
-    mountAuthGate(root, {
+    const disposeGate = mountAuthGate(root, {
       signal: gate.signal,
       sessionRequest: sessionRequest || requestSession(abort.signal),
       onReady: () => { if (!abort.signal.aborted) setStatus("ready"); },
@@ -43,7 +45,7 @@ export function App({ sessionRequest }: { sessionRequest?: ReturnType<typeof req
         });
       },
     });
-    return () => { gate.abort(); abort.abort(); dispose?.(); };
+    return () => { disposeGate(); gate.abort(); abort.abort(); dispose?.(); };
   }, [sessionRequest]);
 
   return <>
@@ -52,4 +54,13 @@ export function App({ sessionRequest }: { sessionRequest?: ReturnType<typeof req
     </div>}
     <CampaignLayout />
   </>;
+}
+
+export function App({ sessionRequest, archiveRoute }: {
+  sessionRequest?: ReturnType<typeof requestSession>;
+  archiveRoute?: PublicArchiveRoute;
+} = {}) {
+  return archiveRoute
+    ? <PublicArchivePage route={archiveRoute} />
+    : <ManagerApplication sessionRequest={sessionRequest} />;
 }

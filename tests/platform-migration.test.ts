@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getInitialPage, getCampaignRoute, getCampaignViewEndpoint } from "../apps/web/src/platform";
+import { getInitialPage, getCampaignRoute, getCampaignViewEndpoint, getPublicArchiveEndpoint, getPublicArchiveRoute } from "../apps/web/src/platform";
 import { migrateBrowserStorage } from "../apps/web/src/storage";
 import { requestJson } from "../apps/web/src/api";
 import { migrateStore } from "../backend/services/platform-store.mjs";
@@ -36,6 +36,11 @@ test("direct campaign, legal and manager links retain their destination after se
   assert.deepEqual(getCampaignRoute("https://example.org/app.html"), { projectSlug: "", ambassadorSlug: "" });
   assert.equal(getCampaignViewEndpoint("https://example.org/campaign-a/person-a"), "/api/campaign-view?project=campaign-a");
   assert.equal(getCampaignViewEndpoint("https://example.org/project?organizationId=org-a&campaignId=campaign-a&ambassador=person-a"), "/api/campaign-view?organizationId=org-a&campaignId=campaign-a");
+  assert.deepEqual(getPublicArchiveRoute("/campaigns"), { kind: "index" });
+  assert.deepEqual(getPublicArchiveRoute("/campaigns/example-org/autumn-drive/"), { kind: "detail", organizationId: "example-org", campaignId: "autumn-drive" });
+  assert.equal(getPublicArchiveRoute("/campaigns/example-org"), null);
+  assert.equal(getPublicArchiveEndpoint({ kind: "detail", organizationId: "example org", campaignId: "autumn/drive" }), "/api/public/campaigns/example%20org/autumn%2Fdrive");
+  assert.deepEqual(getCampaignRoute("https://example.org/campaigns"), { projectSlug: "", ambassadorSlug: "" });
 });
 
 test("the manager menu requires an authenticated server-granted capability", () => {

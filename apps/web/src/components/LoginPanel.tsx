@@ -6,9 +6,9 @@ export function LoginPanel() {
             <div className="login-visual app-card--dark">
               <div className="login-brand-row">
                 <div className="login-copy">
-                  <span className="brand-kicker">גישה למנהלים מורשים בלבד</span>
-                  <h2>כניסה למערכת הניהול</h2>
-                  <p>מסך הכניסה מספק גישה לפאנל הניהול, לבקרה על קבצי המקור, לפילוחים המתקדמים, להשוואות הקבצים ולכל שכבת האנליטיקה של הקמפיין.</p>
+                  <span className="brand-kicker">גישה למשתמשים שאושרו מראש</span>
+                  <h2>כניסה לחשבון GoodRaise</h2>
+                  <p>לאחר הכניסה נציג את הפרויקטים ששויכו אליך ואת כלי הצפייה, הניתוח או הניהול הזמינים לפי התפקיד שלך בכל פרויקט.</p>
                 </div>
                 <div className="login-logos">
                   <div className="login-logo-frame">
@@ -23,12 +23,12 @@ export function LoginPanel() {
             <form id="login-form" className="login-card app-card">
               <div className="section-header">
                 <div>
-                  <h2>כניסה למערכת הניהול</h2>
+                  <h2>כניסה לחשבון</h2>
                   <div className="text-small text-muted">כניסה באמצעות מייל מורשה מראש. אם זו כניסה ראשונה, המערכת תעבור אוטומטית להגדרת סיסמה.</div>
                 </div>
               </div>
               <label className="form-label">
-                מייל מנהל/ת
+                כתובת מייל
                 <input id="login-email" className="form-control" type="email" autoComplete="username" placeholder="name@example.org" />
               </label>
               <label className="form-label">
@@ -44,10 +44,10 @@ export function LoginPanel() {
                 <input id="login-password-confirm" className="form-control" type="password" autoComplete="new-password" placeholder="הקלד/י שוב את הסיסמה" />
               </label>
               <div className="login-actions">
-                <button id="login-button" className="button-primary action-button" type="submit">כניסה לפאנל הניהול</button>
+                <button id="login-button" className="button-primary action-button" type="submit">כניסה לחשבון</button>
                 <button id="login-reset-button" className="button-ghost" type="button" hidden>איפוס סיסמה</button>
               </div>
-              <div id="login-mode-hint" className="text-small text-muted">הגישה לנתוני הקמפיין זמינה למנהלים מורשים בלבד.</div>
+              <div id="login-mode-hint" className="text-small text-muted">הגישה זמינה רק לחשבונות שאושרו ושויכו מראש.</div>
               <div id="login-message" className="login-message text-small" aria-live="polite"></div>
             </form>
           </div>

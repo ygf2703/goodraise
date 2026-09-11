@@ -46,6 +46,18 @@
 # requests must reach those paths directly instead of being rewritten there.
 
 [[redirects]]
+  from = "/login"
+  to = "/app.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/admin/*"
+  to = "/app.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/admin"
   to = "/app.html"
   status = 200
@@ -68,6 +80,12 @@
 [[redirects]]
   from = "/goodraise"
   to = "/goodraise/index.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/campaigns/*"
+  to = "/app.html"
   status = 200
   force = true
 

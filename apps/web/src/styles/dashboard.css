@@ -156,13 +156,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 #goodraise-root .admin-session-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  color: var(--text-muted);
-  font-size: 1rem;
+  display: none;
 }
 
 #goodraise-root .page-shell {
@@ -172,6 +166,331 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 
 #goodraise-root .page-shell.is-active {
   display: grid;
+}
+
+#goodraise-root.public-archive {
+  min-height: 100vh;
+  background: #f5f9fc;
+}
+
+#goodraise-root .archive-main {
+  width: min(1200px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 72px 0 96px;
+}
+
+#goodraise-root .archive-heading {
+  max-width: 720px;
+  margin: 0 auto 48px;
+  text-align: center;
+}
+
+#goodraise-root .archive-kicker {
+  margin: 0 0 10px;
+  color: #075eb5;
+  font-weight: 800;
+}
+
+#goodraise-root .archive-heading h1,
+#goodraise-root .archive-detail h1 {
+  margin: 0;
+  color: #102d4c;
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  line-height: 1.05;
+}
+
+#goodraise-root .archive-heading > p:last-child {
+  margin: 20px 0 0;
+  color: #566b80;
+  font-size: 1.2rem;
+}
+
+#goodraise-root .archive-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+#goodraise-root .archive-card {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dce5ed;
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgba(16, 45, 76, 0.08);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+#goodraise-root .archive-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(16, 45, 76, 0.14);
+}
+
+#goodraise-root .archive-card-link {
+  display: block;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+#goodraise-root .archive-card-link:focus-visible,
+#goodraise-root .archive-back:focus-visible {
+  outline: 3px solid #075eb5;
+  outline-offset: 4px;
+}
+
+#goodraise-root .archive-card-media {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: linear-gradient(135deg, #dcebf6, #eef5fa);
+}
+
+#goodraise-root .archive-card-media img,
+#goodraise-root .archive-detail-media img,
+#goodraise-root .archive-detail-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#goodraise-root .archive-media-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #075eb5;
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+#goodraise-root .archive-status,
+#goodraise-root .archive-detail-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  color: #fff;
+  background: #102d4c;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+#goodraise-root .archive-status {
+  position: absolute;
+  inset-block-start: 14px;
+  inset-inline-start: 14px;
+  padding: 7px 12px;
+}
+
+#goodraise-root .archive-card-body {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+}
+
+#goodraise-root .archive-organization,
+#goodraise-root .archive-description {
+  margin: 0;
+  color: #566b80;
+}
+
+#goodraise-root .archive-organization {
+  color: #075eb5;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+#goodraise-root .archive-card h2 {
+  margin: 0;
+  color: #102d4c;
+  font-size: 1.45rem;
+}
+
+#goodraise-root .archive-description {
+  min-height: 3.2em;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+#goodraise-root .archive-progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2ebf2;
+}
+
+#goodraise-root .archive-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #075eb5;
+}
+
+#goodraise-root .archive-card-totals,
+#goodraise-root .archive-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#goodraise-root .archive-card-totals {
+  align-items: baseline;
+}
+
+#goodraise-root .archive-card-totals strong {
+  color: #102d4c;
+  font-size: 1.35rem;
+}
+
+#goodraise-root .archive-card-totals span,
+#goodraise-root .archive-card-meta {
+  color: #697b8d;
+  font-size: 0.88rem;
+}
+
+#goodraise-root .archive-card-meta {
+  padding-top: 4px;
+  border-top: 1px solid #e8eef3;
+}
+
+#goodraise-root .archive-back {
+  display: inline-flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  color: #075eb5;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+#goodraise-root .archive-detail-card {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dce5ed;
+  border-radius: 24px;
+  box-shadow: 0 18px 48px rgba(16, 45, 76, 0.1);
+}
+
+#goodraise-root .archive-detail-copy {
+  padding: clamp(32px, 5vw, 64px);
+}
+
+#goodraise-root .archive-detail-status {
+  margin-bottom: 18px;
+  padding: 8px 14px;
+}
+
+#goodraise-root .archive-detail-description {
+  margin: 24px 0 0;
+  color: #566b80;
+  font-size: 1.2rem;
+}
+
+#goodraise-root .archive-detail-total {
+  display: grid;
+  gap: 4px;
+  margin-top: 32px;
+}
+
+#goodraise-root .archive-detail-total strong {
+  color: #075eb5;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+}
+
+#goodraise-root .archive-detail-total span,
+#goodraise-root .archive-detail-facts span {
+  color: #697b8d;
+}
+
+#goodraise-root .archive-progress--large {
+  height: 12px;
+  margin-top: 20px;
+}
+
+#goodraise-root .archive-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 28px;
+}
+
+#goodraise-root .archive-detail-facts div {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #f0f7fc;
+}
+
+#goodraise-root .archive-detail-facts strong {
+  color: #102d4c;
+  font-size: 1.15rem;
+}
+
+#goodraise-root .archive-detail-media {
+  min-height: 520px;
+  background: #dcebf6;
+}
+
+#goodraise-root .archive-story {
+  max-width: 850px;
+  margin: 48px auto 0;
+  padding: 40px;
+  border: 1px solid #dce5ed;
+  border-radius: 18px;
+  background: #fff;
+}
+
+#goodraise-root .archive-story h2 {
+  margin: 0 0 18px;
+  color: #102d4c;
+  font-size: 2rem;
+}
+
+#goodraise-root .archive-story div {
+  color: #405970;
+  font-size: 1.08rem;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+#goodraise-root .archive-loading,
+#goodraise-root .archive-empty {
+  width: min(720px, calc(100% - 48px));
+  margin: 72px auto;
+  padding: 32px;
+  color: #566b80;
+  text-align: center;
+  border: 1px solid #dce5ed;
+  border-radius: 18px;
+  background: #fff;
+}
+
+#goodraise-root .archive-empty.is-error {
+  color: #9f2430;
+}
+
+#goodraise-root .archive-footer {
+  padding: 28px;
+  color: #697b8d;
+  text-align: center;
+  border-top: 1px solid #dce5ed;
+}
+
+@media (max-width: 900px) {
+  #goodraise-root .archive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #goodraise-root .archive-detail-card { grid-template-columns: 1fr; }
+  #goodraise-root .archive-detail-media { min-height: 360px; grid-row: 1; }
+}
+
+@media (max-width: 620px) {
+  #goodraise-root .archive-main { width: min(100% - 28px, 1200px); padding-block: 44px 64px; }
+  #goodraise-root .archive-grid { grid-template-columns: 1fr; }
+  #goodraise-root .archive-card-meta { flex-direction: column; }
+  #goodraise-root .archive-detail-facts { grid-template-columns: 1fr; }
+  #goodraise-root .archive-story { padding: 26px; }
 }
 
 @keyframes pageFade {
@@ -2752,6 +3071,202 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   #goodraise-root .app-card {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+#goodraise-root .account-home {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-7) var(--space-5) var(--space-8);
+}
+
+#goodraise-root .account-home[hidden] {
+  display: none;
+}
+
+#goodraise-root .account-home-heading {
+  padding: clamp(28px, 5vw, 56px);
+  border-radius: var(--radius-xl);
+  color: white;
+  background: linear-gradient(135deg, var(--navy-950), var(--navy-800));
+  box-shadow: var(--shadow-lg);
+}
+
+#goodraise-root .account-home-heading h1 {
+  margin: var(--space-2) 0;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+}
+
+#goodraise-root .account-home-heading p,
+#goodraise-root .site-access-management .public-panel-header p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+#goodraise-root .account-project-section {
+  display: grid;
+  gap: var(--space-4);
+}
+
+#goodraise-root .account-project-section h2,
+#goodraise-root .site-access-management h2 {
+  margin: 0;
+  color: var(--navy-950);
+}
+
+#goodraise-root .account-project-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+#goodraise-root .account-project-card {
+  display: grid;
+  gap: var(--space-2);
+  min-height: 190px;
+  padding: var(--space-5);
+  border: 1px solid rgba(17, 29, 74, 0.1);
+  border-radius: var(--radius-lg);
+  color: var(--navy-950);
+  background: white;
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+#goodraise-root .account-project-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+#goodraise-root .account-project-card h3,
+#goodraise-root .account-project-card p {
+  margin: 0;
+}
+
+#goodraise-root .account-project-card p {
+  color: var(--graphite);
+}
+
+#goodraise-root .account-project-status,
+#goodraise-root .account-project-role {
+  width: fit-content;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 214, 41, 0.24);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+#goodraise-root .account-project-role {
+  align-self: end;
+  background: rgba(17, 29, 74, 0.08);
+}
+
+#goodraise-root .account-empty {
+  margin: 0;
+  padding: var(--space-5);
+  border: 1px dashed rgba(17, 29, 74, 0.2);
+  border-radius: var(--radius-lg);
+  color: var(--graphite);
+  background: rgba(255, 255, 255, 0.65);
+}
+
+#goodraise-root .site-access-management {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6);
+}
+
+#goodraise-root .site-access-management[hidden] {
+  display: none;
+}
+
+#goodraise-root .site-access-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.75fr) minmax(0, 1.25fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+#goodraise-root .site-access-layout h3,
+#goodraise-root .managed-account-form h3 {
+  margin: 0 0 var(--space-3);
+  color: var(--navy-950);
+}
+
+#goodraise-root .managed-account-list,
+#goodraise-root .managed-account-form,
+#goodraise-root .managed-memberships {
+  display: grid;
+  gap: var(--space-3);
+}
+
+#goodraise-root .managed-account-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid rgba(17, 29, 74, 0.12);
+  border-radius: var(--radius-md);
+  color: var(--navy-950);
+  background: white;
+  text-align: start;
+  cursor: pointer;
+}
+
+#goodraise-root .managed-account-card:hover {
+  border-color: var(--accent-500);
+}
+
+#goodraise-root .managed-account-card span,
+#goodraise-root .managed-account-card small {
+  color: var(--graphite);
+}
+
+#goodraise-root .managed-account-flags {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+#goodraise-root .managed-account-flags label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+}
+
+#goodraise-root .managed-membership-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(17, 29, 74, 0.04);
+}
+
+@media (max-width: 920px) {
+  #goodraise-root .account-project-grid,
+  #goodraise-root .site-access-layout {
+    grid-template-columns: 1fr;
+  }
+
+  #goodraise-root .managed-membership-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  #goodraise-root .account-home {
+    padding-inline: var(--space-3);
+  }
+
+  #goodraise-root .managed-membership-row {
+    grid-template-columns: 1fr;
   }
 }
 

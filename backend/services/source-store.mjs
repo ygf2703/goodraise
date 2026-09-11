@@ -774,6 +774,9 @@ export async function saveAdminSourceConfig(request, rawConfig, scope = {}) {
   if (access.error) {
     return access.error;
   }
+  if (access.campaign.status === "completed") {
+    return jsonResponse(409, { message: "קמפיין שהסתיים נעול לשינויים במקור הנתונים." });
+  }
 
   const normalized = await saveCampaignSource(access.organization.id, access.campaign.id, rawConfig, access.auth.email);
   await appendAuditEvent({

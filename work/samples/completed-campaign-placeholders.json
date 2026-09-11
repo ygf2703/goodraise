@@ -1,0 +1,107 @@
+[
+  {
+    "schemaVersion": 1,
+    "revision": 1,
+    "organization": {
+      "id": "achim-la-semel",
+      "slug": "achim-la-semel",
+      "name": "עמותת אחים לסמל",
+      "logoUrl": "/assets/achim-lasemel-logo.png"
+    },
+    "campaign": {
+      "id": "giveback-86612",
+      "slug": "giveback-86612",
+      "name": "עושים טוב בצהוב, ראש השנה 2025",
+      "status": "completed",
+      "description": "יוזמה קהילתית לגיוס תרומות, רכישת מזון ואריזתו עבור אוכלוסיות מוחלשות, כדי לאפשר למשפחות לחגוג את ראש השנה בכבוד.",
+      "story": "עמותת אחים לסמל וקרן מכבי תל אביב המשיכו את מסורת ״עושים טוב בצהוב״ לקראת ראש השנה. התרומות מימנו רכישה, אריזה וחלוקה של כ־2,500 חבילות מזון לאנשים ולמשפחות הזקוקים לסיוע ברחבי הארץ. יותר מאלף מתנדבים ואוהדים השתתפו במאמץ הקהילתי.",
+      "mediaType": "image",
+      "mediaUrl": "/assets/giveback-86612.jpg",
+      "mediaAlt": "תמונת הקמפיין עושים טוב בצהוב, ראש השנה 2025",
+      "campaignLogoUrl": "/assets/achim-lasemel-logo.png"
+    },
+    "totals": {
+      "raised": 1019826,
+      "target": 1000000,
+      "progressPercent": 101.98,
+      "supporterCount": 3581,
+      "currency": "ILS"
+    },
+    "startAt": "2025-08-31T06:10:51+03:00",
+    "endAt": "2025-09-09T19:00:00+03:00",
+    "completedAt": "2025-09-09T19:00:00+03:00",
+    "publishedAt": "2025-08-31T06:10:51+03:00",
+    "updatedAt": "2025-09-09T19:00:00+03:00",
+    "href": "/campaigns/achim-la-semel/giveback-86612"
+  },
+  {
+    "schemaVersion": 1,
+    "revision": 1,
+    "organization": {
+      "id": "achim-la-semel",
+      "slug": "achim-la-semel",
+      "name": "עמותת אחים לסמל",
+      "logoUrl": "/assets/achim-lasemel-logo.png"
+    },
+    "campaign": {
+      "id": "giveback-89666",
+      "slug": "giveback-89666",
+      "name": "עושים טוב בצהוב פסח",
+      "status": "completed",
+      "description": "מיזם של אחים לסמל וקרן מכבי תל אביב שהפך אהדה לאחריות חברתית וגייס מזון עבור אלפי משפחות לקראת פסח.",
+      "story": "קמפיין הפסח רתם אוהדים, שחקנים ומתנדבים למבצע רחב של רכישת מזון, אריזת אלפי חבילות וחלוקתן למשפחות, קשישים, ניצולי שואה וחיילים בודדים. יותר מאלף מתנדבים השתתפו באריזה ובשינוע כדי לאפשר למקבלי הסיוע לחגוג בכבוד.",
+      "mediaType": "image",
+      "mediaUrl": "/assets/giveback-89666.png",
+      "mediaAlt": "תמונת הקמפיין עושים טוב בצהוב פסח",
+      "campaignLogoUrl": "/assets/achim-lasemel-logo.png"
+    },
+    "totals": {
+      "raised": 1028211,
+      "target": 1000000,
+      "progressPercent": 102.82,
+      "supporterCount": 3083,
+      "currency": "ILS"
+    },
+    "startAt": "2026-03-14T22:00:00+02:00",
+    "endAt": "2026-03-24T20:00:00+02:00",
+    "completedAt": "2026-03-24T20:00:00+02:00",
+    "publishedAt": "2026-03-14T22:00:00+02:00",
+    "updatedAt": "2026-03-24T20:00:00+02:00",
+    "href": "/campaigns/achim-la-semel/giveback-89666"
+  },
+  {
+    "schemaVersion": 1,
+    "revision": 1,
+    "organization": {
+      "id": "achim-la-semel",
+      "slug": "achim-la-semel",
+      "name": "עמותת אחים לסמל",
+      "logoUrl": "/assets/achim-lasemel-logo.png"
+    },
+    "campaign": {
+      "id": "giveback-91745",
+      "slug": "giveback-91745",
+      "name": "עושים טוב בצהוב ראש השנה",
+      "status": "completed",
+      "description": "מיזם קהילתי של אחים לסמל וקרן מכבי לגיוס תרומות, אריזת חבילות מזון וחלוקתן למשפחות הזקוקות לסיוע בחגים.",
+      "story": "בשנה ה־14 למיזם הקהילה התגייסה שוב לקראת ראש השנה. מתנדבים גייסו תרומות, ארזו אלפי מארזי מזון וחילקו אותם למשפחות, חיילים בודדים, שורדי שואה ומבוגרים הזקוקים לעזרה ברחבי הארץ. הפעילות כולה נשענה על התנדבות ועל ערבות הדדית.",
+      "mediaType": "image",
+      "mediaUrl": "/assets/giveback-91745.jpeg",
+      "mediaAlt": "תמונת הקמפיין עושים טוב בצהוב ראש השנה",
+      "campaignLogoUrl": "/assets/achim-lasemel-logo.png"
+    },
+    "totals": {
+      "raised": 840815,
+      "target": 800000,
+      "progressPercent": 105.1,
+      "supporterCount": 2530,
+      "currency": "ILS"
+    },
+    "startAt": "2026-08-23T06:00:56+03:00",
+    "endAt": "2026-09-01T19:00:00+03:00",
+    "completedAt": "2026-09-01T19:00:00+03:00",
+    "publishedAt": "2026-08-23T06:00:56+03:00",
+    "updatedAt": "2026-09-01T19:00:00+03:00",
+    "href": "/campaigns/achim-la-semel/giveback-91745"
+  }
+]

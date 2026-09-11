@@ -12,7 +12,7 @@ test("the homepage and marketing alias show the landing page, including tracking
 });
 
 test("campaign, ambassador, legal and admin links retain the application", () => {
-  for (const path of ["/admin", "/project", "/rules", "/privacy", "/prizes", "/app.html", "/campaign", "/campaign/person", "/?project=campaign", "/?ambassador=person", "/?nickname=person", "/?project=campaign&ambassador=person&utm_source=email", "/index.html?project=campaign&nickname=person&utm_source=email"]) {
+  for (const path of ["/login", "/admin", "/admin/users", "/project", "/rules", "/privacy", "/prizes", "/campaigns", "/campaigns/org/campaign", "/app.html", "/campaign", "/campaign/person", "/?project=campaign", "/?ambassador=person", "/?nickname=person", "/?project=campaign&ambassador=person&utm_source=email", "/index.html?project=campaign&nickname=person&utm_source=email"]) {
     assert.equal(isLandingRequest(new URL(path, "https://example.org")), false, path);
     if (path.startsWith("/?") || path.startsWith("/index.html?")) {
       const target = rewriteHomepage(new Request(new URL(path, "https://example.org")));

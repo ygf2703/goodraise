@@ -2,11 +2,11 @@ import { useEffect, useRef } from "react";
 import { mountSiteHeader } from "../../../../work/assets/site-header.js";
 
 // Also rendered into the static homepage by prepareAssets.
-export function Header() {
+export function Header({ loadSession = false }: { loadSession?: boolean } = {}) {
   const header = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (header.current) return mountSiteHeader(header.current, { loadSession: false });
-  }, []);
+    if (header.current) return mountSiteHeader(header.current, { loadSession });
+  }, [loadSession]);
 
   return (<header id="site-header" className="site-header" ref={header} dir="rtl">
     <div className="site-header-inner">
@@ -15,16 +15,19 @@ export function Header() {
       </a>
       <nav id="main-nav" className="site-header-nav" aria-label="ניווט ראשי">
         <a data-site-audience="public" href="/#how-it-works">איך זה עובד</a>
+        <a data-site-audience="public" href="/campaigns">קמפיינים שהסתיימו</a>
         <a data-site-audience="public" href="/#about">קצת עלינו</a>
         <a data-site-audience="public" href="/#footer">בואו נדבר</a>
-        <a data-site-audience="manager" data-page-target="admin" href="/admin" hidden>דשבורד ניהולי</a>
+        <a data-site-audience="analyst" data-page-target="admin" href="/admin" hidden>דשבורד ניהולי</a>
+        <a data-site-audience="session" href="/admin" hidden>הפרויקטים שלי</a>
+        <a data-site-audience="site-admin" href="/admin/users" hidden>משתמשים והרשאות</a>
         <a data-site-audience="manager" data-page-target="project" href="/project" hidden>דף הפרויקט</a>
         <a data-site-audience="manager" data-page-target="prizes" href="/prizes" hidden>פרסים ותחרות</a>
-        <a data-site-audience="guest" className="site-header-mobile-login" href="/admin">כניסה למערכת</a>
+        <a data-site-audience="guest" className="site-header-mobile-login" href="/login">כניסה למערכת</a>
       </nav>
       <div className="site-header-actions">
-        <a data-site-audience="guest" className="site-header-login" href="/admin">כניסה</a>
-        <a data-site-audience="guest" className="site-header-cta" href="/admin">מתחילים לגייס <span aria-hidden="true">←</span></a>
+        <a data-site-audience="guest" className="site-header-login" href="/login">כניסה</a>
+        <a data-site-audience="guest" className="site-header-cta" href="/#footer">מתחילים לגייס <span aria-hidden="true">←</span></a>
         <button data-site-audience="session" className="site-header-logout" type="button" hidden>התנתקות</button>
         <span className="site-header-error" role="status" hidden></span>
       </div>

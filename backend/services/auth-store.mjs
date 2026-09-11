@@ -1,14 +1,16 @@
 import { getDatabasePool } from '../database.ts';
-import { pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { authorize, hasRequiredRole } from "./authorization.mjs";
+import { authorize, getEffectiveRole, hasRequiredRole } from "./authorization.mjs";
 import {
   ROLE_ANALYST,
   ROLE_CAMPAIGN_MANAGER,
+  ROLE_ORGANIZATION_ADMIN,
   ROLE_PLATFORM_ADMIN,
+  ROLE_ORDER,
   ROLE_VIEWER,
   isoNow,
   normalizeEmail,
@@ -61,6 +63,9 @@ CREATE TABLE IF NOT EXISTS goodraise.admin_users (
   last_login_at TIMESTAMPTZ
 );
 
+ALTER TABLE goodraise.admin_users
+  ADD COLUMN IF NOT EXISTS access_config_hash TEXT NOT NULL DEFAULT '';
+
 CREATE TABLE IF NOT EXISTS goodraise.admin_sessions (
   token TEXT PRIMARY KEY,
   admin_user_id UUID NOT NULL REFERENCES goodraise.admin_users(id) ON DELETE CASCADE,
@@ -68,9 +73,29 @@ CREATE TABLE IF NOT EXISTS goodraise.admin_sessions (
   expires_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS goodraise.admin_memberships (
+  id UUID PRIMARY KEY,
+  admin_user_id UUID NOT NULL REFERENCES goodraise.admin_users(id) ON DELETE CASCADE,
+  organization_id UUID NOT NULL REFERENCES goodraise.organizations(id) ON DELETE CASCADE,
+  campaign_id UUID REFERENCES goodraise.campaigns(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT admin_memberships_role CHECK (role IN ('organization_admin', 'campaign_manager', 'analyst', 'viewer')),
+  CONSTRAINT admin_memberships_scope CHECK (
+    (role = 'organization_admin' AND campaign_id IS NULL)
+    OR (role <> 'organization_admin' AND campaign_id IS NOT NULL)
+  )
+);
+
 CREATE INDEX IF NOT EXISTS idx_admin_users_role ON goodraise.admin_users(role);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_user ON goodraise.admin_sessions(admin_user_id);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON goodraise.admin_sessions(expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_admin_memberships_organization
+  ON goodraise.admin_memberships(admin_user_id, organization_id) WHERE campaign_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_admin_memberships_campaign
+  ON goodraise.admin_memberships(admin_user_id, campaign_id) WHERE campaign_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_admin_memberships_user ON goodraise.admin_memberships(admin_user_id);
 `;
 
 let postgresSchemaPromise = null;
@@ -116,6 +141,10 @@ async function ensurePostgresAuthSchema() {
         `);
         if (!normalizedEmails.rows[0]?.convalidated) {
           throw new Error("Apply database migrations with npm run db:migrate before starting SQL authentication (003_normalize_admin_email.sql required).");
+        }
+        const membershipTable = await client.query("SELECT to_regclass('goodraise.admin_memberships')::text AS name");
+        if (!membershipTable.rows[0]?.name) {
+          throw new Error("Apply database migrations with npm run db:migrate before starting SQL authentication (005_account_memberships.sql required).");
         }
       } finally {
         client.release();
@@ -189,6 +218,57 @@ function normalizeCampaignScope(values) {
   return [];
 }
 
+function normalizeMembership(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const role = normalizeRole(value.role, ROLE_VIEWER);
+  if (role === ROLE_PLATFORM_ADMIN) return null;
+  const organizationSlug = normalizeSlug(value.organizationSlug || value.organizationId || "");
+  const organizationId = normalizeStableId(value.organizationId || organizationSlug || "");
+  if (!organizationId && !organizationSlug) return null;
+  if (role === ROLE_ORGANIZATION_ADMIN) {
+    return { organizationId, organizationSlug, campaignId: "", campaignSlug: "", role };
+  }
+  const campaignSlug = normalizeSlug(value.campaignSlug || value.campaignId || "");
+  const campaignId = normalizeStableId(value.campaignId || campaignSlug || "");
+  if (!campaignId && !campaignSlug) return null;
+  return { organizationId, organizationSlug, campaignId, campaignSlug, role };
+}
+
+function legacyMemberships(value = {}) {
+  const role = normalizeRole(value.role, ROLE_VIEWER);
+  if (role === ROLE_PLATFORM_ADMIN) return [];
+  const organizationId = normalizeStableId(value.organizationId || value.organizationAppId || value.organizationSlug || "");
+  const organizationSlug = normalizeSlug(value.organizationSlug || value.organizationId || value.organizationAppId || "");
+  if (!organizationId && !organizationSlug) return [];
+  if (role === ROLE_ORGANIZATION_ADMIN) {
+    return [{ organizationId, organizationSlug, campaignId: "", campaignSlug: "", role }];
+  }
+  const campaignIds = normalizeCampaignScope(value.campaignIds || value.campaignSlugs);
+  const campaignSlugs = normalizeCampaignScope(value.campaignSlugs || value.campaignIds);
+  const identifiers = [...new Set([...campaignIds, ...campaignSlugs])];
+  return identifiers.map((identifier) => ({
+    organizationId,
+    organizationSlug,
+    campaignId: identifier,
+    campaignSlug: identifier,
+    role,
+  }));
+}
+
+function normalizeMemberships(value, fallback = {}) {
+  const source = Array.isArray(value) ? value : legacyMemberships(fallback);
+  const memberships = source.map(normalizeMembership).filter(Boolean);
+  const byScope = new Map();
+  for (const membership of memberships) {
+    const key = membership.campaignId || membership.campaignSlug
+      ? `${membership.organizationId || membership.organizationSlug}:campaign:${membership.campaignId || membership.campaignSlug}`
+      : `${membership.organizationId || membership.organizationSlug}:organization`;
+    const existing = byScope.get(key);
+    if (!existing || (ROLE_ORDER[membership.role] || 0) > (ROLE_ORDER[existing.role] || 0)) byScope.set(key, membership);
+  }
+  return [...byScope.values()];
+}
+
 function normalizeManagerRecord(value) {
   if (typeof value === "string") {
     const email = normalizeEmail(value);
@@ -231,8 +311,30 @@ function normalizeManagerRecord(value) {
     organizationSlug,
     campaignIds,
     campaignSlugs,
+    memberships: normalizeMemberships(value.memberships, value),
     isActive: value.isActive !== false,
   };
+}
+
+function accessConfigHash(record) {
+  const memberships = normalizeMemberships(record?.memberships, record)
+    .map((membership) => ({
+      organizationId: membership.organizationId,
+      organizationSlug: membership.organizationSlug,
+      campaignId: membership.campaignId,
+      campaignSlug: membership.campaignSlug,
+      role: membership.role,
+    }))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return createHash("sha256").update(JSON.stringify({
+    role: normalizeRole(record?.role, ROLE_PLATFORM_ADMIN),
+    organizationId: normalizeStableId(record?.organizationId || ""),
+    organizationSlug: normalizeSlug(record?.organizationSlug || ""),
+    campaignIds: normalizeCampaignScope(record?.campaignIds).sort(),
+    campaignSlugs: normalizeCampaignScope(record?.campaignSlugs).sort(),
+    memberships,
+    isActive: record?.isActive !== false,
+  })).digest("hex");
 }
 
 function uniqueManagerRecords(records) {
@@ -384,6 +486,65 @@ async function ensureNotRateLimited(store, email, clientAddress) {
   return null;
 }
 
+async function readPostgresMemberships(client, adminUserId) {
+  const result = await client.query(`
+    SELECT COALESCE(o.app_id, o.slug) AS organization_id, o.slug AS organization_slug,
+      COALESCE(c.app_id, c.slug, '') AS campaign_id, COALESCE(c.slug, '') AS campaign_slug,
+      m.role
+    FROM goodraise.admin_memberships m
+    JOIN goodraise.organizations o ON o.id = m.organization_id
+    LEFT JOIN goodraise.campaigns c ON c.id = m.campaign_id
+    WHERE m.admin_user_id = $1::uuid
+    ORDER BY o.name, c.name NULLS FIRST, m.role
+  `, [adminUserId]);
+  return normalizeMemberships(result.rows.map((row) => ({
+    organizationId: row.organization_id,
+    organizationSlug: row.organization_slug,
+    campaignId: row.campaign_id,
+    campaignSlug: row.campaign_slug,
+    role: row.role,
+  })));
+}
+
+async function replacePostgresMemberships(client, email, memberships, { rejectMissing = false } = {}) {
+  const userResult = await client.query("SELECT id::text FROM goodraise.admin_users WHERE email = $1 LIMIT 1", [normalizeEmail(email)]);
+  const adminUserId = userResult.rows[0]?.id;
+  if (!adminUserId) throw new Error(`Admin user not found for membership update: ${email}`);
+  await client.query("DELETE FROM goodraise.admin_memberships WHERE admin_user_id = $1::uuid", [adminUserId]);
+  for (const membership of normalizeMemberships(memberships)) {
+    const organizationResult = await client.query(`
+      SELECT id::text FROM goodraise.organizations
+      WHERE app_id = $1 OR slug = $2
+      ORDER BY CASE WHEN app_id = $1 THEN 0 ELSE 1 END
+      LIMIT 1
+    `, [membership.organizationId, membership.organizationSlug]);
+    const organizationId = organizationResult.rows[0]?.id;
+    if (!organizationId) {
+      if (rejectMissing) throw new Error("הארגון שנבחר אינו קיים.");
+      continue;
+    }
+    let campaignId = null;
+    if (membership.role !== ROLE_ORGANIZATION_ADMIN) {
+      const campaignResult = await client.query(`
+        SELECT id::text FROM goodraise.campaigns
+        WHERE organization_id = $1::uuid AND (app_id = $2 OR slug = $3)
+        ORDER BY CASE WHEN app_id = $2 THEN 0 ELSE 1 END
+        LIMIT 1
+      `, [organizationId, membership.campaignId, membership.campaignSlug]);
+      campaignId = campaignResult.rows[0]?.id || null;
+      if (!campaignId) {
+        if (rejectMissing) throw new Error("הקמפיין שנבחר אינו קיים בארגון.");
+        continue;
+      }
+    }
+    await client.query(`
+      INSERT INTO goodraise.admin_memberships (
+        id, admin_user_id, organization_id, campaign_id, role, created_at, updated_at
+      ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, NOW(), NOW())
+    `, [randomUUID(), adminUserId, organizationId, campaignId, membership.role]);
+  }
+}
+
 async function ensureAdminSeed(store, email = "") {
   // Re-read current configuration on every account lookup to keep revocation
   // immediate, but provision only that account. Health may explicitly seed all.
@@ -392,7 +553,8 @@ async function ensureAdminSeed(store, email = "") {
     const createdAt = isoNow();
     await withPostgresClient(async (client) => {
       for (const manager of managers) {
-        await client.query(
+        const managerAccessHash = accessConfigHash(manager);
+        const seeded = await client.query(
           `
             INSERT INTO goodraise.admin_users (
               id,
@@ -403,10 +565,11 @@ async function ensureAdminSeed(store, email = "") {
               campaign_ids,
               campaign_slugs,
               is_active,
+              access_config_hash,
               created_at,
               updated_at
             )
-            VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11)
             ON CONFLICT (email) DO UPDATE SET
               role = EXCLUDED.role,
               organization_app_id = EXCLUDED.organization_app_id,
@@ -414,12 +577,10 @@ async function ensureAdminSeed(store, email = "") {
               campaign_ids = EXCLUDED.campaign_ids,
               campaign_slugs = EXCLUDED.campaign_slugs,
               is_active = EXCLUDED.is_active,
+              access_config_hash = EXCLUDED.access_config_hash,
               updated_at = EXCLUDED.updated_at
-            WHERE (goodraise.admin_users.role, goodraise.admin_users.organization_app_id,
-              goodraise.admin_users.organization_slug, goodraise.admin_users.campaign_ids,
-              goodraise.admin_users.campaign_slugs, goodraise.admin_users.is_active)
-              IS DISTINCT FROM (EXCLUDED.role, EXCLUDED.organization_app_id,
-                EXCLUDED.organization_slug, EXCLUDED.campaign_ids, EXCLUDED.campaign_slugs, EXCLUDED.is_active)
+            WHERE goodraise.admin_users.access_config_hash IS DISTINCT FROM EXCLUDED.access_config_hash
+            RETURNING id::text
           `,
           [
             randomUUID(),
@@ -430,10 +591,12 @@ async function ensureAdminSeed(store, email = "") {
             JSON.stringify(manager.campaignIds || []),
             JSON.stringify(manager.campaignSlugs || []),
             manager.isActive !== false,
+            managerAccessHash,
             createdAt,
             createdAt,
           ],
         );
+        if (seeded.rowCount) await replacePostgresMemberships(client, manager.email, manager.memberships || []);
       }
     });
     return;
@@ -441,7 +604,7 @@ async function ensureAdminSeed(store, email = "") {
   const createdAt = isoNow();
   for (const manager of managers) {
     const existing = await store.getJSON(adminKey(manager.email));
-    if (existing && ["email", "role", "organizationId", "organizationSlug", "campaignIds", "campaignSlugs", "isActive"]
+    if (existing && ["email", "role", "organizationId", "organizationSlug", "campaignIds", "campaignSlugs", "memberships", "isActive"]
       .every((key) => JSON.stringify(existing[key]) === JSON.stringify(manager[key]))) continue;
     await store.setJSON(adminKey(manager.email), {
       email: manager.email,
@@ -450,6 +613,7 @@ async function ensureAdminSeed(store, email = "") {
       organizationSlug: manager.organizationSlug,
       campaignIds: manager.campaignIds,
       campaignSlugs: manager.campaignSlugs,
+      memberships: manager.memberships || [],
       isActive: manager.isActive,
       createdAt: existing?.createdAt || createdAt,
       passwordHash: existing?.passwordHash || "",
@@ -470,6 +634,7 @@ function normalizeAdminRecord(record) {
     organizationSlug: normalizeSlug(record.organizationSlug || ""),
     campaignIds: Array.isArray(record.campaignIds) ? record.campaignIds.map((item) => normalizeStableId(item)).filter(Boolean) : [],
     campaignSlugs: Array.isArray(record.campaignSlugs) ? record.campaignSlugs.map((item) => normalizeSlug(item)).filter(Boolean) : [],
+    memberships: normalizeMemberships(record.memberships, record),
     isActive: record.isActive !== false,
     createdAt: record.createdAt || "",
     updatedAt: record.updatedAt || "",
@@ -487,6 +652,7 @@ async function getAdminRecord(store, email) {
       const result = await client.query(
         `
           SELECT
+            id::text,
             email,
             role,
             organization_app_id,
@@ -509,6 +675,7 @@ async function getAdminRecord(store, email) {
       if (!row) {
         return null;
       }
+      const memberships = await readPostgresMemberships(client, row.id);
       return normalizeAdminRecord({
         email: row.email,
         role: row.role,
@@ -516,6 +683,7 @@ async function getAdminRecord(store, email) {
         organizationSlug: row.organization_slug,
         campaignIds: row.campaign_ids || [],
         campaignSlugs: row.campaign_slugs || [],
+        memberships,
         passwordHash: row.password_hash || "",
         isActive: row.is_active !== false,
         createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at || ""),
@@ -721,6 +889,11 @@ async function getAccessibleCampaignSummaries(auth) {
   return filterAccessibleCampaignSummaries(auth, summaries).map((item) => ({
     ...item,
     organizationSlug: item.organizationSlug || normalizeSlug(item.organizationName || ""),
+    accessRole: getEffectiveRole(
+      auth,
+      { id: item.organizationId, slug: item.organizationSlug },
+      { id: item.campaignId, slug: item.campaignSlug },
+    ),
   }));
 }
 
@@ -734,6 +907,10 @@ async function getSessionIdentity(request) {
 
 function buildSessionIdentity(admin, session) {
   const authenticatedEmail = admin && admin.isActive !== false ? normalizeEmail(admin.email) : "";
+  const memberships = Array.isArray(admin?.memberships) ? admin.memberships : [];
+  const siteAdmin = normalizeRole(admin?.role, ROLE_VIEWER) === ROLE_PLATFORM_ADMIN;
+  const hasMembershipRole = (minimumRole) => memberships.some((membership) =>
+    hasRequiredRole(normalizeRole(membership.role, ROLE_VIEWER), minimumRole));
   const auth = {
     authenticated: Boolean(authenticatedEmail),
     email: authenticatedEmail,
@@ -742,10 +919,16 @@ function buildSessionIdentity(admin, session) {
     organizationSlug: admin?.organizationSlug || "",
     campaignIds: Array.isArray(admin?.campaignIds) ? admin.campaignIds : [],
     campaignSlugs: Array.isArray(admin?.campaignSlugs) ? admin.campaignSlugs : [],
+    memberships,
     sessionExpiresAt: session?.expiresAt || "",
     setupSupported: true,
     permissions: {
-      campaignPages: Boolean(authenticatedEmail) && hasRequiredRole(admin?.role, ROLE_CAMPAIGN_MANAGER),
+      campaignPages: Boolean(authenticatedEmail) && (siteAdmin || memberships.length > 0),
+      analytics: Boolean(authenticatedEmail) && (siteAdmin || hasMembershipRole(ROLE_ANALYST)),
+      campaignManagement: Boolean(authenticatedEmail) && (siteAdmin || hasMembershipRole(ROLE_CAMPAIGN_MANAGER)),
+      organizationManagement: Boolean(authenticatedEmail) && (siteAdmin || hasMembershipRole(ROLE_ORGANIZATION_ADMIN)),
+      siteAdmin: Boolean(authenticatedEmail) && siteAdmin,
+      manageUsers: Boolean(authenticatedEmail) && siteAdmin,
     },
   };
   return auth;
@@ -765,6 +948,227 @@ export async function getAuthStatus(request, { includeCampaigns = true } = {}) {
   };
 }
 
+async function requireSiteAdminAccess(request) {
+  const access = await requireManagerAccess(request, ROLE_PLATFORM_ADMIN, "נדרשת התחברות של מנהל/ת האתר.");
+  if (access.error) return access;
+  if (normalizeRole(access.auth.role, ROLE_VIEWER) !== ROLE_PLATFORM_ADMIN) {
+    return { auth: access.auth, error: failureResponse(403, "רק מנהלי האתר יכולים לנהל משתמשים והרשאות.") };
+  }
+  return access;
+}
+
+function publicAccountRecord(record) {
+  const normalized = normalizeAdminRecord(record);
+  return {
+    email: normalized.email,
+    isActive: normalized.isActive,
+    siteAdmin: normalized.role === ROLE_PLATFORM_ADMIN,
+    passwordSet: Boolean(normalized.passwordHash),
+    memberships: normalized.memberships,
+    createdAt: normalized.createdAt,
+    updatedAt: normalized.updatedAt,
+    lastLoginAt: normalized.lastLoginAt,
+  };
+}
+
+async function listAllAdminRecords(store) {
+  await ensureAdminSeed(store);
+  if (!usesPostgresAuthStore()) {
+    const items = await store.listJSON("admin:");
+    return items.map((item) => normalizeAdminRecord(item.value)).filter(Boolean);
+  }
+  return withPostgresClient(async (client) => {
+    const result = await client.query(`
+      SELECT id::text, email, role, organization_app_id, organization_slug,
+        campaign_ids, campaign_slugs, password_hash, is_active, created_at,
+        updated_at, password_set_at, last_login_at
+      FROM goodraise.admin_users
+      ORDER BY email
+    `);
+    const records = [];
+    for (const row of result.rows) {
+      records.push(normalizeAdminRecord({
+        email: row.email,
+        role: row.role,
+        organizationAppId: row.organization_app_id,
+        organizationSlug: row.organization_slug,
+        campaignIds: row.campaign_ids || [],
+        campaignSlugs: row.campaign_slugs || [],
+        memberships: await readPostgresMemberships(client, row.id),
+        passwordHash: row.password_hash || "",
+        isActive: row.is_active !== false,
+        createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at || ""),
+        updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at || ""),
+        passwordSetAt: row.password_set_at instanceof Date ? row.password_set_at.toISOString() : String(row.password_set_at || ""),
+        lastLoginAt: row.last_login_at instanceof Date ? row.last_login_at.toISOString() : String(row.last_login_at || ""),
+      }));
+    }
+    return records;
+  });
+}
+
+async function canonicalizeManagedMemberships(rawMemberships) {
+  if (!Array.isArray(rawMemberships)) throw new Error("רשימת ההרשאות אינה תקינה.");
+  const allowedRoles = new Set([ROLE_ORGANIZATION_ADMIN, ROLE_CAMPAIGN_MANAGER, ROLE_ANALYST, ROLE_VIEWER]);
+  for (const membership of rawMemberships) {
+    if (!allowedRoles.has(String(membership?.role || "").trim().toLowerCase())) {
+      throw new Error("נבחר תפקיד שאינו נתמך.");
+    }
+  }
+  const [organizations, campaigns] = await Promise.all([listOrganizations(), listCampaigns()]);
+  const canonical = [];
+  for (const membership of normalizeMemberships(rawMemberships)) {
+    const organization = organizations.find((item) =>
+      [item.id, item.slug].includes(membership.organizationId) || [item.id, item.slug].includes(membership.organizationSlug));
+    if (!organization) throw new Error("הארגון שנבחר אינו קיים.");
+    if (membership.role === ROLE_ORGANIZATION_ADMIN) {
+      canonical.push({
+        organizationId: organization.id,
+        organizationSlug: organization.slug,
+        campaignId: "",
+        campaignSlug: "",
+        role: membership.role,
+      });
+      continue;
+    }
+    const campaign = campaigns.find((item) => item.organizationId === organization.id &&
+      ([item.id, item.slug].includes(membership.campaignId) || [item.id, item.slug].includes(membership.campaignSlug)));
+    if (!campaign) throw new Error("הקמפיין שנבחר אינו קיים בארגון.");
+    canonical.push({
+      organizationId: organization.id,
+      organizationSlug: organization.slug,
+      campaignId: campaign.id,
+      campaignSlug: campaign.slug,
+      role: membership.role,
+    });
+  }
+  return normalizeMemberships(canonical);
+}
+
+function legacyScopeForMemberships(memberships) {
+  const first = memberships[0] || {};
+  const role = memberships.reduce((highest, membership) =>
+    (ROLE_ORDER[membership.role] || 0) > (ROLE_ORDER[highest] || 0) ? membership.role : highest, ROLE_VIEWER);
+  const sameOrganization = memberships.filter((item) =>
+    item.organizationId === first.organizationId || item.organizationSlug === first.organizationSlug);
+  return {
+    role,
+    organizationId: first.organizationId || "",
+    organizationSlug: first.organizationSlug || "",
+    campaignIds: sameOrganization.map((item) => item.campaignId).filter(Boolean),
+    campaignSlugs: sameOrganization.map((item) => item.campaignSlug).filter(Boolean),
+  };
+}
+
+export async function getManagedAccounts(request) {
+  const access = await requireSiteAdminAccess(request);
+  if (access.error) return access.error;
+  const store = getPersistence();
+  const [accounts, organizations, campaigns] = await Promise.all([
+    listAllAdminRecords(store),
+    listOrganizations(),
+    listCampaigns(),
+  ]);
+  return jsonResponse(200, {
+    users: accounts.map(publicAccountRecord),
+    organizations: organizations.map((organization) => ({
+      id: organization.id,
+      slug: organization.slug,
+      name: organization.name,
+      campaigns: campaigns.filter((campaign) => campaign.organizationId === organization.id).map((campaign) => ({
+        id: campaign.id,
+        slug: campaign.slug,
+        name: campaign.name,
+        status: campaign.status,
+      })),
+    })),
+  });
+}
+
+export async function saveManagedAccount(request, rawAccount = {}) {
+  const access = await requireSiteAdminAccess(request);
+  if (access.error) return access.error;
+  const email = normalizeEmail(rawAccount.email);
+  if (!email || !email.includes("@")) return failureResponse(400, "יש להזין כתובת מייל תקינה.");
+  const isActive = rawAccount.isActive !== false;
+  const siteAdmin = rawAccount.siteAdmin === true;
+  if (email === access.auth.email && (!isActive || !siteAdmin)) {
+    return failureResponse(400, "לא ניתן לבטל או להסיר את הרשאת מנהל האתר מהחשבון המחובר.");
+  }
+  let memberships;
+  try {
+    memberships = siteAdmin ? [] : await canonicalizeManagedMemberships(rawAccount.memberships || []);
+  } catch (error) {
+    return failureResponse(400, error instanceof Error ? error.message : "רשימת ההרשאות אינה תקינה.");
+  }
+  const store = getPersistence();
+  const existing = await getAdminRecord(store, email);
+  const now = isoNow();
+  const legacy = siteAdmin ? {
+    role: ROLE_PLATFORM_ADMIN, organizationId: "", organizationSlug: "", campaignIds: [], campaignSlugs: [],
+  } : legacyScopeForMemberships(memberships);
+  const record = normalizeAdminRecord({
+    ...(existing || {}),
+    email,
+    ...legacy,
+    memberships,
+    isActive,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    passwordHash: existing?.passwordHash || "",
+    passwordSetAt: existing?.passwordSetAt || "",
+    lastLoginAt: existing?.lastLoginAt || "",
+  });
+  if (usesPostgresAuthStore()) {
+    await withPostgresClient(async (client) => {
+      await client.query("BEGIN");
+      try {
+        await client.query(`
+          INSERT INTO goodraise.admin_users (
+            id, email, role, organization_app_id, organization_slug, campaign_ids,
+            campaign_slugs, password_hash, is_active, access_config_hash, created_at, updated_at,
+            password_set_at, last_login_at
+          ) VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12,
+            NULLIF($13, '')::timestamptz, NULLIF($14, '')::timestamptz)
+          ON CONFLICT (email) DO UPDATE SET
+            role = EXCLUDED.role,
+            organization_app_id = EXCLUDED.organization_app_id,
+            organization_slug = EXCLUDED.organization_slug,
+            campaign_ids = EXCLUDED.campaign_ids,
+            campaign_slugs = EXCLUDED.campaign_slugs,
+            is_active = EXCLUDED.is_active,
+            access_config_hash = EXCLUDED.access_config_hash,
+            updated_at = EXCLUDED.updated_at
+        `, [randomUUID(), record.email, record.role, record.organizationId, record.organizationSlug,
+          JSON.stringify(record.campaignIds), JSON.stringify(record.campaignSlugs), record.passwordHash || null,
+          record.isActive, accessConfigHash(record), record.createdAt || now, now, record.passwordSetAt, record.lastLoginAt]);
+        await replacePostgresMemberships(client, email, memberships, { rejectMissing: true });
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      }
+    });
+  } else {
+    await store.setJSON(adminKey(email), record);
+  }
+  if (!isActive) await deleteSessionsForEmail(store, email);
+  await appendAuditEvent({
+    user: access.auth.email,
+    role: ROLE_PLATFORM_ADMIN,
+    organizationId: "",
+    campaignId: "",
+    action: existing ? "account_access_updated" : "account_invited",
+    outcome: "success",
+    detail: { accountEmail: email, siteAdmin, isActive, membershipCount: memberships.length },
+  });
+  return jsonResponse(existing ? 200 : 201, {
+    user: publicAccountRecord(record),
+    created: !existing,
+    message: existing ? "הרשאות המשתמש עודכנו." : "המשתמש אושר ויוכל להגדיר סיסמה בכניסה הראשונה.",
+  });
+}
+
 export async function requireManagerAccess(request, minimumRole = ROLE_VIEWER, unauthorizedMessage = "נדרשת התחברות מנהל.") {
   const auth = await getSessionIdentity(request);
   if (!auth?.authenticated || !auth?.email) {
@@ -773,7 +1177,14 @@ export async function requireManagerAccess(request, minimumRole = ROLE_VIEWER, u
       auth: null,
     };
   }
-  if (!hasRequiredRole(auth.role, minimumRole)) {
+  const highestMembershipRole = (auth.memberships || []).reduce((highest, membership) =>
+    (ROLE_ORDER[normalizeRole(membership.role, ROLE_VIEWER)] || 0) > (ROLE_ORDER[highest] || 0)
+      ? normalizeRole(membership.role, ROLE_VIEWER)
+      : highest, ROLE_VIEWER);
+  const effectiveAccountRole = normalizeRole(auth.role, ROLE_VIEWER) === ROLE_PLATFORM_ADMIN
+    ? ROLE_PLATFORM_ADMIN
+    : highestMembershipRole;
+  if (!hasRequiredRole(effectiveAccountRole, minimumRole)) {
     return {
       error: failureResponse(403, "אין הרשאה מספקת לביצוע הפעולה המבוקשת."),
       auth,
@@ -865,8 +1276,15 @@ export async function resolveScopedAccess(request, options = {}) {
     };
   }
 
+  const scopedAuth = {
+    ...auth,
+    accountRole: auth.role,
+    role: authorization.effectiveRole || auth.role,
+    effectiveRole: authorization.effectiveRole || auth.role,
+  };
+
   return {
-    auth,
+    auth: scopedAuth,
     organization,
     campaign,
   };
@@ -950,12 +1368,26 @@ export async function getAdminDataset(request, scope = {}) {
     outcome: "success",
   });
 
+  const analystView = normalizeRole(access.auth.role, ROLE_VIEWER) === ROLE_ANALYST;
+  const rows = Array.isArray(context.dataset.rows) ? context.dataset.rows : [];
   return jsonResponse(200, {
     organizationId: access.organization.id,
     campaignId: access.campaign.id,
     organization: access.organization,
     campaign: access.campaign,
-    rows: Array.isArray(context.dataset.rows) ? context.dataset.rows : [],
+    rows: analystView ? rows.map((row) => ({
+      id: row?.id || "",
+      createdIso: row?.createdIso || "",
+      date: row?.date || "",
+      hour: Number(row?.hour || 0),
+      donor: "מוסתר לפי הרשאה",
+      email: "",
+      city: "",
+      ambassador: row?.ambassador || "",
+      amount: Number(row?.amount || 0),
+      status: row?.status || "",
+      chargeResult: "",
+    })) : rows,
     meta: context.dataset.meta && typeof context.dataset.meta === "object" ? context.dataset.meta : {},
     sourceLabel: context.dataset.sourceLabel || "קובץ בסיס מאובטח",
     generatedAt: context.dataset.generatedAt || "",
@@ -973,6 +1405,46 @@ function buildPublicDatasetRows(rows = [], { compact = false } = {}) {
     status: row?.status || "",
     ...(compact ? {} : { email: "", donor: "מוסתר בצפייה ציבורית", city: "", chargeResult: "" }),
   }));
+}
+
+function isSuccessfulPublicRow(row) {
+  const status = String(row?.status || "").trim().toLowerCase();
+  return status === "success" || row?.chargedSuccess === true || row?.charged_success === true;
+}
+
+function buildViewerCampaignSummary(rows = []) {
+  const successfulRows = rows.filter(isSuccessfulPublicRow);
+  const supporters = new Set();
+  const ambassadors = new Map();
+  for (const row of successfulRows) {
+    const supporterKey = normalizeEmail(row?.email || "")
+      || String(row?.donor || row?.fullName || row?.full_name || row?.donorId || row?.donor_id || row?.id || "").trim().toLowerCase();
+    if (supporterKey) supporters.add(supporterKey);
+    const ambassador = String(row?.ambassador || row?.ambassadorName || row?.["Ambassador name"] || "").trim();
+    if (!ambassador) continue;
+    const current = ambassadors.get(ambassador) || { ambassador, amount: 0, donationCount: 0 };
+    current.amount += Number(row?.amount || row?.total || 0) || 0;
+    current.donationCount += 1;
+    ambassadors.set(ambassador, current);
+  }
+  return {
+    raised: successfulRows.reduce((sum, row) => sum + (Number(row?.amount || row?.total || 0) || 0), 0),
+    donationCount: successfulRows.length,
+    supporterCount: supporters.size,
+    ambassadorTotals: [...ambassadors.values()].sort((left, right) => right.amount - left.amount),
+  };
+}
+
+function buildViewerDatasetMeta(meta = {}, summary) {
+  return {
+    rowCount: summary.donationCount,
+    uniqueDates: Array.isArray(meta?.uniqueDates) ? meta.uniqueDates.map(String) : [],
+    projectDates: Array.isArray(meta?.projectDates) ? meta.projectDates.map(String) : [],
+    defaultFrom: String(meta?.defaultFrom || ""),
+    defaultTo: String(meta?.defaultTo || ""),
+    minDate: String(meta?.minDate || ""),
+    maxDate: String(meta?.maxDate || ""),
+  };
 }
 
 function buildPublicCampaignConfig(config = {}) {
@@ -1049,14 +1521,20 @@ export async function getPublicDataset(request, scope = {}) {
     return failureResponse(404, "מאגר הנתונים הציבורי לקמפיין המבוקש אינו זמין כרגע.");
   }
 
+  const datasetRows = Array.isArray(context.dataset.rows) ? context.dataset.rows : [];
+  const viewerOnly = normalizeRole(access.auth.role, ROLE_VIEWER) === ROLE_VIEWER;
+  const summary = viewerOnly ? buildViewerCampaignSummary(datasetRows) : null;
   return jsonResponse(200, {
     organizationId: context.organization.id,
     campaignId: context.campaign.id,
     organization: context.organization,
     campaign: context.campaign,
-    rows: buildPublicDatasetRows(Array.isArray(context.dataset.rows) ? context.dataset.rows : [], { compact: scope.compact }),
-    meta: context.dataset.meta && typeof context.dataset.meta === "object" ? context.dataset.meta : {},
-    sourceLabel: context.dataset.sourceLabel || "קובץ בסיס ציבורי",
+    rows: viewerOnly ? [] : buildPublicDatasetRows(datasetRows, { compact: scope.compact }),
+    ...(summary ? { summary } : {}),
+    meta: viewerOnly
+      ? buildViewerDatasetMeta(context.dataset.meta, summary)
+      : context.dataset.meta && typeof context.dataset.meta === "object" ? context.dataset.meta : {},
+    sourceLabel: viewerOnly ? "נתוני קמפיין מצטברים" : context.dataset.sourceLabel || "קובץ בסיס ציבורי",
     generatedAt: context.dataset.generatedAt || context.dataset.updatedAt || "",
     campaignConfig: buildPublicCampaignConfig(context.config),
   });
@@ -1073,7 +1551,7 @@ export async function getCampaignView(request) {
 }
 
 export async function getPublicContext(request) {
-  const access = await requireManagerAccess(request, ROLE_CAMPAIGN_MANAGER);
+  const access = await requireManagerAccess(request, ROLE_VIEWER);
   if (access.error) return access.error;
   const summaries = (await listCampaignSummaries({ auth: access.auth })).filter((item) =>
     authorize(access.auth, "campaign_page_view",

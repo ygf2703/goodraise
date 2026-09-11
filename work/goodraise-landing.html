@@ -67,6 +67,31 @@
       .step-number { display:block; color:var(--blue); font-size:15px; font-weight:700; margin-bottom:15px; }
       .step h3 { font-size:24px; margin-bottom:12px; }
       .step p { color:var(--muted); font-size:18px; }
+      .past-campaigns { background:var(--pale); }
+      .campaign-carousel-wrap { position:relative; margin-top:48px; }
+      .campaign-carousel { display:grid; grid-auto-flow:column; grid-auto-columns:calc((100% - 48px) / 3); gap:24px; overflow-x:auto; overscroll-behavior-inline:contain; scroll-behavior:smooth; scroll-snap-type:inline mandatory; scrollbar-width:none; padding:4px 3px 24px; }
+      .campaign-carousel.is-single { grid-auto-columns:min(380px,100%); justify-content:center; }
+      .campaign-carousel::-webkit-scrollbar { display:none; }
+      .campaign-card { overflow:hidden; scroll-snap-align:start; border:1px solid var(--line); border-radius:16px; background:#fff; box-shadow:0 12px 30px #102d4c10; }
+      .campaign-card-link { display:block; height:100%; }
+      .campaign-card-link:focus-visible { outline-offset:-4px; }
+      .campaign-card-media { position:relative; display:grid; place-items:center; aspect-ratio:16/9; overflow:hidden; color:var(--blue); background:#dbeaf6; font-weight:800; }
+      .campaign-card-media img { width:100%; height:100%; object-fit:cover; }
+      .campaign-card-status { position:absolute; top:13px; right:13px; padding:6px 11px; border-radius:999px; color:#fff; background:var(--navy); font-size:13px; font-weight:800; }
+      .campaign-card-body { display:grid; gap:11px; padding:20px; }
+      .campaign-card-org { color:var(--blue); font-size:14px; font-weight:800; }
+      .campaign-card h3 { font-size:23px; }
+      .campaign-card-description { min-height:3.2em; display:-webkit-box; overflow:hidden; color:var(--muted); font-size:16px; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+      .campaign-progress { height:7px; overflow:hidden; border-radius:99px; background:#e2ebf2; }
+      .campaign-progress span { display:block; height:100%; border-radius:inherit; background:var(--blue); }
+      .campaign-card-total { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+      .campaign-card-total strong { color:var(--navy); font-size:21px; }
+      .campaign-card-total span, .campaign-card-meta { color:var(--muted); font-size:14px; }
+      .campaign-card-meta { display:flex; justify-content:space-between; gap:10px; padding-top:9px; border-top:1px solid var(--line); }
+      .carousel-controls { display:flex; justify-content:center; gap:10px; margin-top:8px; }
+      .carousel-button { width:44px; height:44px; border:1px solid #bccddc; border-radius:50%; color:var(--navy); background:#fff; }
+      .carousel-button:hover { background:#e7f1f8; }
+      .campaigns-all { display:flex; justify-content:center; margin-top:24px; }
       .about { padding-top:0; }
       .about-grid { display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:80px; border-top:1px solid var(--line); padding-top:80px; }
       .about-image { min-height:320px; background:#edf1f5; border-radius:12px; border:1px solid #dce4ec; }
@@ -116,6 +141,7 @@
         .step { padding-inline-start:16px; }
         .step h3 { font-size:21px; }
         .step p { font-size:17px; }
+        .campaign-carousel { grid-auto-columns:calc((100% - 24px) / 2); }
         .about { padding-top:0; }
         .about-grid { grid-template-columns:1fr; gap:32px; padding-top:58px; }
         .about-copy { grid-row:1; }
@@ -141,6 +167,8 @@
         .step-number { margin-bottom:8px; }
         .step h3 { font-size:24px; margin-bottom:8px; }
         .step p { font-size:18px; }
+        .campaign-carousel { grid-auto-columns:88%; }
+        .campaign-card-meta { flex-direction:column; }
         .footer-main { grid-template-columns:1fr 1fr; }
         .footer-bottom { align-items:flex-start; flex-direction:column; }
       }
@@ -163,7 +191,7 @@
             <h1 id="hero-title">רעיון קטן.<br />קהילה גדולה.<br /><span>שינוי אמיתי.</span></h1>
             <p class="hero-description">לכל מטרה טובה יש סיפור. כאן מתחיל הסיפור שלכם — עם האנשים שמאמינים בו, ועם הכלים להפוך אותו למציאות.</p>
             <div class="hero-actions">
-              <a class="button button-primary" href="/admin">מתחילים לעשות טוב <span aria-hidden="true">←</span></a>
+              <a class="button button-primary" href="/#footer">מתחילים לעשות טוב <span aria-hidden="true">←</span></a>
               <a class="button button-secondary" href="#how-it-works">איך זה עובד?</a>
             </div>
             <p class="hero-note"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>מהרעיון הראשון ועד היעד — יחד איתכם.</p>
@@ -192,6 +220,19 @@
           </div>
         </div>
       </section>
+      <section id="past-campaigns" class="section past-campaigns" aria-labelledby="past-campaigns-title" hidden>
+        <div class="container">
+          <div class="section-heading"><span class="section-kicker">הטוב שכבר קרה</span><h2 id="past-campaigns-title">קמפיינים שהסתיימו</h2><p>סיפורים של אנשים וקהילות שהפכו מטרה טובה להשפעה אמיתית.</p></div>
+          <div class="campaign-carousel-wrap">
+            <div id="campaign-carousel" class="campaign-carousel" aria-label="קמפיינים שהסתיימו"></div>
+            <div class="carousel-controls" aria-label="ניווט בין קמפיינים">
+              <button id="campaign-carousel-next" class="carousel-button" type="button" aria-label="הקמפיין הבא">→</button>
+              <button id="campaign-carousel-previous" class="carousel-button" type="button" aria-label="הקמפיין הקודם">←</button>
+            </div>
+          </div>
+          <div class="campaigns-all"><a class="button button-secondary" href="/campaigns">לכל הקמפיינים שהסתיימו <span aria-hidden="true">←</span></a></div>
+        </div>
+      </section>
       <section id="about" class="section about" aria-labelledby="about-title">
         <div class="container about-grid">
           <!-- Replace this figure with an image of the team or a community initiative. -->
@@ -205,7 +246,7 @@
         <div class="footer-main">
           <div class="footer-brand"><a href="/" aria-label="גודרייז — דף הבית"><img src="__GOODRAISE_LOGO_DATA_URI__" width="980" height="330" alt="גודרייז" /></a><p>מחברים אנשים למטרות טובות.<br />יחד, עושים יותר טוב.</p></div>
           <nav aria-label="על גודרייז"><h2 class="footer-heading">נעים להכיר</h2><div class="footer-links"><a href="#about">קצת עלינו</a><a href="#how-it-works">איך זה עובד</a><button type="button" data-placeholder="partners">שותפים לדרך</button></div></nav>
-          <nav aria-label="מידע ועזרה"><h2 class="footer-heading">כאן בשבילכם</h2><div class="footer-links"><button type="button" data-placeholder="contact">יצירת קשר</button><button type="button" data-placeholder="faq">שאלות נפוצות</button><a href="/admin">כניסה למערכת</a></div></nav>
+          <nav aria-label="מידע ועזרה"><h2 class="footer-heading">כאן בשבילכם</h2><div class="footer-links"><button type="button" data-placeholder="contact">יצירת קשר</button><button type="button" data-placeholder="faq">שאלות נפוצות</button><a href="/login">כניסה למערכת</a></div></nav>
           <nav aria-label="מידע משפטי"><h2 class="footer-heading">חשוב לדעת</h2><div class="footer-links"><a href="/rules">תנאי שימוש</a><a href="/privacy">מדיניות פרטיות</a><button type="button" data-placeholder="accessibility">הצהרת נגישות</button></div></nav>
         </div>
         <div class="footer-bottom"><span>© גודרייז. כל הזכויות שמורות.</span><a class="back-top" href="#top">בחזרה למעלה <span aria-hidden="true">↑</span></a></div>
@@ -235,6 +276,65 @@
         });
       });
       dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
+
+      const campaignSection = document.getElementById("past-campaigns");
+      const campaignCarousel = document.getElementById("campaign-carousel");
+      const money = (value, currency) => new Intl.NumberFormat("he-IL", { style:"currency", currency:currency || "ILS", maximumFractionDigits:0 }).format(Number(value || 0));
+      const date = (value) => {
+        const parsed = new Date(value || "");
+        return Number.isNaN(parsed.getTime()) ? "" : new Intl.DateTimeFormat("he-IL", { dateStyle:"medium" }).format(parsed);
+      };
+      const node = (name, className, text) => {
+        const element = document.createElement(name);
+        if (className) element.className = className;
+        if (text) element.textContent = text;
+        return element;
+      };
+      const renderCampaign = (item) => {
+        const card = node("article", "campaign-card");
+        const link = node("a", "campaign-card-link");
+        link.href = item.href;
+        const media = node("div", "campaign-card-media", "GoodRaise");
+        const imageUrl = item.campaign.mediaUrl || item.campaign.campaignLogoUrl || item.organization.logoUrl;
+        if (imageUrl) {
+          media.textContent = "";
+          const image = document.createElement("img");
+          image.src = imageUrl;
+          image.alt = item.campaign.mediaAlt || item.campaign.name;
+          image.loading = "lazy";
+          media.append(image);
+        }
+        media.append(node("span", "campaign-card-status", "הקמפיין הסתיים"));
+        const body = node("div", "campaign-card-body");
+        body.append(node("p", "campaign-card-org", item.organization.name), node("h3", "", item.campaign.name));
+        if (item.campaign.description) body.append(node("p", "campaign-card-description", item.campaign.description));
+        const progress = node("div", "campaign-progress");
+        progress.setAttribute("aria-label", `${item.totals.progressPercent}% מהיעד`);
+        const progressValue = document.createElement("span");
+        progressValue.style.width = `${Math.min(100, Math.max(0, item.totals.progressPercent))}%`;
+        progress.append(progressValue);
+        const totals = node("div", "campaign-card-total");
+        totals.append(node("strong", "", money(item.totals.raised, item.totals.currency)), node("span", "", `מתוך ${money(item.totals.target, item.totals.currency)}`));
+        const meta = node("div", "campaign-card-meta");
+        meta.append(node("span", "", `${Number(item.totals.supporterCount || 0).toLocaleString("he-IL")} תומכים ותומכות`));
+        const completed = date(item.completedAt);
+        if (completed) meta.append(node("span", "", `הסתיים ב־${completed}`));
+        body.append(progress, totals, meta);
+        link.append(media, body);
+        card.append(link);
+        return card;
+      };
+      fetch("/api/public/campaigns?limit=8", { headers:{ accept:"application/json" } })
+        .then((response) => response.ok ? response.json() : Promise.reject(new Error("archive unavailable")))
+        .then((payload) => {
+          if (!Array.isArray(payload.items) || !payload.items.length) return;
+          campaignCarousel.classList.toggle("is-single", payload.items.length === 1);
+          campaignCarousel.replaceChildren(...payload.items.map(renderCampaign));
+          campaignSection.hidden = false;
+        })
+        .catch(() => {});
+      document.getElementById("campaign-carousel-next").addEventListener("click", () => campaignCarousel.scrollBy({ left:-campaignCarousel.clientWidth * .8, behavior:"smooth" }));
+      document.getElementById("campaign-carousel-previous").addEventListener("click", () => campaignCarousel.scrollBy({ left:campaignCarousel.clientWidth * .8, behavior:"smooth" }));
     </script>
   </body>
 </html>

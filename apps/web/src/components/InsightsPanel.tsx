@@ -71,11 +71,11 @@ export function InsightsPanel() {
                       <div className="text-small text-muted">מרכז שליטה לקבצים, למסננים וליעדים. כל היכולות הקיימות נשמרות, רק מוצגות בצורה מדויקת ונוחה יותר.</div>
                     </div>
                   </div>
-                  <div className="control-actions control-actions--inline">
+                  <div className="control-actions control-actions--inline" data-requires-role="campaign_manager">
                     <button id="add-manual-contribution" className="button-secondary action-button secondary" type="button">הוספת הכפלה ידנית</button>
                   </div>
                   <div className="control-groups">
-                    <section className="control-group">
+                    <section className="control-group" data-requires-role="campaign_manager">
                       <div className="control-group-header">
                         <h4>תאריכי הפרויקט לניתוח</h4>
                         <p>הגדרה זו קובעת את ימי הפרויקט, טווח ברירת המחדל והפילוחים. היא אינה מסננת את הנתונים בלבד.</p>
@@ -96,7 +96,7 @@ export function InsightsPanel() {
                       <div id="analysis-project-dates-status" className="status-note text-small" aria-live="polite"></div>
                     </section>
 
-                    <section className="control-group">
+                    <section className="control-group" data-requires-role="campaign_manager">
                       <div className="control-group-header">
                         <h4>נתונים</h4>
                         <p>קבצי הבסיס, ההשוואה והפרסים</p>
@@ -118,7 +118,7 @@ export function InsightsPanel() {
                       <div id="import-status" className="status-note text-small" aria-live="polite">טבלת הפרסים הקבועה כבר טעונה במערכת. העלאת קובץ פרסים היא אופציונלית בלבד ונועדה רק להחלפה יזומה.</div>
                     </section>
 
-                    <section className="control-group">
+                    <section className="control-group" data-requires-role="campaign_manager">
                       <div className="control-group-header">
                         <h4>מקור נתונים</h4>
                         <p>בחירה בין העלאת קובץ ידנית לבין חיבור ל-API של מערכת הגיוס לצורך משיכה שוטפת לאורך הקמפיין</p>
