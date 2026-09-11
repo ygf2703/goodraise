@@ -70,7 +70,7 @@ npm start
 
 ## R&D documentation
 
-Start with the [engineering guide](docs/README.md), then [architecture](docs/architecture.md), [data model](docs/data-model.md), [API](docs/api.md), and [development](docs/development.md). The [migration record](docs/platform-migration.md) explains compatibility, validation, and remaining work. The [performance investigation](docs/performance-investigation.md) records the measured baseline and the changes made during migration.
+Start with the [active product and engineering TODO](docs/todo.md) and [engineering guide](docs/README.md), then [architecture](docs/architecture.md), [data model](docs/data-model.md), [API](docs/api.md), and [development](docs/development.md). The [migration record](docs/platform-migration.md) explains compatibility and validation. The [performance investigation](docs/performance-investigation.md) records the measured baseline and the changes made during migration.
 
 ## Code map
 

@@ -1,17 +1,18 @@
 # GoodRaise R&D guide
 
-Updated 2026-09-08 for the implemented Node.js/React migration. Start here to understand architecture, domain rules, development and remaining research/engineering work. The repository has one Node backend, a React frontend, and TypeScript for the new application boundaries and tooling.
+Updated 2026-09-11 for the active product backlog, membership access, completed-campaign archive, and implemented Node.js/React migration. Start here to understand architecture, domain rules, development and remaining research/engineering work. The repository has one Node backend, a React frontend, and TypeScript for the new application boundaries and tooling.
 
 ## Reading order
 
-1. [Architecture](architecture.md): system diagram, stack, modules and frontend ownership.
-2. [Data model](data-model.md): organizations/campaigns, ledger, snapshots and persistence.
-3. [Multi-tenancy](multi-tenancy.md): role and campaign access boundaries.
-4. [API contracts](api.md): routes, payloads and errors shared locally and on Netlify.
-5. [Intelligence model](intelligence-model.md): scoring, forecasts and question-provider boundaries.
-6. [Development](development.md): install, build, database migrations, imports, tests and hosting.
-7. [Platform migration](platform-migration.md): changes, compatibility and validation.
-8. [Engineering assessment](engineering-assessment.md): current limitations and next work.
+1. [Active TODO](todo.md): current production, product-definition and engineering work.
+2. [Architecture](architecture.md): system diagram, stack, modules and frontend ownership.
+3. [Data model](data-model.md): organizations/campaigns, ledger, snapshots and persistence.
+4. [Multi-tenancy](multi-tenancy.md): role and campaign access boundaries.
+5. [API contracts](api.md): routes, payloads and errors shared locally and on Netlify.
+6. [Intelligence model](intelligence-model.md): scoring, forecasts and question-provider boundaries.
+7. [Development](development.md): install, build, database migrations, imports, tests and hosting.
+8. [Platform migration](platform-migration.md): changes, compatibility and validation.
+9. [Engineering assessment](engineering-assessment.md): current limitations and next work.
 
 The [target architecture](target-architecture.md) records the chosen direction and remaining component/data migration work. The [performance investigation](performance-investigation.md) preserves the measured pre-migration baseline alongside current changes. The [2026-09-09 database rollout](database-rollout-2026-09-09.md) records the production migration, rehearsal and recovery snapshot.
 
