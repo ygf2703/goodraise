@@ -3348,6 +3348,7 @@ function setAdminTab(tab) {
     const isActive = button.dataset.adminTabTarget === nextTab;
     button.classList.toggle("is-active", isActive);
     button.setAttribute("aria-selected", isActive ? "true" : "false");
+    button.tabIndex = isActive ? 0 : -1;
   });
   if (nextTab === "design" && state.ui.page === "admin") {
     if (isManagerAuthenticated() && !state.auth.campaignConfigLoaded) {
@@ -5909,13 +5910,13 @@ function renderTable(rows) {
     <table>
       <thead>
         <tr>
-          <th>תאריך ושעה</th>
-          <th>יום</th>
-          <th>שגריר/ה</th>
-          <th>תורם/ת</th>
-          <th>סכום</th>
-          <th>עיר</th>
-          <th>סטטוס</th>
+          <th scope="col">תאריך ושעה</th>
+          <th scope="col">יום</th>
+          <th scope="col">שגריר/ה</th>
+          <th scope="col">תורם/ת</th>
+          <th scope="col">סכום</th>
+          <th scope="col">עיר</th>
+          <th scope="col">סטטוס</th>
         </tr>
       </thead>
       <tbody>
@@ -6268,12 +6269,12 @@ function renderCampaignDesigner(force = false) {
           <table class="records-table ambassador-links-table">
             <thead>
               <tr>
-                <th>שגריר/ה</th>
-                <th>כינוי</th>
-                <th>צוות</th>
-                <th>יעד אישי</th>
-                <th>מייל</th>
-                <th>לינק אישי</th>
+                <th scope="col">שגריר/ה</th>
+                <th scope="col">כינוי</th>
+                <th scope="col">צוות</th>
+                <th scope="col">יעד אישי</th>
+                <th scope="col">מייל</th>
+                <th scope="col">לינק אישי</th>
               </tr>
             </thead>
             <tbody>
@@ -6334,7 +6335,7 @@ function renderCampaignDesigner(force = false) {
           <p class="text-small text-muted">${formatNumber(ambassadorFundraisingRows.length)} שגרירים תואמים לסינון.</p>
           <div class="table-wrap ambassador-links-table-wrap">
             <table class="records-table ambassador-links-table">
-              <thead><tr><th>שגריר/ה</th><th>מייל</th><th>טלפון</th><th>כינוי</th><th>סכום גיוס</th></tr></thead>
+              <thead><tr><th scope="col">שגריר/ה</th><th scope="col">מייל</th><th scope="col">טלפון</th><th scope="col">כינוי</th><th scope="col">סכום גיוס</th></tr></thead>
               <tbody>
                 ${ambassadorFundraisingRows.length
                   ? ambassadorFundraisingRows
@@ -7202,6 +7203,20 @@ function bindEvents() {
   elements.adminTabButtons.forEach((button) => {
     listen(button, "click", () => {
       setAdminTab(button.dataset.adminTabTarget || "insights");
+    });
+    listen(button, "keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      const tabs = elements.adminTabButtons.filter((tab) => !tab.hidden);
+      if (!tabs.length) return;
+      event.preventDefault();
+      const current = Math.max(0, tabs.indexOf(button));
+      const next = event.key === "Home" ? 0
+        : event.key === "End" ? tabs.length - 1
+          : event.key === "ArrowLeft" ? (current + 1) % tabs.length
+            : (current - 1 + tabs.length) % tabs.length;
+      const nextButton = tabs[next];
+      setAdminTab(nextButton.dataset.adminTabTarget || "insights");
+      nextButton.focus();
     });
   });
 

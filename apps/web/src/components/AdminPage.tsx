@@ -21,8 +21,8 @@ export function AdminPage() {
                   <p>הפרדנו בין שכבת הניתוח והבקרה לבין שכבת עיצוב דף הפרויקט, כדי שהעבודה תהיה ממוקדת וברורה יותר.</p>
                 </div>
                 <div className="admin-tabbar" role="tablist" aria-label="לשוניות ניהול">
-                  <button className="admin-tab-button is-active" type="button" role="tab" aria-selected="true" data-admin-tab-target="insights">בקרה ותובנות</button>
-                  <button className="admin-tab-button" type="button" role="tab" aria-selected="false" data-admin-tab-target="design">עיצוב ומדיה</button>
+                  <button id="admin-tab-insights" className="admin-tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="admin-tab-panel-insights" tabIndex={0} data-admin-tab-target="insights">בקרה ותובנות</button>
+                  <button id="admin-tab-design" className="admin-tab-button" type="button" role="tab" aria-selected="false" aria-controls="admin-tab-panel-design" tabIndex={-1} data-admin-tab-target="design">עיצוב ומדיה</button>
                 </div>
               </div>
             </section>

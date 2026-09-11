@@ -84,6 +84,12 @@ The initial flow is implemented. The CTA remains separate from login, and submit
 
 ## Later platform hardening
 
+- [x] Use one shared, responsive footer across the homepage, public campaigns, campaign application, login, legal pages, and authenticated administration.
+- [x] Add public תנאי שימוש, מדיניות פרטיות, and הצהרת נגישות links to that footer and add a first accessibility statement at `/accessibility`.
+- [x] Add baseline accessibility improvements: skip-to-content navigation, semantic landmarks/headings, visible focus, accessible tab relationships/keyboard behavior, labelled authentication fields, table column scopes, reduced-motion support, and page-specific document titles.
+- [ ] Add the real accessibility contact name, email, phone, and any physical-service accessibility arrangements to `/accessibility` before opening the service publicly.
+- [ ] Run an independent Israeli Standard 5568 AA audit, including manual keyboard, screen-reader, zoom/reflow, mobile, form-error, chart/table, campaign-content and third-party payment-flow testing; record and remediate the findings.
+- [ ] Add automated accessibility checks for representative public and authenticated journeys to CI; automated checks supplement rather than replace the manual audit.
 - [ ] Replace full manager dataset downloads with paginated transaction APIs and server-side aggregate/read-model tables.
 - [ ] Measure production cold/warm API latency, database connection time, query time, payload size, and browser main-thread work.
 - [ ] Bind external ingestion credentials to explicit organizations/campaigns instead of relying on one server-wide key.

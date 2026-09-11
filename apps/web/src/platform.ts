@@ -50,7 +50,7 @@ export function getCampaignViewEndpoint(address: string): string {
 export function getInitialPage(pathname: string, authenticated = false): Page {
   const path = pathname.replace(/\/$/, "");
   if (path === "/login" || path === "/admin/users") return "admin";
-  if (["/admin", "/rules", "/privacy", "/prizes", "/project"].includes(path)) {
+  if (["/admin", "/rules", "/privacy", "/accessibility", "/prizes", "/project"].includes(path)) {
     return path.slice(1) as Page;
   }
   return (!path || path === "/index.html") && authenticated ? "admin" : "project";
@@ -74,7 +74,7 @@ export function getPublicArchiveEndpoint(route: PublicArchiveRoute, limit = 100)
 export function getCampaignRoute(address: string): { projectSlug: string; ambassadorSlug: string } {
   const url = new URL(address);
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
-  const reserved = new Set(["admin", "login", "start", "rules", "privacy", "prizes", "project", "campaigns", "goodraise", "index.html", "app.html"]);
+  const reserved = new Set(["admin", "login", "start", "rules", "privacy", "accessibility", "prizes", "project", "campaigns", "goodraise", "index.html", "app.html"]);
   return {
     projectSlug: url.searchParams.get("project") || (reserved.has(parts[0]) ? "" : parts[0] || ""),
     ambassadorSlug: url.searchParams.get("ambassador") || url.searchParams.get("nickname") || parts[1] || "",

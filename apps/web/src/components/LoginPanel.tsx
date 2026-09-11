@@ -7,7 +7,7 @@ export function LoginPanel() {
               <div className="login-brand-row">
                 <div className="login-copy">
                   <span className="brand-kicker">גישה למשתמשים שאושרו מראש</span>
-                  <h2>כניסה לחשבון GoodRaise</h2>
+                  <h1>כניסה לחשבון GoodRaise</h1>
                   <p>לאחר הכניסה נציג את הפרויקטים ששויכו אליך ואת כלי הצפייה, הניתוח או הניהול הזמינים לפי התפקיד שלך בכל פרויקט.</p>
                 </div>
                 <div className="login-logos">
@@ -26,19 +26,19 @@ export function LoginPanel() {
               </div>
               <label className="form-label">
                 כתובת מייל
-                <input id="login-email" className="form-control" type="email" autoComplete="username" placeholder="name@example.org" />
+                <input id="login-email" className="form-control" type="email" autoComplete="username" placeholder="name@example.org" aria-describedby="login-mode-hint login-message" required />
               </label>
               <label className="form-label">
                 סיסמה
                 <div className="password-field">
-                  <input id="login-password" className="form-control" type="password" autoComplete="current-password" placeholder="הקלד/י סיסמה" />
+                  <input id="login-password" className="form-control" type="password" autoComplete="current-password" placeholder="הקלד/י סיסמה" aria-describedby="login-password-setup-note login-message" required />
                   <button id="login-password-toggle" className="button-ghost password-toggle" type="button" aria-label="הצג או הסתר סיסמה">הצג</button>
                 </div>
                 <div id="login-password-setup-note" className="text-small text-muted" hidden style={{"display":"none"}}>בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.</div>
               </label>
               <label id="login-password-confirm-label" className="form-label" hidden style={{"display":"none"}}>
                 אימות סיסמה
-                <input id="login-password-confirm" className="form-control" type="password" autoComplete="new-password" placeholder="הקלד/י שוב את הסיסמה" />
+                <input id="login-password-confirm" className="form-control" type="password" autoComplete="new-password" placeholder="הקלד/י שוב את הסיסמה" aria-describedby="login-password-setup-note login-message" />
               </label>
               <div className="login-actions">
                 <button id="login-button" className="button-primary action-button" type="submit">כניסה לחשבון</button>

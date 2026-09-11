@@ -13,7 +13,7 @@ function walk(node: { attrs?: { name: string; value: string }[]; childNodes?: un
   for (const child of node.childNodes || []) walk(child as Parameters<typeof walk>[0]);
 }
 walk(document);
-for (const id of ["app", "goodraise-root", "page-project", "page-prizes", "page-rules", "page-privacy", "page-admin", "login-form", "account-home", "site-access-management", "managed-account-form", "csv-upload", "compare-upload", "prize-upload", "export-filtered"]) {
+for (const id of ["app", "goodraise-root", "main", "footer", "page-project", "page-prizes", "page-rules", "page-privacy", "page-accessibility", "page-admin", "login-form", "account-home", "site-access-management", "managed-account-form", "csv-upload", "compare-upload", "prize-upload", "export-filtered"]) {
   assert.ok(ids.has(id), `Missing React workflow: ${id}`);
 }
 assert.doesNotMatch(html, /__INITIAL_|__AUTH_CONFIG__|data:image\/.*?;base64|yellow-dashboard/);
@@ -25,10 +25,12 @@ const bootstrap = JSON.parse(await readFile(resolve(import.meta.dirname, "../app
 assert.equal(bootstrap.rows.length, 0, "Donor rows must only be loaded through the scoped API.");
 assert.equal(bootstrap.prizes.placePrizes.length + bootstrap.prizes.tierPrizes.length, 0, "Prize data must only be loaded after authorization.");
 const landing = await readFile(resolve(output, "goodraise/index.html"), "utf8");
-assert.doesNotMatch(landing, /__LANDING_|__GOODRAISE_|__SITE_HEADER__|data:image\/.*?;base64/);
+assert.doesNotMatch(landing, /__LANDING_|__GOODRAISE_|__SITE_HEADER__|__SITE_FOOTER__|data:image\/.*?;base64/);
 const homepage = await readFile(resolve(output, "index.html"), "utf8");
 assert.equal(homepage, landing, "The default index document must be the landing page.");
 assert.match(homepage, /id="hero-title"/);
+assert.match(homepage, /class="skip-link"[^>]+href="#main"/);
+assert.match(homepage, /<main id="main" tabindex="-1">/);
 assert.doesNotMatch(homepage, /href="\/admin"[^>]*>מתחילים/);
 assert.match(homepage, /href="\/login"[^>]*>כניסה למערכת/);
 assert.doesNotMatch(homepage, /id="goodraise-root"/);
@@ -46,8 +48,12 @@ assert.match(appHeaders[0], /<a[^>]*data-site-audience="session"[^>]*href="\/adm
 assert.match(appHeaders[0], /<a[^>]*data-site-audience="site-admin"[^>]*href="\/admin\/users"[^>]*hidden/, "Hide account management until site-admin authorization.");
 const footer = html.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || "";
 assert.doesNotMatch(footer, /data-page-target="(?:project|prizes|admin)"/);
-assert.match(footer, /data-page-target="rules"/);
+assert.match(footer, /href="\/rules"[^>]*>תנאי שימוש<\/a>/);
 assert.match(footer, /href="\/privacy"/);
+assert.match(footer, /href="\/accessibility"/);
+assert.match(html, /<main id="main"[^>]*tabindex="-1"/);
+const homeFooter = homepage.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || "";
+assert.equal(footer, homeFooter, "The homepage and application must use the same footer.");
 for (const asset of ["assets/site-header.css", "assets/site-header.js"]) {
   assert.ok(files.includes(asset), `Missing shared header asset: ${asset}`);
 }

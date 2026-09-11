@@ -19,8 +19,9 @@ to every authenticated account.
 | ניהול משתמשים | `/admin/users` | Site-admin header | Implemented; approvals, roles, memberships and deactivation |
 | דף הפרויקט | `/project`, `/<campaign>` or `/<campaign>/<ambassador>` | Main menu for assigned users | Access migrated; content migration pending |
 | פרסים ותחרות | `/prizes` | Main menu for assigned users | Access migrated; content migration pending |
-| תקנון השתתפות | `/rules` | Campaign footer; homepage footer uses תנאי שימוש | Content migration pending |
-| מדיניות פרטיות | `/privacy` | Homepage and campaign footers | Removed from the header; content migration pending |
+| תנאי שימוש ותקנון השתתפות | `/rules` | Shared footer on every page | Content migration pending |
+| מדיניות פרטיות | `/privacy` | Shared footer on every page | Removed from the header; content migration pending |
+| הצהרת נגישות | `/accessibility` | Shared footer on every page | Public statement; direct contact details and independent audit pending |
 | דשבורד ניהולי | `/admin?organizationId=…&campaignId=…` | Analyst+ main menu/project selector | Content migration pending |
 | התנתקות | Shared header and `/admin` | Available for any authenticated account | Ends the server session and returns to the homepage |
 

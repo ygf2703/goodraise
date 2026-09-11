@@ -49,6 +49,9 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
   padding: 0;
   min-height: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 #goodraise-root::before {
@@ -102,6 +105,8 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   max-width: 1600px;
   margin: 0 auto;
   padding: var(--space-4);
+  width: 100%;
+  flex: 1 0 auto;
 }
 
 #goodraise-root .app-content,
@@ -112,47 +117,6 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 #goodraise-root .comparison-shell {
   display: grid;
   gap: var(--space-5);
-}
-
-#goodraise-root .app-footer {
-  padding: var(--space-4);
-  border-top: 1px solid var(--border-light);
-  color: var(--text-muted);
-  font-size: 1rem;
-  text-align: center;
-}
-
-#goodraise-root .app-footer nav {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-3);
-}
-
-#goodraise-root .app-footer a,
-#goodraise-root .app-footer button {
-  display: inline-block;
-  padding: var(--space-2);
-  color: inherit;
-  text-decoration: none;
-  border: 0;
-  background: none;
-  font: inherit;
-  cursor: pointer;
-}
-
-#goodraise-root .app-footer a:hover,
-#goodraise-root .app-footer button:hover,
-#goodraise-root .app-footer button.is-active {
-  color: var(--navy-900);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-
-#goodraise-root .app-footer a:focus-visible,
-#goodraise-root .app-footer button:focus-visible {
-  outline: 2px solid var(--navy-900);
-  outline-offset: 4px;
 }
 
 #goodraise-root .admin-session-bar {
@@ -171,6 +135,10 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 #goodraise-root.public-archive {
   min-height: 100vh;
   background: #f5f9fc;
+}
+
+#goodraise-root .archive-content {
+  flex: 1 0 auto;
 }
 
 #goodraise-root .archive-main {
@@ -345,7 +313,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 
 #goodraise-root .archive-card-totals span,
 #goodraise-root .archive-card-meta {
-  color: #697b8d;
+  color: #566b80;
   font-size: 0.88rem;
 }
 
@@ -401,7 +369,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 
 #goodraise-root .archive-detail-total span,
 #goodraise-root .archive-detail-facts span {
-  color: #697b8d;
+  color: #566b80;
 }
 
 #goodraise-root .archive-progress--large {
@@ -470,13 +438,6 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 
 #goodraise-root .archive-empty.is-error {
   color: #9f2430;
-}
-
-#goodraise-root .archive-footer {
-  padding: 28px;
-  color: #697b8d;
-  text-align: center;
-  border-top: 1px solid #dce5ed;
 }
 
 @media (max-width: 900px) {
@@ -1641,9 +1602,15 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 #goodraise-root .brand-command .hero-badge,
 #goodraise-root .brand-command .brand-kicker,
 #goodraise-root .login-visual .brand-kicker,
-#goodraise-root .login-visual h2,
+#goodraise-root .login-visual h1,
 #goodraise-root .login-visual p {
   color: var(--white);
+}
+
+#goodraise-root .login-visual h1 {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.15;
 }
 
 #goodraise-root .hero-meta-grid {
@@ -2587,7 +2554,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   padding: var(--space-6);
 }
 
-#goodraise-root .legal-hero h2 {
+#goodraise-root .legal-hero h1 {
   margin: 0 0 var(--space-3);
   color: var(--navy-950);
   font-size: 2rem;
@@ -2645,7 +2612,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   gap: var(--space-3);
 }
 
-#goodraise-root .legal-document h3 {
+#goodraise-root .legal-document h2 {
   font-size: 1.28rem;
   font-weight: 800;
 }
@@ -3295,6 +3262,8 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
     radial-gradient(circle at 12% 8%, rgba(255, 214, 41, 0.2), transparent 25rem),
     linear-gradient(180deg, #f9fbfd, #eef4f8);
   font-family: "Assistant", Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
 }
 
 #goodraise-application-root,
@@ -3319,6 +3288,13 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   width: min(1000px, calc(100% - 40px));
   margin-inline: auto;
   padding: 64px 0 96px;
+  flex: 1 0 auto;
+}
+
+#goodraise-root :where(a, button, input, select, textarea):focus-visible,
+#goodraise-application-root :where(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid #075eb5;
+  outline-offset: 4px;
 }
 
 #goodraise-application-root .application-intro {
@@ -3452,7 +3428,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   width: 100%;
   min-height: 48px;
   padding: 10px 13px;
-  border: 1px solid #bccbd8;
+  border: 1px solid #7d91a5;
   border-radius: 9px;
   color: #182b3d;
   background: #fff;
@@ -3471,6 +3447,15 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 #goodraise-application-root .admin-application-review select:focus {
   border-color: var(--application-blue);
   box-shadow: 0 0 0 3px rgba(7, 94, 181, 0.12);
+}
+
+#goodraise-application-root .application-form input:focus-visible,
+#goodraise-application-root .application-form select:focus-visible,
+#goodraise-application-root .application-form textarea:focus-visible,
+#goodraise-application-root .admin-application-review textarea:focus-visible,
+#goodraise-application-root .admin-application-review select:focus-visible {
+  outline: 3px solid var(--application-blue);
+  outline-offset: 2px;
 }
 
 #goodraise-application-root .application-field-help {

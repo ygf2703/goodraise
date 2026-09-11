@@ -40,7 +40,7 @@ test("manager dashboard provides filtered ambassador fundraising reports and CSV
   assert.match(template, /data-project-action="export-ambassador-report"/);
   assert.match(template, /data-project-action="export-zero-fundraising-ambassadors"/);
   assert.match(template, /ambassadors-zero-fundraising\.csv/);
-  assert.match(template, /מייל<\/th><th>טלפון/);
+  assert.match(template, /<th scope="col">מייל<\/th><th scope="col">טלפון<\/th>/);
 });
 
 test("prize dashboard calculates a sprint winner from a precise selected time window", async () => {

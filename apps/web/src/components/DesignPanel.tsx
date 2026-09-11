@@ -1,7 +1,7 @@
 
 
 export function DesignPanel() {
-  return (<div id="admin-tab-panel-design" className="admin-tab-panel" hidden>
+  return (<div id="admin-tab-panel-design" className="admin-tab-panel" role="tabpanel" aria-labelledby="admin-tab-design" tabIndex={0} hidden>
               <section className="dashboard-section">
                 <div className="section-header">
                   <h3>עיצוב, טקסטים ומדיה של עמוד הפרויקט</h3>

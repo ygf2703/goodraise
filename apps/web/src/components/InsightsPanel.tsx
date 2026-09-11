@@ -1,7 +1,7 @@
 
 
 export function InsightsPanel() {
-  return (<div id="admin-tab-panel-insights" className="admin-tab-panel">
+  return (<div id="admin-tab-panel-insights" className="admin-tab-panel" role="tabpanel" aria-labelledby="admin-tab-insights" tabIndex={0}>
               <section className="admin-overview-grid">
                 <article className="brand-command app-card app-card--dark">
                   <div className="brand-command-head">

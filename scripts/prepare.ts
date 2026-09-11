@@ -8,6 +8,7 @@ import { readSetting } from "../backend/services/legacy-compat.mjs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Header } from "../apps/web/src/components/Header";
+import { SiteFooter } from "../apps/web/src/components/SiteFooter";
 
 const root = resolve(import.meta.dirname, "..");
 const source = readSetting("SOURCE_CSV");
@@ -55,6 +56,7 @@ export async function prepareAssets(): Promise<void> {
   await cp(resolve(root, "work/assets"), resolve(root, "apps/web/public/assets"), { recursive: true });
   let landing = await readFile(resolve(root, "work/goodraise-landing.html"), "utf8");
   landing = landing.replace("__SITE_HEADER__", renderToStaticMarkup(createElement(Header)));
+  landing = landing.replace("__SITE_FOOTER__", renderToStaticMarkup(createElement(SiteFooter)));
   const images: Record<string, string> = {
     __GOODRAISE_LOGO_DATA_URI__: "goodraise-logo-transparent.png",
     __LANDING_HERO_IMAGE_DATA_URI__: "landing-hero-campaign.png",

@@ -15,11 +15,11 @@ cp .env.example .env
 npm run dev
 ```
 
-Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; placeholder copy and image areas can be replaced there. React and the API share this origin. `/start`, `/login`, `/admin`, `/admin/users`, `/admin/applications`, `/campaigns`, `/rules`, `/privacy`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
+Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; placeholder copy and image areas can be replaced there. React and the API share this origin. `/start`, `/login`, `/admin`, `/admin/users`, `/admin/applications`, `/campaigns`, `/rules`, `/privacy`, `/accessibility`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
 
 The build writes the landing page to `dist/index.html` as the default homepage. The React application shell is `dist/app.html`; application routes rewrite to this file. Legacy campaign query links at `/` and `/index.html` use a query-aware rewrite to preserve their campaign and ambassador context.
 
-All pages share the landing-page header. See the [navigation migration map](docs/navigation-migration.md) for the existing destinations retained during the gradual page migration.
+All pages share the landing-page header and footer, including direct links to the terms, privacy policy, and accessibility statement. The [accessibility implementation record](docs/accessibility.md) maps the current baseline and pre-launch gaps to the official Israeli guidance. See the [navigation migration map](docs/navigation-migration.md) for the existing destinations retained during the gradual page migration.
 
 Accounts cannot self-register. A site admin approves the email and assigns one or more organization/campaign memberships; the user's first login then enters password setup. `/admin` opens the assigned-project selector when there are multiple projects, opens the only project directly when there is one, and shows a clear no-project state when there are none. Active and completed projects are separated. Site admins manage approvals and memberships at `/admin/users`.
 

@@ -6,6 +6,8 @@ import type {
 } from "../../../../shared/contracts/campaign";
 import { getPublicArchiveEndpoint, type PublicArchiveRoute } from "../platform";
 import { Header } from "./Header";
+import { SiteFooter } from "./SiteFooter";
+import { SkipLink } from "./SkipLink";
 
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("he-IL", {
@@ -52,7 +54,7 @@ export function PublicCampaignCard({ item }: { item: PublicCompletedCampaignCard
 }
 
 function ArchiveIndex({ data }: { data: PublicCompletedCampaignIndex }) {
-  return <main className="archive-main">
+  return <div className="archive-main">
     <header className="archive-heading">
       <p className="archive-kicker">הטוב שכבר קרה</p>
       <h1>קמפיינים שהסתיימו</h1>
@@ -61,12 +63,12 @@ function ArchiveIndex({ data }: { data: PublicCompletedCampaignIndex }) {
     {data.items.length
       ? <div className="archive-grid">{data.items.map((item) => <PublicCampaignCard key={`${item.organization.id}:${item.campaign.id}`} item={item} />)}</div>
       : <div className="archive-empty">עדיין אין קמפיינים שהסתיימו להצגה.</div>}
-  </main>;
+  </div>;
 }
 
 function ArchiveDetail({ campaign }: { campaign: PublicCompletedCampaign }) {
   const image = campaign.campaign.mediaUrl || campaign.campaign.campaignLogoUrl || campaign.organization.logoUrl;
-  return <main className="archive-main archive-detail">
+  return <div className="archive-main archive-detail">
     <a className="archive-back" href="/campaigns">כל הקמפיינים שהסתיימו <span aria-hidden="true">←</span></a>
     <article className="archive-detail-card">
       <div className="archive-detail-copy">
@@ -99,7 +101,7 @@ function ArchiveDetail({ campaign }: { campaign: PublicCompletedCampaign }) {
       <h2>על הקמפיין</h2>
       <div>{campaign.campaign.story}</div>
     </section>}
-  </main>;
+  </div>;
 }
 
 export function PublicArchivePage({ route }: { route: PublicArchiveRoute }) {
@@ -118,12 +120,15 @@ export function PublicArchivePage({ route }: { route: PublicArchiveRoute }) {
   }, [route.kind, route.kind === "detail" ? route.organizationId : "", route.kind === "detail" ? route.campaignId : ""]);
 
   return <div id="goodraise-root" className="public-archive" dir="rtl">
+    <SkipLink />
     <Header loadSession />
-    {!data && !error && <div className="archive-loading" role="status">טוענים קמפיינים שהסתיימו…</div>}
-    {error && <main className="archive-main"><div className="archive-empty is-error">{error}</div></main>}
-    {data && (route.kind === "index"
-      ? <ArchiveIndex data={data as PublicCompletedCampaignIndex} />
-      : <ArchiveDetail campaign={data as PublicCompletedCampaign} />)}
-    <footer className="archive-footer">GoodRaise · אנשים טובים, מטרות טובות.</footer>
+    <main id="main" className="archive-content" tabIndex={-1}>
+      {!data && !error && <div className="archive-loading" role="status">טוענים קמפיינים שהסתיימו…</div>}
+      {error && <div className="archive-main"><div className="archive-empty is-error">{error}</div></div>}
+      {data && (route.kind === "index"
+        ? <ArchiveIndex data={data as PublicCompletedCampaignIndex} />
+        : <ArchiveDetail campaign={data as PublicCompletedCampaign} />)}
+    </main>
+    <SiteFooter />
   </div>;
 }

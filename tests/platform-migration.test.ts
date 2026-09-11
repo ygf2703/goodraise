@@ -25,6 +25,7 @@ class MemoryStorage implements Storage {
 test("direct campaign, legal and manager links retain their destination after session restoration", () => {
   assert.equal(getInitialPage("/rules", true), "rules");
   assert.equal(getInitialPage("/privacy/"), "privacy");
+  assert.equal(getInitialPage("/accessibility"), "accessibility");
   assert.equal(getInitialPage("/admin"), "admin");
   assert.equal(getInitialPage("/project"), "project");
   assert.equal(getInitialPage("/prizes/"), "prizes");
@@ -33,6 +34,7 @@ test("direct campaign, legal and manager links retain their destination after se
   assert.equal(getInitialPage("/", true), "admin");
   assert.deepEqual(getCampaignRoute("https://example.org/campaign-a/person-a"), { projectSlug: "campaign-a", ambassadorSlug: "person-a" });
   assert.deepEqual(getCampaignRoute("https://example.org/admin"), { projectSlug: "", ambassadorSlug: "" });
+  assert.deepEqual(getCampaignRoute("https://example.org/accessibility"), { projectSlug: "", ambassadorSlug: "" });
   assert.deepEqual(getCampaignRoute("https://example.org/app.html"), { projectSlug: "", ambassadorSlug: "" });
   assert.equal(getCampaignViewEndpoint("https://example.org/campaign-a/person-a"), "/api/campaign-view?project=campaign-a");
   assert.equal(getCampaignViewEndpoint("https://example.org/project?organizationId=org-a&campaignId=campaign-a&ambassador=person-a"), "/api/campaign-view?organizationId=org-a&campaignId=campaign-a");

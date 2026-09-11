@@ -87,6 +87,12 @@
   status = 200
   force = true
 
+[[redirects]]
+  from = "/accessibility"
+  to = "/app.html"
+  status = 200
+  force = true
+
 # Keep the marketing landing page public instead of treating "goodraise" as a
 # campaign slug and routing it into the application SPA.
 [[redirects]]

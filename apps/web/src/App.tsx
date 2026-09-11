@@ -68,6 +68,25 @@ export function App({ sessionRequest, archiveRoute, applicationRoute }: {
   archiveRoute?: never;
   applicationRoute?: CampaignApplicationRoute;
 } = {}) {
+  useEffect(() => {
+    const path = window.location.pathname.replace(/\/$/, "");
+    const page = getInitialPage(window.location.pathname);
+    const title = archiveRoute?.kind === "index" ? "קמפיינים שהסתיימו"
+      : archiveRoute?.kind === "detail" ? "קמפיין שהסתיים"
+        : applicationRoute === "start" ? "פתיחת קמפיין"
+          : applicationRoute === "verify" ? "אימות בקשת קמפיין"
+            : applicationRoute === "admin" ? "בקשות לפתיחת קמפיין"
+              : path === "/login" ? "כניסה לחשבון"
+                : path === "/admin/users" ? "משתמשים והרשאות"
+                  : page === "rules" ? "תנאי שימוש"
+                    : page === "privacy" ? "מדיניות פרטיות"
+                      : page === "accessibility" ? "הצהרת נגישות"
+                        : page === "prizes" ? "פרסים ותחרות"
+                          : page === "admin" ? "ניהול הקמפיינים"
+                            : "דף הקמפיין";
+    document.title = `${title} | GoodRaise`;
+  }, [archiveRoute, applicationRoute]);
+
   if (archiveRoute) return <PublicArchivePage route={archiveRoute} />;
   if (applicationRoute === "start") return <CampaignApplicationPage />;
   if (applicationRoute === "verify") return <CampaignApplicationVerificationPage />;

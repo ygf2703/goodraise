@@ -2,6 +2,8 @@ import { FormEvent, useMemo, useState } from "react";
 
 import { requestJson } from "../api";
 import { Header } from "./Header";
+import { SiteFooter } from "./SiteFooter";
+import { SkipLink } from "./SkipLink";
 
 interface SubmissionResponse {
   submitted?: boolean;
@@ -67,8 +69,9 @@ export function CampaignApplicationPage() {
   };
 
   return <div id="goodraise-application-root" dir="rtl">
+    <SkipLink />
     <Header />
-    <main className="application-page-main">
+    <main id="main" className="application-page-main" tabIndex={-1}>
       <section className="application-intro">
         <span>מתחילים בפשטות</span>
         <h1>ספרו לנו על הקמפיין שתרצו לפתוח</h1>
@@ -186,6 +189,7 @@ export function CampaignApplicationPage() {
         <p className="application-submit-note">לא ייפתח חשבון ולא ייווצר קמפיין לפני אישור של מנהל/ת האתר.</p>
       </form>}
     </main>
+    <SiteFooter />
   </div>;
 }
 
@@ -214,8 +218,9 @@ export function CampaignApplicationVerificationPage() {
   };
 
   return <div id="goodraise-application-root" dir="rtl">
+    <SkipLink />
     <Header />
-    <main className="application-verification-page">
+    <main id="main" className="application-verification-page" tabIndex={-1}>
       <section className="application-success">
         <div className="application-success-mark" aria-hidden="true">{status === "success" ? "✓" : "✉"}</div>
         <h1>{status === "success" ? "המייל אומת" : "אימות כתובת המייל"}</h1>
@@ -227,5 +232,6 @@ export function CampaignApplicationVerificationPage() {
         {status === "success" && <a className="application-secondary-link" href="/">חזרה לדף הבית</a>}
       </section>
     </main>
+    <SiteFooter />
   </div>;
 }

@@ -90,4 +90,4 @@ export interface PublicCompletedCampaignIndex {
   hasMore: boolean;
 }
 
-export type Page = "project" | "prizes" | "rules" | "privacy" | "admin";
+export type Page = "project" | "prizes" | "rules" | "privacy" | "accessibility" | "admin";

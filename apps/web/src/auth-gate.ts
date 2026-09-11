@@ -56,7 +56,7 @@ export function mountAuthGate(root: HTMLElement, options: {
   const showShell = (session: ManagerSession | null) => {
     setSiteSession(session);
     const requested = currentPage();
-    const page = requested === "rules" || requested === "privacy" ? requested : "admin";
+    const page = ["rules", "privacy", "accessibility"].includes(requested) ? requested : "admin";
     for (const section of root.querySelectorAll<HTMLElement>(".page-shell")) {
       section.classList.toggle("is-active", section.id === `page-${page}`);
     }
@@ -95,13 +95,13 @@ export function mountAuthGate(root: HTMLElement, options: {
     showShell(session);
     if (!session.authenticated) {
       const path = window.location.pathname.replace(/\/$/, "");
-      if (!["/login", "/rules", "/privacy"].includes(path)) {
+      if (!["/login", "/rules", "/privacy", "/accessibility"].includes(path)) {
         const returnTo = `${window.location.pathname}${window.location.search}`;
         window.location.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
       }
       return;
     }
-    if (["rules", "privacy"].includes(currentPage())) return;
+    if (["rules", "privacy", "accessibility"].includes(currentPage())) return;
     busy = true;
     button.disabled = true;
     showMessage("הכניסה הצליחה. טוענים את הפרויקטים…");
@@ -180,8 +180,6 @@ export function mountAuthGate(root: HTMLElement, options: {
   element("logout-button").addEventListener("click", () => {
     void logoutSiteSession().catch(() => showMessage("ההתנתקות נכשלה. נסו שוב.", true));
   }, { signal });
-  root.querySelector('.app-footer [data-page-target="rules"]')?.addEventListener("click", () => window.location.assign("/rules"), { signal });
-
   void options.sessionRequest.then(async ({ response, payload }) => {
     if (signal.aborted || revision) return;
     if (response.ok) await acceptSession(payload);
