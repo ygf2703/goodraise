@@ -7,7 +7,7 @@ Updated 2026-09-13. Use Node.js 24 for development, tests and deployment. Python
 ```sh
 npm ci
 cp .env.example .env
-# Edit GOODRAISE_MANAGER_EMAILS with the initial site admins before first login.
+# Migration 007 provisions the two site owners; MANAGER_EMAILS is optional for additional bootstrap accounts.
 npm run db:local:up
 npm run db:migrate
 npm run dev
@@ -29,6 +29,7 @@ The default address is `http://127.0.0.1:8767`. Development uses Vite middleware
 | `GOODRAISE_DATA_DIR` | Development key/value files; defaults `work/data` |
 | `GOODRAISE_DATABASE_URL` / `DATABASE_URL` | PostgreSQL connection; first takes precedence |
 | `GOODRAISE_MIGRATION_DATABASE_URL` | Optional direct owner connection used only by the ordered migration runner; takes precedence there |
+| `GOODRAISE_MIGRATION_CREDENTIALS_DIR` | Private local directory for generated bootstrap passwords; defaults to Git-ignored `work/private/admin-credentials` |
 | `GOODRAISE_LOCAL_DATABASE_URL` | Explicit replaceable local target used by the Docker database tooling |
 | `GOODRAISE_LOCAL_DB_NAME`, `_USER`, `_PASSWORD`, `_PORT` | Local Docker PostgreSQL settings; safe development defaults are in `.env.example` |
 | `GOODRAISE_SOURCE_DATABASE_URL` | Direct hosted PostgreSQL URL used only for an explicit backup/clone command; do not retain in source control |
@@ -45,7 +46,7 @@ The default address is `http://127.0.0.1:8767`. Development uses Vite middleware
 
 The old manager/source environment names are accepted through compatibility readers. New setup should use only the names above. Cookie transport uses HTTPS detection/Netlify runtime; local loopback development uses HTTP.
 
-First login for an approved email enters password setup. Initial site admins can be seeded through `GOODRAISE_MANAGER_EMAILS`; after login they approve additional users and assign memberships at `/admin/users`. Approval does not prove mailbox ownership, so keep the account list controlled. There is no unauthenticated local password-reset endpoint in the shared Node application.
+First login for an approved email without a password enters password setup. Migration 007 provisions the two site owners with generated passwords; additional initial site admins can be seeded through `GOODRAISE_MANAGER_EMAILS`. After login they approve additional users and assign memberships at `/admin/users`. Approval does not prove mailbox ownership, so keep the account list controlled. There is no unauthenticated local password-reset endpoint in the shared Node application.
 
 ## Database workflow
 
@@ -67,7 +68,7 @@ To make a local development copy from Neon, use the direct connection URL rather
 GOODRAISE_SOURCE_DATABASE_URL='postgresql://…' npm run db:local:clone -- --replace-local
 ```
 
-This creates an ignored, mode-`0600` custom-format backup in `work/database-backups`, drops and restores only the local `goodraise` schema, and then runs every ordered repository migration. Authentication, membership, application-review, and source-configuration rows are excluded, so production password hashes, active sessions, verification tokens, and source credentials never enter the retained backup. Campaign and donor records are still private production data; keep the backup on an encrypted workstation and do not upload or commit it. The configured `GOODRAISE_MANAGER_EMAILS` accounts are seeded locally when the application starts.
+This creates an ignored, mode-`0600` custom-format backup in `work/database-backups`, drops and restores only the local `goodraise` schema, and then runs every ordered repository migration. Authentication, membership, application-review, and source-configuration rows are excluded, so production password hashes, active sessions, verification tokens, and source credentials never enter the retained backup. Campaign and donor records are still private production data; keep the backup on an encrypted workstation and do not upload or commit it. Because a sanitized backup retains migration history but omits users, local restore removes only the `007_site_admins.ts` history entry and reapplies it to create local owner accounts with fresh passwords. Other migration records are retained. Additional configured `GOODRAISE_MANAGER_EMAILS` accounts are seeded locally when the application starts.
 
 Recreate the same local database later without connecting to Neon:
 
@@ -87,7 +88,7 @@ Set the database URL and run:
 npm run db:migrate
 ```
 
-The runner uses `GOODRAISE_MIGRATION_DATABASE_URL` first when present, then falls back to `GOODRAISE_DATABASE_URL` or `DATABASE_URL`. In hosted environments, this allows the application to use a restricted pooled runtime role while migrations use a direct owner connection. Both remain server-only secrets.
+The runner uses `GOODRAISE_MIGRATION_DATABASE_URL` first when present, then falls back to `GOODRAISE_DATABASE_URL` or `DATABASE_URL`. In hosted environments, this allows the application to use a restricted pooled runtime role while migrations use a direct owner connection. Both remain server-only secrets. Ordered `.sql` and `.ts` migrations share the same lock, checksum validation, transaction and history table; TypeScript migrations use the runner's client and must not commit independently.
 
 `db/migrations/001_initial.sql` provides the baseline schema. `002_ingest_validation.sql` aligns the import-batch schema with Node validation counters. The runner locks migration execution, records checksums, applies each migration in a transaction, skips applied files, and fails if an applied file was edited. Add a new numbered SQL file for subsequent changes.
 
@@ -98,6 +99,32 @@ The runner uses `GOODRAISE_MIGRATION_DATABASE_URL` first when present, then fall
 `005_account_memberships.sql` adds per-user organization/campaign memberships and an access-configuration hash used to avoid rewriting unchanged configured accounts on each session read. It backfills legacy single-scope roles. Apply it before deploying the account selector or site-admin user management.
 
 `006_campaign_applications.sql` adds the public application record, hashed and expiring email-verification state, approval references, notification diagnostics and append-only review events. Apply it before exposing `/start` or `/admin/applications`. Local development writes messages to `work/data/goodraise-email-outbox-dev.json`; production requires the configured email provider and never returns verification URLs in the public response.
+
+### Site-admin bootstrap: migration 007
+
+`007_site_admins.ts` creates or promotes `ranbo7@gmail.com` and `noamfrostig@gmail.com` to active, global `platform_admin` accounts. Run it with the normal `npm run db:migrate` command, not by pasting the TypeScript file into a SQL editor. Existing account IDs, set passwords and password timestamps are preserved. New/passwordless accounts receive distinct cryptographically random passwords, hashed with the application's PBKDF2-SHA256 format; plaintext never enters SQL or command output. Scoped memberships are removed for these global admins, and sessions are revoked only when an account's access/credentials change. Other users are untouched.
+
+The generated-password JSON is stored **on the machine running the migration**, not on the database server. Its directory must have mode `0700`; each file is created exclusively with mode `0600`, synced before database writes, and never overwritten. Filenames start with `.env.007-site-admins-` so Vite's development filesystem server also denies them. The file identifies the target database without its connection credentials. A successful migration prints the file path. If both accounts already have passwords, no password file is created. Do not copy this directory into `dist`, upload it as a CI artifact, or commit it. Transfer the passwords securely and change them after first login.
+
+To apply all pending migrations to production from your workstation, first confirm a recoverable snapshot and save the **direct** owner URL as `GOODRAISE_MIGRATION_DATABASE_URL` in a private, ignored `.env.production.local` file. Require verified TLS (`sslmode=verify-full`). Then run:
+
+```sh
+node --env-file=.env.production.local --import tsx scripts/migrate-db.ts
+```
+
+This command deliberately does not load the local `.env`, avoiding its local migration URL. It applies missing migrations 004–006 before 007 and independently generates production passwords where needed; local passwords are not copied into production. It does not change Netlify's runtime connection variable or deploy code. Verify `/api/health` and both authenticated admin accounts afterward. If either email is also in the hosted `GOODRAISE_MANAGER_EMAILS`, keep its role `platform_admin` and active; runtime configuration remains authoritative and can otherwise override the migration.
+
+Rerunning the command skips an applied 007 and does not reset passwords, reactivate subsequently disabled users, or revoke fresh sessions. A credential-write failure rolls back account changes and leaves 007 unapplied. An interrupted/rolled-back attempt may leave a private candidate-password file: it is **not evidence of success**. Check the migration record and login before using that file. Keep candidate files if the commit result is uncertain; a committed password cannot be recovered from its hash. Never delete the migration marker to reset a live account's password.
+
+```sql
+SELECT name, checksum, applied_at FROM goodraise.schema_migrations ORDER BY name;
+SELECT email, role, is_active,
+       (password_hash IS NOT NULL AND length(password_hash) > 0) AS password_set
+FROM goodraise.admin_users
+WHERE email IN ('ranbo7@gmail.com', 'noamfrostig@gmail.com');
+```
+
+### Migration safeguards and operational imports
 
 Apply migration 003 **before deploying the updated SQL authentication code**. Rehearse against a restored database copy and retain a backup. New code refuses SQL authentication if the constraint is missing, preventing duplicate account seeding against legacy mixed-case records. The previous code already normalizes writes and accepts lowercase values, so the schema change can precede code deployment. If the migration reports a collision, resolve the account ownership explicitly; do not automatically merge credentials or permissions. The GoodRaise Neon production database was migrated on 2026-09-09 after a snapshot and rehearsal; see the [rollout record](database-rollout-2026-09-09.md). Other databases still require their own migration check.
 

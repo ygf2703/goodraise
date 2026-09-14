@@ -213,6 +213,12 @@ async function restoreBackup(path) {
     "exec", "-T", "postgres", "pg_restore", "--exit-on-error", "--no-owner", "--no-privileges",
     "-U", localUser, "-d", localDatabase, `/backups/${basename(resolvedPath)}`,
   );
+  // Sanitized backups retain migration history but deliberately omit users.
+  // Reapply only the account bootstrap; it preserves any existing passwords.
+  await compose(
+    "exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-U", localUser, "-d", localDatabase,
+    "-c", "DELETE FROM goodraise.schema_migrations WHERE name = '007_site_admins.ts';",
+  );
   await run(process.execPath, ["--import", "tsx", "scripts/migrate-db.ts"], {
     env: {
       ...process.env,

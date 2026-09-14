@@ -6,6 +6,7 @@ Updated 2026-09-13. This is the current working backlog. Historical assessment d
 
 - [ ] Take or confirm a recoverable production database snapshot before changing the schema.
 - [ ] Apply migrations `004_completed_campaign_snapshots.sql`, `005_account_memberships.sql`, and `006_campaign_applications.sql` to the production Neon database.
+- [ ] Apply `007_site_admins.ts` through the Node migration runner, securely retain any generated production passwords, and verify both owner accounts can log in as global site admins.
 - [ ] Verify both migration names and checksums in `goodraise.schema_migrations`.
 - [ ] Verify `campaign_public_snapshots`, `admin_memberships`, `campaign_applications`, `campaign_application_events`, `admin_users.access_config_hash`, constraints, and indexes exist.
 - [ ] Backfill public snapshots for real campaigns that are already completed.

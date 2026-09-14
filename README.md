@@ -11,7 +11,7 @@ Use Node.js 24 (`.nvmrc`; validated with 24.20.0).
 ```sh
 npm ci
 cp .env.example .env
-# Set GOODRAISE_MANAGER_EMAILS in .env to the initial authorized site admins.
+# Migration 007 provisions the two site owners; MANAGER_EMAILS is optional for additional bootstrap accounts.
 npm run db:local:up
 npm run db:migrate
 npm run dev
@@ -36,6 +36,8 @@ Set `GOODRAISE_DATABASE_URL` in `.env`, then initialize or upgrade the schema:
 ```sh
 npm run db:migrate
 ```
+
+Migration `007_site_admins.ts` provisions Ran and Noam as site-wide admins. It generates independent random passwords only for new/passwordless accounts and saves them in a mode-`0600`, Git-ignored JSON file under `work/private/admin-credentials/`; the migration prints its path, never its passwords. Existing passwords are preserved. See [admin bootstrap and production migration](docs/development.md#site-admin-bootstrap-migration-007) for safe execution and recovery.
 
 For a persistent PostgreSQL 18 development database managed by Docker:
 
@@ -108,7 +110,7 @@ backend/database.ts       One bounded PostgreSQL pool per process
 netlify/functions/        Thin deployment adapters and job entry points
 shared/                   TypeScript contracts and deterministic intelligence
 scripts/                  Node build, development, migration, import and checks
-db/migrations/            Ordered SQL migrations
+db/migrations/            Ordered SQL and TypeScript data migrations
 tests/                    Unit, HTTP integration and disposable PostgreSQL checks
 work/assets/              Platform and existing campaign media
 work/samples/             Synthetic seed CSV

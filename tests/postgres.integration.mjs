@@ -10,6 +10,7 @@ import { verifyScopedAuthorization } from './helpers/scoped-authorization.mjs';
 import { verifyPostgresAuthorizationQueries } from './helpers/postgres-authorization-queries.mjs';
 import { verifyEmailNormalizationMigration, verifySqlEmailAndSeeding, verifyEmailMigrationGuard } from './helpers/postgres-email-normalization.mjs';
 import { verifyPostgresReadQueries } from './helpers/postgres-read-queries.mjs';
+import { verifySiteAdminMigration, verifySiteAdminLogin } from './helpers/postgres-site-admins.mjs';
 
 const directory = await mkdtemp(join(tmpdir(), 'goodraise-postgres-'));
 const port = await new Promise((resolve, reject) => {
@@ -29,6 +30,8 @@ try {
   await database.createDatabase('goodraise_test');
   for (const key of ['NETLIFY', 'NETLIFY_LOCAL', 'SITE_ID', 'URL', 'SITE_NAME', 'DATABASE_URL', 'OPENAI_API_KEY']) delete process.env[key];
   process.env.GOODRAISE_DATABASE_URL = `postgresql://postgres:local-test-only@127.0.0.1:${port}/goodraise_test`;
+  process.env.GOODRAISE_MIGRATION_DATABASE_URL = process.env.GOODRAISE_DATABASE_URL;
+  process.env.GOODRAISE_MIGRATION_CREDENTIALS_DIR = join(directory, 'admin-credentials');
   process.env.GOODRAISE_DATA_DIR = join(directory, 'state');
   process.env.GOODRAISE_MANAGER_EMAILS = '[{"email":"sql-manager@example.org","role":"platform_admin"}]';
   process.env.GOODRAISE_RUN_RUNTIME_SCHEMA_MIGRATIONS = 'false';
@@ -37,7 +40,8 @@ try {
   client = database.getPgClient('goodraise_test');
   await client.connect();
   const migrations = await client.query('SELECT name FROM goodraise.schema_migrations');
-  assert.equal(migrations.rowCount, 6);
+  assert.equal(migrations.rowCount, 7);
+  const adminCredentials = await verifySiteAdminMigration({ client, run, directory });
   await verifyEmailNormalizationMigration(client);
   const repo = await import('../backend/services/campaign-repositories.mjs');
   const ingest = await import('../backend/services/postgres-ingest.mjs');
@@ -67,6 +71,7 @@ try {
   dataset = await repo.getCampaignDataset('org-sql', 'alpha');
   assert.equal(dataset.rows.reduce((sum, row) => sum + row.amount, 0), 200);
   const { handleRequest } = await import('../backend/app.ts');
+  await verifySiteAdminLogin({ client, handleRequest, adminCredentials });
   const setup = await handleRequest(new Request('http://localhost/api/auth/setup', { method: 'POST', body: JSON.stringify({ email: 'sql-manager@example.org', password: 'DatabaseTest123!', confirmPassword: 'DatabaseTest123!' }) }));
   assert.equal(setup.status, 200);
   const cookie = setup.headers.get('set-cookie');

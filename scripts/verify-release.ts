@@ -20,7 +20,7 @@ assert.doesNotMatch(html, /__INITIAL_|__AUTH_CONFIG__|data:image\/.*?;base64|yel
 assert.match(html, /type="module"[^>]+src="\/assets\/.+\.js"/);
 assert.ok(Buffer.byteLength(html) < 200_000, "The application shell unexpectedly exceeds 200 KB.");
 const files = await readdir(output, { recursive: true });
-assert.ok(!files.some((name) => /admin-dataset|source\.csv|\.local\.json|\.py$/.test(name)), "Private inputs are present in public output.");
+assert.ok(!files.some((name) => /admin-dataset|source\.csv|\.local\.json|\.py$|\.env(?:\.|$)|(?:^|\/)(?:private|admin-credentials)\//.test(name)), "Private inputs are present in public output.");
 const bootstrap = JSON.parse(await readFile(resolve(import.meta.dirname, "../apps/web/src/generated/bootstrap.json"), "utf8"));
 assert.equal(bootstrap.rows.length, 0, "Donor rows must only be loaded through the scoped API.");
 assert.equal(bootstrap.prizes.placePrizes.length + bootstrap.prizes.tierPrizes.length, 0, "Prize data must only be loaded after authorization.");
