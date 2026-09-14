@@ -13,6 +13,8 @@ Updated 2026-09-13. This is the current working backlog. Historical assessment d
 - [ ] Keep the three scraped Giveback placeholder campaigns limited to development or staging; do not seed them into production.
 - [ ] Verify production `/api/health`, `/api/auth/status`, `/api/public/campaigns`, login, project selection, and completed-campaign pages.
 - [ ] Configure `GOODRAISE_PUBLIC_URL`, `GOODRAISE_EMAIL_MODE=resend`, `GOODRAISE_RESEND_API_KEY`, and `GOODRAISE_EMAIL_FROM`, then verify applicant, admin-notification, approval and rejection messages from a deploy preview.
+- [ ] Confirm the contact recipients (`GOODRAISE_CONTACT_EMAILS`, defaults to Ran and Noam), verify real inbox delivery and Reply-To from a deploy preview, and confirm the inboxes are monitored. Local outbox tests do not verify real delivery.
+- [ ] Before opening the public contact form broadly, add/verify edge-level abuse protection for `/api/contact` (the application quotas are best-effort across simultaneous Netlify instances) and define cleanup/retention for rate-limit metadata and received messages. Consider a privacy/accessibility-reviewed CAPTCHA only if needed.
 - [ ] Add an explicit migration stage to deployment so application code is not published against an older schema. Keep migrations transactional, checksummed, rehearsed, and independently observable.
 - [ ] Replace the hosted owner connection used by application functions with a least-privilege pooled runtime role; keep a direct owner URL only for migrations and protected backups.
 - [ ] Give routine production inspection its own read-only database role/connection and test that it cannot write, change schema, or read credential-bearing configuration.
@@ -94,6 +96,7 @@ The initial flow is implemented. The CTA remains separate from login, and submit
 ## Later platform hardening
 
 - [x] Use one shared, responsive footer across the homepage, public campaigns, campaign application, login, legal pages, and authenticated administration.
+- [x] Replace the FAQ/contact placeholders with public `/faq` and `/contact` pages, remove the partners footer item everywhere, and send contact messages through the existing email service with validation, local outbox capture and delivery-failure feedback.
 - [x] Add public תנאי שימוש, מדיניות פרטיות, and הצהרת נגישות links to that footer and add a first accessibility statement at `/accessibility`.
 - [x] Add baseline accessibility improvements: skip-to-content navigation, semantic landmarks/headings, visible focus, accessible tab relationships/keyboard behavior, labelled authentication fields, table column scopes, reduced-motion support, and page-specific document titles.
 - [ ] Confirm with the business/legal owner whether GoodRaise must appoint an accessibility coordinator and whether any statutory exemption applies; document the decision without treating an exemption as a product-quality target.

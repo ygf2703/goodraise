@@ -46,6 +46,18 @@
 # requests must reach those paths directly instead of being rewritten there.
 
 [[redirects]]
+  from = "/faq"
+  to = "/app.html"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/contact"
+  to = "/app.html"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/login"
   to = "/app.html"
   status = 200

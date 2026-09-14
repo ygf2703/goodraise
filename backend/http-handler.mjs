@@ -42,6 +42,7 @@ import {
   saveAdminSourceConfig,
 } from "./services/source-store.mjs";
 import { refreshAdminSource } from "./services/source-sync.mjs";
+import { handleContactRequest } from "./services/contact.mjs";
 import { answerCampaignInsightQuestion } from "./services/insight-assistant.mjs";
 import {
   IngestHttpError,
@@ -239,10 +240,12 @@ async function addCampaignManualContribution(request, payload, scope) {
 }
 
 export default async (request) => {
-  await completedCampaignCacheWarmup;
-  await ensureMultiTenantMigration();
   const url = new URL(request.url);
   const { pathname } = url;
+  // Public support must remain usable even if the campaign DB needs attention.
+  if (pathname === "/api/contact") return handleContactRequest(request);
+  await completedCampaignCacheWarmup;
+  await ensureMultiTenantMigration();
 
   if (request.method === "OPTIONS") {
     return new Response(null, {

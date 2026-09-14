@@ -40,10 +40,11 @@ export function getPublicBaseUrl(requestUrl = "") {
  * Deliver one transactional message. Development writes a deterministic local
  * outbox record; production uses Resend's HTTPS API and idempotency header.
  */
-export async function sendTransactionalEmail({ to, subject, text, html = "", idempotencyKey }) {
+export async function sendTransactionalEmail({ to, subject, text, html = "", replyTo = "", idempotencyKey }) {
   const recipients = [...new Set((Array.isArray(to) ? to : [to]).map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
   if (!recipients.length) throw new EmailDeliveryError("No email recipients were configured.");
   if (!subject || !text || !idempotencyKey) throw new EmailDeliveryError("Email subject, text and idempotency key are required.");
+  if (replyTo && !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(replyTo)) throw new EmailDeliveryError("Invalid reply-to address.");
 
   if (shouldUseDevelopmentOutbox()) {
     const outbox = getOutbox();
@@ -56,6 +57,7 @@ export async function sendTransactionalEmail({ to, subject, text, html = "", ide
       subject: String(subject),
       text: String(text),
       html: String(html || ""),
+      ...(replyTo ? { replyTo } : {}),
       createdAt: new Date().toISOString(),
     };
     await outbox.setJSON(key, record);
@@ -83,7 +85,7 @@ export async function sendTransactionalEmail({ to, subject, text, html = "", ide
         "idempotency-key": String(idempotencyKey).slice(0, 256),
         "user-agent": "GoodRaise/1.0",
       },
-      body: JSON.stringify({ from, to: recipients, subject, text, ...(html ? { html } : {}) }),
+      body: JSON.stringify({ from, to: recipients, subject, text, ...(html ? { html } : {}), ...(replyTo ? { reply_to: replyTo } : {}) }),
       signal: AbortSignal.timeout(10_000),
     });
   } catch (error) {

@@ -5,6 +5,12 @@ export type PublicArchiveRoute =
   | { kind: "detail"; organizationId: string; campaignId: string };
 
 export type CampaignApplicationRoute = "start" | "verify" | "admin";
+export type PublicHelpRoute = "faq" | "contact";
+
+export function getPublicHelpRoute(pathname: string): PublicHelpRoute | null {
+  const path = pathname.replace(/\/$/, "");
+  return path === "/faq" ? "faq" : path === "/contact" ? "contact" : null;
+}
 
 // Both transports expose exactly the same relative URLs and session cookie.
 export const authConfig = {
@@ -74,7 +80,7 @@ export function getPublicArchiveEndpoint(route: PublicArchiveRoute, limit = 100)
 export function getCampaignRoute(address: string): { projectSlug: string; ambassadorSlug: string } {
   const url = new URL(address);
   const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
-  const reserved = new Set(["admin", "login", "start", "rules", "privacy", "accessibility", "prizes", "project", "campaigns", "goodraise", "index.html", "app.html"]);
+  const reserved = new Set(["admin", "login", "start", "rules", "privacy", "accessibility", "faq", "contact", "prizes", "project", "campaigns", "goodraise", "index.html", "app.html"]);
   return {
     projectSlug: url.searchParams.get("project") || (reserved.has(parts[0]) ? "" : parts[0] || ""),
     ambassadorSlug: url.searchParams.get("ambassador") || url.searchParams.get("nickname") || parts[1] || "",

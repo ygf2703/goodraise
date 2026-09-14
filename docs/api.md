@@ -1,6 +1,6 @@
 # API contracts
 
-Updated 2026-09-11. This is the shared Node contract, implemented by [route dispatch](../backend/http-handler.mjs) and [application boundary](../backend/app.ts), used by local and Netlify adapters. There is no OpenAPI specification or versioned API prefix.
+Updated 2026-09-14. This is the shared Node contract, implemented by [route dispatch](../backend/http-handler.mjs) and [application boundary](../backend/app.ts), used by local and Netlify adapters. There is no OpenAPI specification or versioned API prefix.
 
 ## Conventions and access
 
@@ -21,6 +21,7 @@ Account emails are case-insensitive: setup/login input is trimmed and lowercased
 | Method | Route | Access | Body / result |
 | --- | --- | --- | --- |
 | GET | `/api/health` | Public | Runtime/persistence counts and metadata; performs store reads/seeding |
+| POST | `/api/contact` | Public, independent of campaign DB | `{name, email, topic, message, consentAccepted: true, requestId, website?: ""}`; `200 {sent: true, development: boolean}` only after email-provider acceptance or local outbox capture |
 | GET | `/api/public-context` | Viewer+ in an assigned scope | Legacy selected organization/campaign context |
 | GET | `/api/public/campaigns?limit=8` | Public | Cached cards for completed campaigns; maximum 100 |
 | GET | `/api/public/campaigns/:organization/:campaign` | Public | One cached, sanitized completed-campaign snapshot |
@@ -58,6 +59,8 @@ Public application input contains contact details, organization identity, campai
 PostgreSQL approval locks the application row and creates or selects the organization, campaign/config/source/empty dataset, approved user and organization membership in one transaction. Repeated approval is idempotent. Existing users retain their password and other memberships. Rejection requires a reviewer note. Applicant verification, site-admin notification and decision mail use provider idempotency keys; provider failures are logged and surfaced through stored notification diagnostics or the decision response.
 
 Completed-campaign endpoints are anonymous and aggregate-only. They return public cache headers, a Netlify CDN policy and an ETag; matching `If-None-Match` requests receive `304`. The index cache is refreshed from persisted snapshots at most every five minutes per Node instance. Detail requests use the same warmed in-memory snapshot and never fall back to the donation ledger.
+
+Contact topics are `general`, `campaign`, `account`, `technical`, or `accessibility`; request IDs are client-generated UUIDv4 values reused for unchanged retries. Name length is 2–100 characters, email is validated (maximum 254), message length is 10–4,000, and the body limit is 20 KB. The server controls recipients and sender; visitor email is Reply-To only. Errors include `400` validation, `403` origin mismatch, `405` unsupported method, `413` body too large, `415` non-JSON, `429` quota exceeded (with `Retry-After`), and `503` unconfirmed delivery/storage failure. Contact responses are `no-store`. See [delivery configuration and quota limitations](development.md#public-contact-form).
 
 ## Campaign configuration
 

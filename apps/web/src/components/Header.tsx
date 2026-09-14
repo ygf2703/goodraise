@@ -20,7 +20,7 @@ export function Header({ loadSession = false }: { loadSession?: boolean } = {}) 
         <a data-site-audience="public" href="/#how-it-works">איך זה עובד</a>
         <a data-site-audience="public" href="/campaigns">קמפיינים שהסתיימו</a>
         <a data-site-audience="public" href="/#about">קצת עלינו</a>
-        <a data-site-audience="public" href="/#footer">בואו נדבר</a>
+        <a data-site-audience="public" href="/contact">בואו נדבר</a>
         <a data-site-audience="analyst" data-page-target="admin" href="/admin" hidden>דשבורד ניהולי</a>
         <a data-site-audience="session" href="/admin" hidden>הפרויקטים שלי</a>
         <a data-site-audience="site-admin" href="/admin/applications" hidden>בקשות לקמפיינים</a>

@@ -9,6 +9,7 @@ export const config = {
     "/api/public/campaigns",
     "/api/public/campaigns/*",
     "/api/applications",
+    "/api/contact",
     "/api/applications/verify",
     "/api/campaign-view",
     "/api/auth/status",

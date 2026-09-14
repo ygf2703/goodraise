@@ -43,10 +43,23 @@ The default address is `http://127.0.0.1:8767`. Development uses Vite middleware
 | `GOODRAISE_PUBLIC_URL` | Canonical public origin used in verification, review and first-login email links |
 | `GOODRAISE_EMAIL_MODE` | Optional `outbox` for local capture or `resend` for hosted delivery |
 | `GOODRAISE_RESEND_API_KEY`, `GOODRAISE_EMAIL_FROM` | Server-only production transactional-email credentials/sender |
+| `GOODRAISE_CONTACT_EMAILS` | Optional comma-separated contact recipients; defaults to Ran and Noam, independent of database availability |
 
 The old manager/source environment names are accepted through compatibility readers. New setup should use only the names above. Cookie transport uses HTTPS detection/Netlify runtime; local loopback development uses HTTP.
 
 First login for an approved email without a password enters password setup. Migration 007 provisions the two site owners with generated passwords; additional initial site admins can be seeded through `GOODRAISE_MANAGER_EMAILS`. After login they approve additional users and assign memberships at `/admin/users`. Approval does not prove mailbox ownership, so keep the account list controlled. There is no unauthenticated local password-reset endpoint in the shared Node application.
+
+## Public contact form
+
+`/faq` and `/contact` are public React pages. `POST /api/contact` dispatches before campaign-cache warmup or migration checks: support does not require a working campaign database or an approved account. No new database migration is needed.
+
+Messages go only to the server-configured comma-separated `GOODRAISE_CONTACT_EMAILS`, defaulting to Ran and Noam. The visitor's validated email becomes Reply-To; the sender remains `GOODRAISE_EMAIL_FROM`. There is no automatic reply to unverified visitors. This uses the existing Resend integration ([official send-email contract](https://resend.com/docs/api-reference/emails/send-email)), with plain-text content and a deterministic idempotency key for unchanged retries.
+
+Locally, keep `GOODRAISE_EMAIL_MODE=outbox` (also the development default). Submit a synthetic message at `/contact` and inspect the ignored `work/data/goodraise-email-outbox-dev.json` (or `GOODRAISE_DATA_DIR`). The UI explicitly says it was captured locally, not emailed. Treat the outbox as private: it contains submitted names, email addresses and messages; do not commit or publish it.
+
+For hosted delivery, configure `GOODRAISE_PUBLIC_URL`, `GOODRAISE_EMAIL_MODE=resend`, `GOODRAISE_RESEND_API_KEY` and a verified `GOODRAISE_EMAIL_FROM`. Confirm recipients and test inbox delivery/Reply-To in a deploy preview with permission from the recipients. A success response means the provider accepted the message, not that it reached the inbox. Missing configuration, provider failure or missing provider message ID returns HTTP 503; the browser retains the form for retry. No live email is sent by the automated tests.
+
+Safeguards include server-side validation, a 20 KB body limit, same-origin checks, a honeypot and one-hour quotas of five attempts per client IP and three per normalized email (retries and delivery failures count). Only hashed identifiers and counters/expiry timestamps are stored in `goodraise-contact-limits` Blobs, or `goodraise-contact-limits-dev.json` locally. Quota reservations are serialized within a process; they are **best-effort across serverless instances**, not a substitute for edge-level abuse protection. Expiry resets counters on the next request; stale keys are not automatically deleted. Production protection, retention/cleanup and real-delivery verification remain on the TODO list.
 
 ## Database workflow
 

@@ -9,6 +9,8 @@ import type { PublicArchiveRoute } from "./platform";
 import type { CampaignApplicationRoute } from "./platform";
 import { CampaignApplicationPage, CampaignApplicationVerificationPage } from "./components/CampaignApplicationPage";
 import { AdminApplicationsPage } from "./components/AdminApplicationsPage";
+import { PublicHelpPage } from "./components/HelpPages";
+import type { PublicHelpRoute } from "./platform";
 
 // The adapter owns the empty chart/table containers inside this fixed layout.
 // Memoization prevents React from reconciling those containers on status changes.
@@ -59,19 +61,27 @@ function ManagerApplication({ sessionRequest }: { sessionRequest?: ReturnType<ty
   </>;
 }
 
-export function App({ sessionRequest, archiveRoute, applicationRoute }: {
+export function App({ sessionRequest, archiveRoute, applicationRoute, helpRoute }: {
   sessionRequest?: ReturnType<typeof requestSession>;
   archiveRoute?: PublicArchiveRoute;
   applicationRoute?: never;
+  helpRoute?: never;
 } | {
   sessionRequest?: ReturnType<typeof requestSession>;
   archiveRoute?: never;
   applicationRoute?: CampaignApplicationRoute;
+  helpRoute?: never;
+} | {
+  sessionRequest?: never;
+  archiveRoute?: never;
+  applicationRoute?: never;
+  helpRoute: PublicHelpRoute;
 } = {}) {
   useEffect(() => {
     const path = window.location.pathname.replace(/\/$/, "");
     const page = getInitialPage(window.location.pathname);
-    const title = archiveRoute?.kind === "index" ? "קמפיינים שהסתיימו"
+    const title = helpRoute === "faq" ? "שאלות נפוצות" : helpRoute === "contact" ? "יצירת קשר"
+      : archiveRoute?.kind === "index" ? "קמפיינים שהסתיימו"
       : archiveRoute?.kind === "detail" ? "קמפיין שהסתיים"
         : applicationRoute === "start" ? "פתיחת קמפיין"
           : applicationRoute === "verify" ? "אימות בקשת קמפיין"
@@ -85,8 +95,9 @@ export function App({ sessionRequest, archiveRoute, applicationRoute }: {
                           : page === "admin" ? "ניהול הקמפיינים"
                             : "דף הקמפיין";
     document.title = `${title} | GoodRaise`;
-  }, [archiveRoute, applicationRoute]);
+  }, [archiveRoute, applicationRoute, helpRoute]);
 
+  if (helpRoute) return <PublicHelpPage route={helpRoute} />;
   if (archiveRoute) return <PublicArchivePage route={archiveRoute} />;
   if (applicationRoute === "start") return <CampaignApplicationPage />;
   if (applicationRoute === "verify") return <CampaignApplicationVerificationPage />;

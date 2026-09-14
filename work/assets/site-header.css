@@ -49,13 +49,6 @@ html { scroll-padding-top: 105px; }
 .footer-links button { padding: 0; border: 0; color: inherit; background: none; text-align: start; line-height: inherit; }
 .footer-bottom { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding-block: 20px; color: var(--footer-muted); border-top: 1px solid var(--footer-line); font-size: 14px; }
 .back-top { display: inline-flex; align-items: center; gap: 10px; }
-.footer dialog { width: 100%; max-width: min(520px, calc(100% - 40px)); padding: 34px; color: #142e49; border: 1px solid var(--footer-line); border-radius: 12px; font: 18px/1.65 "Assistant", Arial, sans-serif; box-shadow: 0 20px 80px rgba(16, 45, 76, .19); }
-.footer dialog::backdrop { background: rgba(16, 45, 76, .44); }
-.footer dialog h2 { margin: 0; padding-inline-end: 30px; color: var(--footer-navy); font-size: 30px; line-height: 1.15; }
-.footer dialog p { margin: 18px 0 0; color: var(--footer-muted); }
-.footer .dialog-close { position: absolute; top: 15px; left: 15px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; color: #142e49; background: #f0f7fc; border: 0; border-radius: 50%; font-size: 25px; line-height: 1; }
-.footer dialog .button { display: inline-flex; justify-content: center; align-items: center; min-height: 52px; margin-top: 25px; padding: 11px 26px; color: #fff; background: var(--footer-blue); border: 1px solid transparent; border-radius: 7px; font-weight: 700; }
-.footer dialog .button:hover { color: #fff; background: var(--footer-blue-dark); }
 @media (max-width: 1050px) {
   .site-header-inner { gap: 24px; }
   .site-header-nav { gap: 20px; }

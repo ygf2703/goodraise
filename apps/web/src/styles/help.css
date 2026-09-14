@@ -1,0 +1,59 @@
+#goodraise-help-root { min-height: 100vh; display: flex; flex-direction: column; color: #142e49; background: #fff; font: 18px/1.65 "Assistant", Arial, sans-serif; }
+#goodraise-help-root *, #goodraise-help-root *::before, #goodraise-help-root *::after { box-sizing: border-box; }
+#goodraise-help-root .help-main { flex: 1; width: min(1120px, calc(100% - 64px)); margin-inline: auto; padding-block: 64px 88px; }
+#goodraise-help-root .help-main a { color: #075eb5; text-underline-offset: 4px; }
+#goodraise-help-root .help-main :focus-visible { outline: 3px solid #075eb5; outline-offset: 4px; }
+#goodraise-help-root .help-intro { max-width: 740px; margin: 0 auto 48px; text-align: center; }
+#goodraise-help-root .help-eyebrow { color: #075eb5; font-size: 16px; font-weight: 700; }
+#goodraise-help-root .help-main h1 { margin: 8px 0 14px; font-size: clamp(36px, 5vw, 52px); line-height: 1.2; letter-spacing: -.6px; }
+#goodraise-help-root .help-main h2 { margin: 0 0 18px; font-size: 26px; line-height: 1.3; }
+#goodraise-help-root .help-main h3 { margin: 0 0 8px; font-size: 20px; line-height: 1.4; }
+#goodraise-help-root .help-main p { margin: 0; }
+#goodraise-help-root .help-intro p { color: #50657b; font-size: 21px; }
+#goodraise-help-root .help-faq { max-width: 840px; margin-inline: auto; }
+#goodraise-help-root .help-faq-group + .help-faq-group { margin-top: 38px; }
+#goodraise-help-root details { border-bottom: 1px solid #dce5ed; }
+#goodraise-help-root summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 64px; padding-block: 16px; cursor: pointer; font-weight: 700; list-style: none; }
+#goodraise-help-root summary::-webkit-details-marker { display: none; }
+#goodraise-help-root summary::after { content: "+"; flex: none; color: #075eb5; font: 26px/1 Arial, sans-serif; }
+#goodraise-help-root details[open] summary::after { content: "−"; }
+#goodraise-help-root details p { max-width: 740px; padding: 0 0 22px; color: #425a71; }
+#goodraise-help-root .help-callout { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 44px; padding: 30px; background: #f0f7fc; border-radius: 14px; }
+#goodraise-help-root .help-callout h2 { margin-bottom: 6px; }
+#goodraise-help-root .help-button { display: inline-flex; justify-content: center; align-items: center; gap: 18px; min-height: 50px; padding: 12px 26px; background: #075eb5; color: #fff; border: 1px solid transparent; border-radius: 7px; font: 700 18px/1.4 "Assistant", Arial, sans-serif; text-decoration: none; cursor: pointer; }
+#goodraise-help-root .help-button:hover { background: #08457f; }
+#goodraise-help-root fieldset:disabled .help-button { cursor: wait; opacity: .75; }
+#goodraise-help-root .help-contact-grid { display: grid; grid-template-columns: .8fr 1.4fr; gap: 70px; align-items: start; }
+#goodraise-help-root .help-contact-aside { padding-block: 24px; color: #425a71; }
+#goodraise-help-root .help-contact-aside h2 { color: #142e49; font-size: 32px; }
+#goodraise-help-root .help-aside-link { margin-top: 30px; padding-top: 26px; border-top: 1px solid #dce5ed; }
+#goodraise-help-root .help-aside-link a { display: inline-block; margin-top: 10px; font-weight: 700; }
+#goodraise-help-root .help-card { padding: 32px; border: 1px solid #dce5ed; border-radius: 16px; background: #f8fbfe; }
+#goodraise-help-root .help-form h2 { margin-bottom: 6px; }
+#goodraise-help-root .help-form fieldset { min-width: 0; display: grid; gap: 20px; border: 0; padding: 0; margin: 24px 0 0; }
+#goodraise-help-root .help-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+#goodraise-help-root .help-form label { display: grid; gap: 7px; font-weight: 600; }
+#goodraise-help-root .help-form input:not([type="checkbox"]), #goodraise-help-root .help-form select, #goodraise-help-root .help-form textarea { width: 100%; min-width: 0; min-height: 48px; padding: 10px 12px; border: 1px solid #8197ac; border-radius: 6px; background: #fff; color: #142e49; font: 18px/1.5 "Assistant", Arial, sans-serif; }
+#goodraise-help-root .help-form textarea { resize: vertical; }
+#goodraise-help-root .help-form-note { color: #50657b; font-size: 15px; }
+#goodraise-help-root #contact-message-hint { margin-top: -12px; }
+#goodraise-help-root .help-form .help-consent { display: flex; align-items: flex-start; gap: 12px; font-size: 16px; font-weight: 400; }
+#goodraise-help-root .help-consent input { flex: 0 0 22px; width: 22px; height: 22px; margin: 3px 0 0; accent-color: #075eb5; }
+#goodraise-help-root .help-error { padding: 12px 16px; color: #872c27; background: #fff0ee; border: 1px solid #b9544a; border-radius: 6px; }
+#goodraise-help-root .help-honeypot, #goodraise-help-root .help-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#goodraise-help-root .help-success { text-align: center; padding-block: 48px; }
+#goodraise-help-root .help-success-mark { display: block; color: #075eb5; margin-bottom: 20px; font-size: 38px; }
+#goodraise-help-root .help-success a { display: inline-block; margin-top: 22px; }
+@media (max-width: 800px) {
+  #goodraise-help-root .help-main { width: calc(100% - 40px); padding-block: 40px 56px; }
+  #goodraise-help-root .help-intro { margin-bottom: 32px; }
+  #goodraise-help-root .help-contact-grid { grid-template-columns: 1fr; gap: 32px; }
+  #goodraise-help-root .help-contact-aside { order: 1; padding-block: 0; }
+  #goodraise-help-root .help-callout { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 480px) {
+  #goodraise-help-root .help-card { padding: 22px 18px; }
+  #goodraise-help-root .help-form-row { grid-template-columns: 1fr; gap: 20px; }
+  #goodraise-help-root .help-intro p { font-size: 19px; }
+  #goodraise-help-root .help-callout { padding: 24px; }
+}

@@ -215,22 +215,6 @@
     <script type="module">
       import { mountSiteHeader } from "/assets/site-header.js";
       mountSiteHeader(document.getElementById("site-header"));
-      const placeholders = {
-        partners: ["שותפים לדרך", "כאן יוצגו הארגונים, הקהילות והשותפים שעושים איתנו טוב. התוכן יתווסף בהמשך."],
-        contact: ["יצירת קשר", "כאן יופיעו פרטי יצירת הקשר שלנו: כתובת דואר אלקטרוני, מספר טלפון ודרכים נוספות לדבר איתנו. הפרטים יתווספו בהמשך."],
-        faq: ["שאלות נפוצות", "כאן יופיעו תשובות לשאלות על פתיחת קמפיין, שיתוף עם הקהילה וניהול הגיוס. התוכן יתווסף בהמשך."],
-      };
-      const dialog = document.getElementById("placeholder-dialog");
-      document.querySelectorAll("[data-placeholder]").forEach((button) => {
-        button.addEventListener("click", () => {
-          const [title, description] = placeholders[button.dataset.placeholder];
-          document.getElementById("dialog-title").textContent = title;
-          document.getElementById("dialog-description").textContent = description;
-          dialog.showModal();
-        });
-      });
-      dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
-
       const campaignSection = document.getElementById("past-campaigns");
       const campaignCarousel = document.getElementById("campaign-carousel");
       const money = (value, currency) => new Intl.NumberFormat("he-IL", { style:"currency", currency:currency || "ILS", maximumFractionDigits:0 }).format(Number(value || 0));
