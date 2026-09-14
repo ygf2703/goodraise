@@ -11,6 +11,7 @@ work/prizes.xlsx
 work/prizes.csv
 work/data/*
 !work/data/.gitkeep
+work/database-backups/
 netlify/data/*
 !netlify/data/.gitkeep
 apps/web/public/

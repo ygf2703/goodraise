@@ -1,6 +1,6 @@
 # GoodRaise product and engineering TODO
 
-Updated 2026-09-11. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
+Updated 2026-09-13. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
 
 ## Now: finish the current production rollout
 
@@ -13,6 +13,10 @@ Updated 2026-09-11. This is the current working backlog. Historical assessment d
 - [ ] Verify production `/api/health`, `/api/auth/status`, `/api/public/campaigns`, login, project selection, and completed-campaign pages.
 - [ ] Configure `GOODRAISE_PUBLIC_URL`, `GOODRAISE_EMAIL_MODE=resend`, `GOODRAISE_RESEND_API_KEY`, and `GOODRAISE_EMAIL_FROM`, then verify applicant, admin-notification, approval and rejection messages from a deploy preview.
 - [ ] Add an explicit migration stage to deployment so application code is not published against an older schema. Keep migrations transactional, checksummed, rehearsed, and independently observable.
+- [ ] Replace the hosted owner connection used by application functions with a least-privilege pooled runtime role; keep a direct owner URL only for migrations and protected backups.
+- [ ] Give routine production inspection its own read-only database role/connection and test that it cannot write, change schema, or read credential-bearing configuration.
+- [ ] Remove API bearer tokens and sensitive header values from `campaign_sources.payload`; resolve them from server-side managed secrets keyed by organization/campaign, then rotate the two currently stored credentials.
+- [ ] Scope hosted database secrets by deploy context so production credentials are unavailable to previews and branch deploys unless explicitly required.
 
 ## Campaign application flow
 
@@ -74,7 +78,11 @@ The initial flow is implemented. The CTA remains separate from login, and submit
 
 ## Architecture decisions to formalize
 
-- [ ] Record PostgreSQL as the source of truth for organizations, campaigns, memberships, donations, imports, applications, and lifecycle state.
+- [x] Record PostgreSQL as the source of truth for organizations, campaigns, memberships, donations, imports, applications, and lifecycle state; provider-specific features must not enter the domain or migration contract.
+- [x] Add a persistent local PostgreSQL workflow, protected hosted-data backup/restore, separate local/source connection variables, and ordered portable migrations.
+- [ ] Provision and rehearse a separate Netlify Database, restore a protected GoodRaise backup into it, and verify migrations/data/API behavior before any production cutover.
+- [ ] Define the Netlify Database cutover and rollback window: freeze writes, take a final source backup, restore/verify, change only the hosted `GOODRAISE_DATABASE_URL`, monitor, and retain Neon until rollback is no longer needed.
+- [ ] Consolidate the remaining Netlify Blobs state (auth limits/audits, campaign audits and job markers) into PostgreSQL before calling the platform single-database; preserve expiry, idempotency and audit semantics.
 - [ ] Keep flexible campaign presentation/settings in PostgreSQL JSONB, with validation and schema-versioning rules.
 - [ ] Treat `campaign_datasets` as a rebuildable browser projection rather than a second donation source of truth.
 - [ ] Keep completed-campaign snapshots sanitized and persisted in PostgreSQL; use CDN and per-process memory only as replaceable caches.

@@ -4,8 +4,12 @@ import { resolve } from "node:path";
 import pg from "pg";
 import { normalizePostgresConnectionString } from "../backend/services/postgres-connection.mjs";
 
-const connectionString = normalizePostgresConnectionString(process.env.GOODRAISE_DATABASE_URL || process.env.DATABASE_URL);
-if (!connectionString) throw new Error("Set GOODRAISE_DATABASE_URL before running database migrations.");
+const connectionString = normalizePostgresConnectionString(
+  process.env.GOODRAISE_MIGRATION_DATABASE_URL
+  || process.env.GOODRAISE_DATABASE_URL
+  || process.env.DATABASE_URL,
+);
+if (!connectionString) throw new Error("Set GOODRAISE_MIGRATION_DATABASE_URL or GOODRAISE_DATABASE_URL before running database migrations.");
 const client = new pg.Client({ connectionString });
 await client.connect();
 try {

@@ -42,13 +42,11 @@
       .hero-note { display:flex; align-items:center; gap:8px; margin-top:23px; color:var(--muted); font-size:15px; }
       .hero-note svg { color:var(--blue); }
       .hero-visual { position:relative; padding:12px 0 20px 18px; }
-      .image-placeholder { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; overflow:hidden; }
+      .community-image { position:relative; overflow:hidden; }
+      .community-image img { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:cover; }
       .hero-image { aspect-ratio:1.08; background:#dbeaf6; border:1px solid #c5dbea; border-radius:100px 12px 12px 12px; box-shadow:-18px 20px 0 #c8deef; }
-      .placeholder-frame { position:absolute; inset:27px; border:1px dashed #9bb7cf; border-radius:76px 5px 5px 5px; }
-      .image-icon { color:#658aab; margin-bottom:20px; }
-      .image-placeholder strong { color:#456987; font-weight:600; font-size:21px; }
-      .image-placeholder small { margin-top:5px; color:#456987; font-size:15px; }
-      .image-label { position:absolute; bottom:43px; font-size:14px; color:#456987; }
+      .hero-image img { object-position:50% 40%; }
+      .image-label { position:absolute; inset-block-start:16px; inset-inline-start:16px; padding:4px 10px; border-radius:5px; background:#fff; color:var(--navy); font-size:13px; font-weight:600; line-height:1.5; }
       .visual-note { position:absolute; top:-12px; left:-19px; width:120px; height:120px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:5px; background:var(--yellow); color:var(--navy); font-size:15px; font-weight:700; line-height:1.25; text-align:center; transform:rotate(-10deg); }
       .visual-caption { position:absolute; bottom:-1px; right:-25px; display:flex; align-items:center; gap:14px; background:#fff; border:1px solid var(--line); border-radius:9px; padding:17px 23px; box-shadow:0 8px 25px #123c5d0a; }
       .caption-icon { width:42px; height:42px; display:grid; place-items:center; color:var(--blue); background:var(--pale); border-radius:50%; }
@@ -91,8 +89,8 @@
       .campaigns-all { display:flex; justify-content:center; margin-top:24px; }
       .about { padding-top:0; }
       .about-grid { display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:80px; border-top:1px solid var(--line); padding-top:80px; }
-      .about-image { min-height:320px; background:#edf1f5; border-radius:12px; border:1px solid #dce4ec; }
-      .about-image .placeholder-frame { border-radius:5px; border-color:#b9c8d6; }
+      .about-image { aspect-ratio:1.6; background:#edf1f5; border-radius:12px; border:1px solid #dce4ec; }
+      .about-image img { object-position:50% 45%; }
       .about-copy h2 { max-width:440px; }
       .about-copy p { margin-top:22px; color:var(--muted); font-size:19px; max-width:460px; }
       .text-link { display:inline-flex; align-items:center; gap:16px; margin-top:25px; color:var(--blue); font-size:18px; font-weight:700; }
@@ -114,7 +112,6 @@
         .hero-description { max-width:490px; }
         .hero-visual { width:100%; max-width:520px; margin-inline:auto; padding-inline:15px; }
         .hero-image { aspect-ratio:1.4; border-start-start-radius:70px; }
-        .hero-image .placeholder-frame { border-start-start-radius:48px; }
         .visual-note { top:-13px; left:0; }
         .visual-caption { right:0; bottom:0; }
         .section { padding-block:64px; }
@@ -127,7 +124,6 @@
         .about-grid { grid-template-columns:1fr; gap:32px; padding-top:58px; }
         .about-copy { grid-row:1; }
         .about-copy p { max-width:none; }
-        .about-image { min-height:280px; }
       }
       @media (max-width:480px) {
         .container { width:calc(100% - 36px); }
@@ -139,7 +135,7 @@
         .hero-note { font-size:14px; }
         .hero-image { aspect-ratio:1.05; }
         .visual-caption { padding:12px 16px; }
-        .image-label { bottom:40px; }
+        .image-label { inset-block-start:12px; inset-inline-start:12px; }
         .steps { grid-template-columns:1fr; gap:28px; }
         .step { padding-inline-start:22px; }
         .step-number { margin-bottom:8px; }
@@ -173,13 +169,9 @@
             <p class="hero-note"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>מהרעיון הראשון ועד היעד — יחד איתכם.</p>
           </div>
           <div class="hero-visual">
-            <!-- Replace this figure with the campaign or community hero image. -->
-            <figure class="image-placeholder hero-image" aria-label="מקום לתמונת אווירה של הקהילה">
-              <div class="placeholder-frame" aria-hidden="true"></div>
-              <svg class="image-icon" width="57" height="57" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="5" y="7" width="38" height="34" rx="5" /><circle cx="16" cy="18" r="4" /><path d="m6 34 10-9 9 8 8-13 10 14" /></svg>
-              <strong>כאן תיכנס התמונה שלכם</strong>
-              <small>אנשים, קהילה, והטוב שביניהם</small>
-              <figcaption class="image-label">תמונת אווירה · להמחשה בלבד</figcaption>
+            <figure class="community-image hero-image">
+              <img src="/assets/landing-community-hero.webp" srcset="/assets/landing-community-hero-640.webp 640w, /assets/landing-community-hero.webp 1200w" sizes="(max-width: 555px) calc(100vw - 70px), (max-width: 800px) 490px, (max-width: 1050px) calc((100vw - 114px) / 2), (max-width: 1264px) calc((100vw - 148px) / 2), 540px" width="1200" height="1200" alt="שלושה מתנדבים אורזים יחד מוצרי מזון לתרומה, בגוני כחול ולבן" fetchpriority="high" />
+              <figcaption class="image-label">תמונת המחשה</figcaption>
             </figure>
             <div class="visual-note"><svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z" /></svg><span>טוב שמחבר<br />אנשים</span></div>
             <div class="visual-caption"><span class="caption-icon" aria-hidden="true"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 17 17 5M6 5h11v11" /></svg></span><div><strong>כל שינוי מתחיל במישהו</strong><small>הפעם, הוא יכול להתחיל בכם.</small></div></div>
@@ -211,8 +203,10 @@
       </section>
       <section id="about" class="section about" aria-labelledby="about-title">
         <div class="container about-grid">
-          <!-- Replace this figure with an image of the team or a community initiative. -->
-          <figure class="image-placeholder about-image" aria-label="מקום לתמונה של הצוות או הפעילות"><div class="placeholder-frame" aria-hidden="true"></div><svg class="image-icon" width="44" height="44" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="5" y="7" width="38" height="34" rx="5" /><circle cx="16" cy="18" r="4" /><path d="m6 34 10-9 9 8 8-13 10 14" /></svg><strong>האנשים שמאחורי העשייה</strong><figcaption><small>מקום לתמונה של הצוות או הקהילה</small></figcaption></figure>
+          <figure class="community-image about-image">
+            <img src="/assets/landing-community-planning.webp" srcset="/assets/landing-community-planning-640.webp 640w, /assets/landing-community-planning.webp 1200w" sizes="(max-width: 800px) calc(100vw - 36px), (max-width: 1264px) calc((100vw - 144px) / 2), 560px" width="1200" height="800" alt="קבוצת אנשים מתכננת יוזמה קהילתית סביב שולחן משותף, בגוני כחול ולבן" loading="lazy" decoding="async" />
+            <figcaption class="image-label">תמונת המחשה</figcaption>
+          </figure>
           <div class="about-copy"><span class="section-kicker">נעים להכיר, גודרייז</span><h2 id="about-title">מאחורי כל מטרה טובה,<br />יש אנשים.</h2><p>אנחנו מאמינים שביחד אפשר לעשות יותר. גודרייז מחברת בין רעיונות, אנשים וקהילות — כדי שלמטרות שחשובות לכם תהיה הזדמנות לצמוח.</p><p>כאן יופיע הסיפור שלנו: מי אנחנו, מה מניע אותנו, ולמה בחרנו לעזור לכם לעשות טוב.</p><a class="text-link" href="#footer">בואו נכיר <span aria-hidden="true">←</span></a></div>
         </div>
       </section>

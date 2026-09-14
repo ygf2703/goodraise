@@ -12,10 +12,12 @@ Use Node.js 24 (`.nvmrc`; validated with 24.20.0).
 npm ci
 cp .env.example .env
 # Set GOODRAISE_MANAGER_EMAILS in .env to the initial authorized site admins.
+npm run db:local:up
+npm run db:migrate
 npm run dev
 ```
 
-Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; placeholder copy and image areas can be replaced there. React and the API share this origin. `/start`, `/login`, `/admin`, `/admin/users`, `/admin/applications`, `/campaigns`, `/rules`, `/privacy`, `/accessibility`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
+Open [http://127.0.0.1:8767](http://127.0.0.1:8767) for the Hebrew landing page, also available at `/goodraise/`. Its template is `work/goodraise-landing.html`; the blue-and-white illustration assets and generation prompts are documented in [landing imagery](docs/landing-imagery.md). React and the API share this origin. `/start`, `/login`, `/admin`, `/admin/users`, `/admin/applications`, `/campaigns`, `/rules`, `/privacy`, `/accessibility`, `/prizes`, campaign slugs, and existing query-based campaign and ambassador links load directly into the application.
 
 The build writes the landing page to `dist/index.html` as the default homepage. The React application shell is `dist/app.html`; application routes rewrite to this file. Legacy campaign query links at `/` and `/index.html` use a query-aware rewrite to preserve their campaign and ambassador context.
 
@@ -34,6 +36,24 @@ Set `GOODRAISE_DATABASE_URL` in `.env`, then initialize or upgrade the schema:
 ```sh
 npm run db:migrate
 ```
+
+For a persistent PostgreSQL 18 development database managed by Docker:
+
+```sh
+npm run db:local:up
+npm run db:migrate
+npm run db:local:status
+```
+
+The safe local URL is defined in `.env.example`; copy it to `.env` so the app and migration runner use the container. To recreate local data from the hosted Neon database, obtain its **direct, non-pooled** URL and pass it only to the clone command:
+
+```sh
+GOODRAISE_SOURCE_DATABASE_URL='postgresql://…' npm run db:local:clone -- --replace-local
+```
+
+The clone writes a mode-`0600`, Git-ignored custom PostgreSQL backup under `work/database-backups/`, replaces only the local `goodraise` schema, restores the hosted data, and applies all repository migrations. Authentication rows, application-review records, and source configurations that may hold credentials are intentionally excluded; operational campaign/donor data remains private production data and must not be shared or committed. A saved backup can be restored again with `npm run db:local:restore -- work/database-backups/<file>.dump --replace-local`.
+
+DBeaver and other PostgreSQL clients can use host `127.0.0.1`, port `55432`, database/user `goodraise`, and the local-only password from `.env`. This owner connection is for the local database only. Hosted inspection should use a separate read-only connection; the runtime and migration-owner credentials must not be saved as a general-purpose production connection.
 
 Migrations are ordered, checksummed, and transactional. They do not transfer deployed Blobs/SQLite data. An existing campaign can receive a CSV through the canonical Node ingestion pipeline:
 

@@ -1,6 +1,6 @@
 # Development and operations
 
-Updated 2026-09-08. Use Node.js 24 for development, tests and deployment. Python, pandas, SQLite, and the old server/build scripts have been removed from the active toolchain.
+Updated 2026-09-13. Use Node.js 24 for development, tests and deployment. Python, pandas, SQLite, and the old server/build scripts have been removed from the active toolchain.
 
 ## Install and run
 
@@ -8,6 +8,8 @@ Updated 2026-09-08. Use Node.js 24 for development, tests and deployment. Python
 npm ci
 cp .env.example .env
 # Edit GOODRAISE_MANAGER_EMAILS with the initial site admins before first login.
+npm run db:local:up
+npm run db:migrate
 npm run dev
 ```
 
@@ -26,6 +28,10 @@ The default address is `http://127.0.0.1:8767`. Development uses Vite middleware
 | `GOODRAISE_ACCESS_CONTROL_JSON` | Optional manager allowlist file |
 | `GOODRAISE_DATA_DIR` | Development key/value files; defaults `work/data` |
 | `GOODRAISE_DATABASE_URL` / `DATABASE_URL` | PostgreSQL connection; first takes precedence |
+| `GOODRAISE_MIGRATION_DATABASE_URL` | Optional direct owner connection used only by the ordered migration runner; takes precedence there |
+| `GOODRAISE_LOCAL_DATABASE_URL` | Explicit replaceable local target used by the Docker database tooling |
+| `GOODRAISE_LOCAL_DB_NAME`, `_USER`, `_PASSWORD`, `_PORT` | Local Docker PostgreSQL settings; safe development defaults are in `.env.example` |
+| `GOODRAISE_SOURCE_DATABASE_URL` | Direct hosted PostgreSQL URL used only for an explicit backup/clone command; do not retain in source control |
 | `GOODRAISE_RUN_RUNTIME_SCHEMA_MIGRATIONS` | Legacy runtime DDL escape hatch; leave false and run ordered migrations |
 | `GOODRAISE_SOURCE_CSV` | Private build seed; otherwise `work/source.csv`, then synthetic sample |
 | `GOODRAISE_PRIZES_XLSX`, `GOODRAISE_PRIZES_CSV` | Optional initial prize table; workbook takes precedence |
@@ -43,11 +49,45 @@ First login for an approved email enters password setup. Initial site admins can
 
 ## Database workflow
 
+### Local PostgreSQL and hosted-data copy
+
+`compose.yaml` provides a persistent PostgreSQL 18 database bound only to `127.0.0.1:55432`. Start and inspect it with:
+
+```sh
+npm run db:local:up
+npm run db:migrate
+npm run db:local:status
+```
+
+`GOODRAISE_DATABASE_URL` is the application connection. `GOODRAISE_MIGRATION_DATABASE_URL` is the optional owner connection used only by the migration runner, while `GOODRAISE_LOCAL_DATABASE_URL` is deliberately separate and is the only database the restore command can replace. Hosted Netlify should set the runtime URL as a server-side environment variable; never expose it with a `VITE_` prefix. Use a restricted pooled role for runtime and a direct owner connection for controlled migrations and backups.
+
+To make a local development copy from Neon, use the direct connection URL rather than a pooled runtime URL:
+
+```sh
+GOODRAISE_SOURCE_DATABASE_URL='postgresql://…' npm run db:local:clone -- --replace-local
+```
+
+This creates an ignored, mode-`0600` custom-format backup in `work/database-backups`, drops and restores only the local `goodraise` schema, and then runs every ordered repository migration. Authentication, membership, application-review, and source-configuration rows are excluded, so production password hashes, active sessions, verification tokens, and source credentials never enter the retained backup. Campaign and donor records are still private production data; keep the backup on an encrypted workstation and do not upload or commit it. The configured `GOODRAISE_MANAGER_EMAILS` accounts are seeded locally when the application starts.
+
+Recreate the same local database later without connecting to Neon:
+
+```sh
+npm run db:local:restore -- work/database-backups/goodraise-neon-<timestamp>.dump --replace-local
+```
+
+Stop PostgreSQL without deleting its named volume using `npm run db:local:down`.
+
+For DBeaver, create a PostgreSQL connection named `GoodRaise Local (owner)` with host `127.0.0.1`, port `55432`, database/user `goodraise`, and the local-only password from `.env`. SSL is unnecessary for this loopback-only connection. Do not reuse this connection profile for a hosted database. A normal production-inspection profile must be read-only and use verified TLS; keep the direct owner URL limited to migrations, backups, and time-bounded administrative work.
+
+### Ordered schema migrations
+
 Set the database URL and run:
 
 ```sh
 npm run db:migrate
 ```
+
+The runner uses `GOODRAISE_MIGRATION_DATABASE_URL` first when present, then falls back to `GOODRAISE_DATABASE_URL` or `DATABASE_URL`. In hosted environments, this allows the application to use a restricted pooled runtime role while migrations use a direct owner connection. Both remain server-only secrets.
 
 `db/migrations/001_initial.sql` provides the baseline schema. `002_ingest_validation.sql` aligns the import-batch schema with Node validation counters. The runner locks migration execution, records checksums, applies each migration in a transaction, skips applied files, and fails if an applied file was edited. Add a new numbered SQL file for subsequent changes.
 
