@@ -34,6 +34,7 @@ The [target architecture](target-architecture.md) records the chosen direction a
 | Task | Entry point |
 | --- | --- |
 | Layout/forms | `apps/web/src/components/` |
+| Shared buttons and states | [Button usage contract](buttons.md), `components/Button.tsx`, `work/assets/buttons.css` |
 | Existing filters/charts/import controls | `apps/web/src/compat/dashboard-controller.js` |
 | Browser API behavior | `apps/web/src/api.ts` |
 | Forecast or intervention rules | `shared/intelligence/engine.mjs` |

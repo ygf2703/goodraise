@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { mountSiteHeader } from "../../../../work/assets/site-header.js";
+import { Button, ButtonLink } from "./Button";
 
 // Also rendered into the static homepage by prepareAssets.
 export function Header({ loadSession = false }: { loadSession?: boolean } = {}) {
@@ -10,9 +11,9 @@ export function Header({ loadSession = false }: { loadSession?: boolean } = {}) 
 
   return (<header id="site-header" className="site-header" ref={header} dir="rtl">
     <div className="site-header-inner">
-      <button className="site-header-toggle" type="button" aria-label="פתיחת תפריט" aria-controls="main-nav" aria-expanded="false">
+      <Button className="site-header-toggle" variant="secondary" size="sm" icon aria-label="פתיחת תפריט" aria-controls="main-nav" aria-expanded="false">
         <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
-      </button>
+      </Button>
       <a className="site-header-brand" href="/" aria-label="גודרייז — דף הבית">
         <img src="/assets/goodraise-logo-transparent.png" width="980" height="330" alt="גודרייז" />
       </a>
@@ -31,8 +32,8 @@ export function Header({ loadSession = false }: { loadSession?: boolean } = {}) 
       </nav>
       <div className="site-header-actions">
         <a data-site-audience="guest" className="site-header-login" href="/login" hidden>כניסה</a>
-        <a data-site-audience="guest" className="site-header-cta" href="/start" hidden>מתחילים לגייס <span aria-hidden="true">←</span></a>
-        <button data-site-audience="session" className="site-header-logout" type="button" hidden>התנתקות</button>
+        <ButtonLink data-site-audience="guest" className="site-header-cta" size="sm" href="/start" hidden>מתחילים לגייס <span aria-hidden="true">←</span></ButtonLink>
+        <Button data-site-audience="session" className="site-header-logout" variant="secondary" size="sm" hidden>התנתקות</Button>
         <span className="site-header-error" role="status" hidden></span>
       </div>
     </div>

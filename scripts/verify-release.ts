@@ -57,7 +57,8 @@ assert.doesNotMatch(footer, /שותפים לדרך|data-placeholder|<dialog/);
 assert.match(html, /<main id="main"[^>]*tabindex="-1"/);
 const homeFooter = homepage.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || "";
 assert.equal(footer, homeFooter, "The homepage and application must use the same footer.");
-for (const asset of ["assets/site-header.css", "assets/site-header.js"]) {
+for (const asset of ["assets/site-header.css", "assets/site-header.js", "assets/buttons.css"]) {
   assert.ok(files.includes(asset), `Missing shared header asset: ${asset}`);
 }
+for (const page of [html, homepage]) assert.match(page, /href="\/assets\/buttons\.css"/, "Every application shell must load the shared button styles.");
 console.log(`Release verified: React shell ${Buffer.byteLength(html).toLocaleString()} bytes; protected data excluded.`);

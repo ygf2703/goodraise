@@ -5,6 +5,7 @@ import { requestSession, type ManagerSession } from "../auth-gate";
 import { Header } from "./Header";
 import { SiteFooter } from "./SiteFooter";
 import { SkipLink } from "./SkipLink";
+import { Button, ButtonLink } from "./Button";
 
 interface CampaignApplication {
   id: string;
@@ -148,7 +149,7 @@ export function AdminApplicationsPage() {
           <h1>בקשות לפתיחת קמפיין</h1>
           <p>כאן מאשרים בקשה מאומתת לפני שנוצרים ארגון, קמפיין או חשבון ניהול.</p>
         </div>
-        <a href="/admin/users">משתמשים והרשאות</a>
+        <ButtonLink href="/admin/users" variant="secondary">משתמשים והרשאות</ButtonLink>
       </header>
 
       <div className="admin-application-filters" role="group" aria-label="סינון בקשות">
@@ -196,8 +197,8 @@ export function AdminApplicationsPage() {
                 </label>
               </div>
               <div>
-                <button type="button" className="approve" disabled={busyId === application.id} onClick={() => void decide(application, "approve")}>אישור ופתיחת טיוטה</button>
-                <button type="button" className="reject" disabled={busyId === application.id} onClick={() => void decide(application, "reject")}>דחיית הבקשה</button>
+                <Button busy={busyId === application.id} onClick={() => void decide(application, "approve")}>אישור ופתיחת טיוטה</Button>
+                <Button variant="danger" busy={busyId === application.id} onClick={() => void decide(application, "reject")}>דחיית הבקשה</Button>
               </div>
             </div> : <footer className="admin-application-decision">
               <strong>{statusLabels[application.status] || application.status}</strong>

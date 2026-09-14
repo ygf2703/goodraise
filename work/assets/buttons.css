@@ -1,0 +1,106 @@
+/* Shared by React, the static homepage and legacy dashboard templates.
+   Page CSS owns placement only; button appearance and states belong here.
+   Legacy class aliases keep generated controls on the same design contract. */
+:root {
+  --gr-action-primary: #075eb5;
+  --gr-action-primary-hover: #08457f;
+  --gr-action-primary-active: #06365f;
+  --gr-action-ink: #075eb5;
+  --gr-action-surface: #ffffff;
+  --gr-action-hover-surface: #e7f1fa;
+  --gr-action-active-surface: #d6e8f7;
+  --gr-action-danger: #9b3030;
+  --gr-action-danger-hover: #fff0ee;
+  --gr-action-danger-active: #ffe0dc;
+  --gr-action-focus: #142e49;
+}
+
+:is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button) {
+  --button-color: #ffffff;
+  --button-background: var(--gr-action-primary);
+  --button-hover: var(--gr-action-primary-hover);
+  --button-active: var(--gr-action-primary-active);
+  --button-border: transparent;
+  --button-height: 48px;
+  --button-padding: 20px;
+  --button-font-size: 17px;
+  box-sizing: border-box;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: var(--button-height);
+  max-width: 100%;
+  padding: 10px var(--button-padding);
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  color: var(--button-color);
+  background: var(--button-background);
+  font: 700 var(--button-font-size)/1.4 "Assistant", Arial, sans-serif;
+  text-align: center;
+  text-decoration: none;
+  vertical-align: middle;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+:is(.gr-button--secondary, .button-secondary, .action-button.secondary) {
+  --button-color: var(--gr-action-ink);
+  --button-background: var(--gr-action-surface);
+  --button-hover: var(--gr-action-hover-surface);
+  --button-active: var(--gr-action-active-surface);
+  --button-border: var(--gr-action-ink);
+}
+
+:is(.gr-button--ghost, .button-ghost) {
+  --button-color: var(--gr-action-ink);
+  --button-background: transparent;
+  --button-hover: var(--gr-action-hover-surface);
+  --button-active: var(--gr-action-active-surface);
+}
+
+.gr-button--danger {
+  --button-color: var(--gr-action-danger);
+  --button-background: var(--gr-action-surface);
+  --button-hover: var(--gr-action-danger-hover);
+  --button-active: var(--gr-action-danger-active);
+  --button-border: var(--gr-action-danger);
+}
+
+.gr-button--sm { --button-height: 44px; --button-padding: 12px; --button-font-size: 16px; }
+.gr-button--lg { --button-height: 52px; --button-padding: 26px; --button-font-size: 18px; }
+.gr-button--icon { width: var(--button-height); height: var(--button-height); padding: 0; flex-shrink: 0; }
+.gr-button--icon svg { display: block; flex-shrink: 0; }
+
+:is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button):hover:not(:disabled):not([aria-disabled="true"]) {
+  color: var(--button-color);
+  background: var(--button-hover);
+}
+:is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button):active:not(:disabled):not([aria-disabled="true"]) {
+  color: var(--button-color);
+  background: var(--button-active);
+}
+:is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button):focus-visible {
+  outline: 3px solid var(--gr-action-focus);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px #fff;
+}
+:is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button):is(:disabled, [aria-disabled="true"]) {
+  color: #566575;
+  background: #eef1f5;
+  border-color: #c4cfdb;
+  cursor: not-allowed;
+}
+:is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button)[aria-busy="true"],
+:where([aria-busy="true"]) :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button):disabled { cursor: wait; }
+:is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button)[hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button) { transition: none; }
+}
+@media (forced-colors: active) {
+  :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button) { border-color: ButtonText; }
+  :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button):focus-visible { outline-color: Highlight; }
+}

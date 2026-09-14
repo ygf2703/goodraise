@@ -1,5 +1,4 @@
-
-
+import { Button } from "./Button";
 export function LoginPanel() {
   return (<section id="admin-lock" className="admin-lock app-card app-card--elevated">
           <div className="login-shell">
@@ -32,7 +31,7 @@ export function LoginPanel() {
                 סיסמה
                 <div className="password-field">
                   <input id="login-password" className="form-control" type="password" autoComplete="current-password" placeholder="הקלד/י סיסמה" aria-describedby="login-password-setup-note login-message" required />
-                  <button id="login-password-toggle" className="button-ghost password-toggle" type="button" aria-label="הצג או הסתר סיסמה">הצג</button>
+                  <Button id="login-password-toggle" className="password-toggle" variant="ghost" size="sm" aria-label="הצג או הסתר סיסמה">הצג</Button>
                 </div>
                 <div id="login-password-setup-note" className="text-small text-muted" hidden style={{"display":"none"}}>בכניסה ראשונה יש לבחור סיסמה באורך 8 תווים לפחות.</div>
               </label>
@@ -41,8 +40,8 @@ export function LoginPanel() {
                 <input id="login-password-confirm" className="form-control" type="password" autoComplete="new-password" placeholder="הקלד/י שוב את הסיסמה" aria-describedby="login-password-setup-note login-message" />
               </label>
               <div className="login-actions">
-                <button id="login-button" className="button-primary action-button" type="submit">כניסה לחשבון</button>
-                <button id="login-reset-button" className="button-ghost" type="button" hidden>איפוס סיסמה</button>
+                <Button id="login-button" type="submit">כניסה לחשבון</Button>
+                <Button id="login-reset-button" variant="ghost" hidden>איפוס סיסמה</Button>
               </div>
               <div id="login-mode-hint" className="text-small text-muted">הגישה זמינה רק לחשבונות שאושרו ושויכו מראש.</div>
               <div id="login-message" className="login-message text-small" aria-live="polite"></div>

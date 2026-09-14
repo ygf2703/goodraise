@@ -1,8 +1,8 @@
 #goodraise-help-root { min-height: 100vh; display: flex; flex-direction: column; color: #142e49; background: #fff; font: 18px/1.65 "Assistant", Arial, sans-serif; }
 #goodraise-help-root *, #goodraise-help-root *::before, #goodraise-help-root *::after { box-sizing: border-box; }
 #goodraise-help-root .help-main { flex: 1; width: min(1120px, calc(100% - 64px)); margin-inline: auto; padding-block: 64px 88px; }
-#goodraise-help-root .help-main a { color: #075eb5; text-underline-offset: 4px; }
-#goodraise-help-root .help-main :focus-visible { outline: 3px solid #075eb5; outline-offset: 4px; }
+#goodraise-help-root .help-main a:not(.gr-button) { color: #075eb5; text-underline-offset: 4px; }
+#goodraise-help-root .help-main :focus-visible:not(.gr-button) { outline: 3px solid #075eb5; outline-offset: 4px; }
 #goodraise-help-root .help-intro { max-width: 740px; margin: 0 auto 48px; text-align: center; }
 #goodraise-help-root .help-eyebrow { color: #075eb5; font-size: 16px; font-weight: 700; }
 #goodraise-help-root .help-main h1 { margin: 8px 0 14px; font-size: clamp(36px, 5vw, 52px); line-height: 1.2; letter-spacing: -.6px; }
@@ -20,9 +20,6 @@
 #goodraise-help-root details p { max-width: 740px; padding: 0 0 22px; color: #425a71; }
 #goodraise-help-root .help-callout { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 44px; padding: 30px; background: #f0f7fc; border-radius: 14px; }
 #goodraise-help-root .help-callout h2 { margin-bottom: 6px; }
-#goodraise-help-root .help-button { display: inline-flex; justify-content: center; align-items: center; gap: 18px; min-height: 50px; padding: 12px 26px; background: #075eb5; color: #fff; border: 1px solid transparent; border-radius: 7px; font: 700 18px/1.4 "Assistant", Arial, sans-serif; text-decoration: none; cursor: pointer; }
-#goodraise-help-root .help-button:hover { background: #08457f; }
-#goodraise-help-root fieldset:disabled .help-button { cursor: wait; opacity: .75; }
 #goodraise-help-root .help-contact-grid { display: grid; grid-template-columns: .8fr 1.4fr; gap: 70px; align-items: start; }
 #goodraise-help-root .help-contact-aside { padding-block: 24px; color: #425a71; }
 #goodraise-help-root .help-contact-aside h2 { color: #142e49; font-size: 32px; }

@@ -5,6 +5,7 @@ import type { PublicHelpRoute } from "../platform";
 import { Header } from "./Header";
 import { SiteFooter } from "./SiteFooter";
 import { SkipLink } from "./SkipLink";
+import { Button, ButtonLink } from "./Button";
 
 const faqGroups: { title: string; items: { question: string; answer: ReactNode }[] }[] = [
   { title: "מתחילים לעשות טוב", items: [
@@ -42,7 +43,7 @@ function FaqContent() {
       </section>)}
       <section className="help-callout" aria-labelledby="more-help-title">
         <div><h2 id="more-help-title">השאלה שלכם לא כאן?</h2><p>נשמח לשמוע ולעזור לכם להתקדם.</p></div>
-        <a className="help-button" href="/contact">בואו נדבר <span aria-hidden="true">←</span></a>
+        <ButtonLink href="/contact" size="lg">בואו נדבר <span aria-hidden="true">←</span></ButtonLink>
       </section>
     </div>
   </>;
@@ -114,7 +115,7 @@ function ContactForm() {
       <div className="help-honeypot" aria-hidden="true"><label htmlFor="contact-website">Website<input id="contact-website" name="website" tabIndex={-1} autoComplete="off" /></label></div>
       <label className="help-consent" htmlFor="contact-consent"><input id="contact-consent" name="consentAccepted" type="checkbox" required /><span>אני מסכימ/ה לשימוש בפרטים שמסרתי לצורך טיפול בפנייה וחזרה אליי, בהתאם ל<a href="/privacy">מדיניות הפרטיות</a>.</span></label>
       {error && <p className="help-error" role="alert">{error}</p>}
-      <button className="help-button" type="submit">{sending ? "שולחים את הפנייה…" : "שליחת הפנייה"}<span aria-hidden="true">←</span></button>
+      <Button type="submit" size="lg" busy={sending}>{sending ? "שולחים את הפנייה…" : "שליחת הפנייה"}<span aria-hidden="true">←</span></Button>
     </fieldset>
   </form>;
 }

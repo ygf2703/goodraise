@@ -4,6 +4,7 @@ import { requestJson } from "../api";
 import { Header } from "./Header";
 import { SiteFooter } from "./SiteFooter";
 import { SkipLink } from "./SkipLink";
+import { Button } from "./Button";
 
 interface SubmissionResponse {
   submitted?: boolean;
@@ -183,9 +184,9 @@ export function CampaignApplicationPage() {
           <span>אני מאשר/ת שהפרטים נכונים ושצוות GoodRaise יוכל ליצור איתי קשר בנוגע לבקשה. קראתי את <a href="/privacy" target="_blank">מדיניות הפרטיות</a>.</span>
         </label>
         <div className={`application-form-message${status === "error" ? " is-error" : ""}`} role="status">{message}</div>
-        <button className="application-submit" type="submit" disabled={status === "submitting"}>
+        <Button className="application-submit" size="lg" type="submit" busy={status === "submitting"}>
           {status === "submitting" ? "שולחים…" : "שליחת הבקשה לאישור"}
-        </button>
+        </Button>
         <p className="application-submit-note">לא ייפתח חשבון ולא ייווצר קמפיין לפני אישור של מנהל/ת האתר.</p>
       </form>}
     </main>
@@ -226,9 +227,9 @@ export function CampaignApplicationVerificationPage() {
         <h1>{status === "success" ? "המייל אומת" : "אימות כתובת המייל"}</h1>
         <p>{message || "לחצו על הכפתור כדי להעביר את הבקשה לבדיקת צוות GoodRaise."}</p>
         {referenceCode && <p><strong>מספר בקשה: <span dir="ltr">{referenceCode}</span></strong></p>}
-        {status !== "success" && <button className="application-submit" type="button" onClick={verify} disabled={!token || status === "loading"}>
+        {status !== "success" && <Button className="application-submit" size="lg" onClick={verify} disabled={!token} busy={status === "loading"}>
           {status === "loading" ? "מאמתים…" : "אימות ושליחת הבקשה לבדיקה"}
-        </button>}
+        </Button>}
         {status === "success" && <a className="application-secondary-link" href="/">חזרה לדף הבית</a>}
       </section>
     </main>

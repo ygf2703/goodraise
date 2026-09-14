@@ -1,3 +1,5 @@
+import { Button, ButtonLink } from "./Button";
+
 export function AccountHomePanel() {
   return (<section id="account-home" className="account-home" hidden>
     <div className="account-home-heading">
@@ -34,8 +36,8 @@ export function AccountHomePanel() {
           <p>רק מנהלי האתר יכולים לאשר חשבונות ולשייך תפקידים לארגונים ולפרויקטים.</p>
         </div>
         <div className="site-access-heading-actions">
-          <a className="button-secondary action-button secondary" href="/admin/applications">בקשות לקמפיינים</a>
-          <button id="new-account-button" className="button-secondary action-button secondary" type="button">אישור משתמש חדש</button>
+          <ButtonLink variant="secondary" href="/admin/applications">בקשות לקמפיינים</ButtonLink>
+          <Button id="new-account-button" variant="secondary">אישור משתמש חדש</Button>
         </div>
       </div>
       <div id="account-management-status" className="status-note text-small" aria-live="polite"></div>
@@ -57,14 +59,14 @@ export function AccountHomePanel() {
           <div id="managed-memberships-shell">
             <div className="public-panel-header">
               <h3>שיוכים ותפקידים</h3>
-              <button id="add-membership-button" className="button-ghost" type="button">הוספת שיוך</button>
+              <Button id="add-membership-button" variant="ghost">הוספת שיוך</Button>
             </div>
             <div id="managed-memberships" className="managed-memberships"></div>
             <p className="text-small text-muted">מנהל/ת ארגון מקבל/ת גישה לכל הפרויקטים בארגון. שאר התפקידים משויכים לפרויקט מסוים.</p>
           </div>
           <div className="login-actions">
-            <button id="save-managed-account" className="button-primary action-button" type="submit">שמירת משתמש והרשאות</button>
-            <button id="cancel-managed-account" className="button-ghost" type="button">ביטול</button>
+            <Button id="save-managed-account" type="submit">שמירת משתמש והרשאות</Button>
+            <Button id="cancel-managed-account" variant="ghost">ביטול</Button>
           </div>
         </form>
       </div>
