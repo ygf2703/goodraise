@@ -14,7 +14,7 @@ Updated 2026-09-11 for the active product backlog, membership access, completed-
 8. [Platform migration](platform-migration.md): changes, compatibility and validation.
 9. [Engineering assessment](engineering-assessment.md): current limitations and next work.
 
-The [target architecture](target-architecture.md) records the chosen direction and remaining component/data migration work. The [performance investigation](performance-investigation.md) preserves the measured pre-migration baseline alongside current changes. The [2026-09-09 database rollout](database-rollout-2026-09-09.md) records the production migration, rehearsal and recovery snapshot.
+The [target architecture](target-architecture.md) records the chosen direction and remaining component/data migration work. The [performance investigation](performance-investigation.md) preserves the measured pre-migration baseline alongside current changes. The [2026-09-09 database rollout](database-rollout-2026-09-09.md) records migrations 001–003 and their rehearsal. The [2026-09-16 database rollout](database-rollout-2026-09-16.md) records migrations 004–007, the fresh recovery snapshot, owner-account verification and live API checks.
 
 ## Concepts
 

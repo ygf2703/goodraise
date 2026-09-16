@@ -1,17 +1,19 @@
 # GoodRaise product and engineering TODO
 
-Updated 2026-09-13. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
+Updated 2026-09-16. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
 
 ## Now: finish the current production rollout
 
-- [ ] Take or confirm a recoverable production database snapshot before changing the schema.
-- [ ] Apply migrations `004_completed_campaign_snapshots.sql`, `005_account_memberships.sql`, and `006_campaign_applications.sql` to the production Neon database.
-- [ ] Apply `007_site_admins.ts` through the Node migration runner, securely retain any generated production passwords, and verify both owner accounts can log in as global site admins.
-- [ ] Verify both migration names and checksums in `goodraise.schema_migrations`.
-- [ ] Verify `campaign_public_snapshots`, `admin_memberships`, `campaign_applications`, `campaign_application_events`, `admin_users.access_config_hash`, constraints, and indexes exist.
-- [ ] Backfill public snapshots for real campaigns that are already completed.
+- [x] Take or confirm a recoverable production database snapshot before changing the schema. Manual snapshot created 2026-09-15 at 20:56:21 UTC; see the [rollout record](database-rollout-2026-09-16.md).
+- [x] Apply migrations `004_completed_campaign_snapshots.sql`, `005_account_memberships.sql`, and `006_campaign_applications.sql` to the production Neon database.
+- [x] Apply `007_site_admins.ts` through the Node migration runner and verify both owner accounts are active global site admins. Existing IDs/passwords were preserved; no new passwords were generated.
+- [ ] Verify both owner accounts can log in and select projects using their existing production passwords.
+- [x] Verify both migration names and checksums in `goodraise.schema_migrations`; rerun the runner to confirm it skips already-applied migrations.
+- [x] Verify `campaign_public_snapshots`, `admin_memberships`, `campaign_applications`, `campaign_application_events`, `admin_users.access_config_hash`, constraints, and indexes exist.
+- [ ] Backfill public snapshots for real campaigns that are already completed. The 2026-09-16 production check found zero campaigns with status `completed` and zero snapshots.
 - [ ] Keep the three scraped Giveback placeholder campaigns limited to development or staging; do not seed them into production.
-- [ ] Verify production `/api/health`, `/api/auth/status`, `/api/public/campaigns`, login, project selection, and completed-campaign pages.
+- [x] Verify production `/api/health`, `/api/auth/status`, and `/api/public/campaigns`: all returned HTTP 200 after migration; health reported `ok: true`.
+- [ ] Verify production login, project selection, and completed-campaign pages end to end.
 - [ ] Configure `GOODRAISE_PUBLIC_URL`, `GOODRAISE_EMAIL_MODE=resend`, `GOODRAISE_RESEND_API_KEY`, and `GOODRAISE_EMAIL_FROM`, then verify applicant, admin-notification, approval and rejection messages from a deploy preview.
 - [ ] Confirm the contact recipients (`GOODRAISE_CONTACT_EMAILS`, defaults to Ran and Noam), verify real inbox delivery and Reply-To from a deploy preview, and confirm the inboxes are monitored. Local outbox tests do not verify real delivery.
 - [ ] Before opening the public contact form broadly, add/verify edge-level abuse protection for `/api/contact` (the application quotas are best-effort across simultaneous Netlify instances) and define cleanup/retention for rate-limit metadata and received messages. Consider a privacy/accessibility-reviewed CAPTCHA only if needed.
