@@ -40,10 +40,11 @@ assert.equal(appHeaders.length, 1, "The application must render one shared site 
 assert.deepEqual(appHeaders, homeHeaders, "The homepage and application must use the same header.");
 assert.ok(ids.has("session-status") && ids.has("logout-button"), "Manager account controls must remain available.");
 assert.doesNotMatch(appHeaders[0], /topbar-campaign-logo|topbar-logo/);
-for (const page of ["project", "prizes"]) {
-  assert.match(appHeaders[0], new RegExp(`<a[^>]*data-site-audience="manager"[^>]*data-page-target="${page}"[^>]*hidden`), `Hide ${page} navigation until manager authorization.`);
+assert.doesNotMatch(appHeaders[0], /data-page-target=/, "Campaign navigation must not appear in the global header.");
+assert.match(html, /<section[^>]*data-campaign-navigation[^>]*hidden/, "Hide local navigation until campaign authorization.");
+for (const page of ["admin", "project", "prizes"]) {
+  assert.match(html, new RegExp(`<a data-page-target="${page}" hidden`), `Do not expose unscoped ${page} links.`);
 }
-assert.match(appHeaders[0], /<a[^>]*data-site-audience="analyst"[^>]*data-page-target="admin"[^>]*hidden/, "Hide dashboard navigation until analyst authorization.");
 assert.match(appHeaders[0], /<a[^>]*data-site-audience="session"[^>]*href="\/admin"[^>]*hidden/, "Hide the account portfolio until authentication.");
 assert.match(appHeaders[0], /<a[^>]*data-site-audience="site-admin"[^>]*href="\/admin\/users"[^>]*hidden/, "Hide account management until site-admin authorization.");
 const footer = html.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || "";
@@ -57,7 +58,7 @@ assert.doesNotMatch(footer, /שותפים לדרך|data-placeholder|<dialog/);
 assert.match(html, /<main id="main"[^>]*tabindex="-1"/);
 const homeFooter = homepage.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || "";
 assert.equal(footer, homeFooter, "The homepage and application must use the same footer.");
-for (const asset of ["assets/site-header.css", "assets/site-header.js", "assets/buttons.css"]) {
+for (const asset of ["assets/site-header.css", "assets/site-header.js", "assets/buttons.css", "assets/action-feedback.js", "assets/page-feedback.js", "assets/page-feedback.css"]) {
   assert.ok(files.includes(asset), `Missing shared header asset: ${asset}`);
 }
 for (const page of [html, homepage]) assert.match(page, /href="\/assets\/buttons\.css"/, "Every application shell must load the shared button styles.");

@@ -1,7 +1,8 @@
 import { createRoot, hydrateRoot } from "react-dom/client";
-import { App } from "./App";
+import { ApplicationRouter } from "./ApplicationRouter";
 import "./styles/dashboard.css";
 import "./styles/help.css";
+import "../../../work/assets/page-feedback.css";
 import { requestSession } from "./auth-gate";
 import { getCampaignApplicationRoute, getPublicArchiveRoute, getPublicHelpRoute } from "./platform";
 
@@ -18,7 +19,7 @@ if (fonts) {
 
 const root = document.getElementById("app");
 if (!root) throw new Error("The application root is missing.");
-if (archiveRoute) createRoot(root).render(<App archiveRoute={archiveRoute} />);
-else if (applicationRoute) createRoot(root).render(<App applicationRoute={applicationRoute} />);
-else if (helpRoute) createRoot(root).render(<App helpRoute={helpRoute} />);
-else hydrateRoot(root, <App sessionRequest={sessionRequest} />);
+if (archiveRoute) createRoot(root).render(<ApplicationRouter archiveRoute={archiveRoute} />);
+else if (applicationRoute) createRoot(root).render(<ApplicationRouter applicationRoute={applicationRoute} />);
+else if (helpRoute) createRoot(root).render(<ApplicationRouter helpRoute={helpRoute} />);
+else hydrateRoot(root, <ApplicationRouter sessionRequest={sessionRequest} />);

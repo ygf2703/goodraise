@@ -1,5 +1,8 @@
 import { requestJson } from "./api";
 import { authConfig } from "./platform";
+import { mountProjectNavigation } from "./project-navigation";
+import { setButtonBusy } from "../../../work/assets/action-feedback.js";
+import { beginPageBusy } from "../../../work/assets/page-feedback.js";
 
 export interface AccountMembership {
   organizationId: string;
@@ -95,33 +98,56 @@ function appendProjectCard(container: HTMLElement, campaign: AccessibleCampaign)
   const role = document.createElement("span");
   role.className = "account-project-role";
   role.textContent = roleLabels[campaign.accessRole || "viewer"] || roleLabels.viewer;
-  link.append(status, title, organization, role);
+  // The card is one accessible link; the shared button styling makes its action
+  // explicit without nesting another interactive control inside the anchor.
+  const action = document.createElement("span");
+  action.className = "account-project-action gr-button gr-button--primary gr-button--sm";
+  action.textContent = getProjectActionLabel(campaign);
+  link.append(status, title, organization, role, action);
   container.append(link);
+  return link;
 }
 
 export function getProjectDestination(campaign: AccessibleCampaign) {
   return projectHref(campaign);
 }
 
-export function mountAccountHome(root: HTMLElement, session: AccountSession, signal: AbortSignal) {
+export function getProjectActionLabel(campaign: AccessibleCampaign) {
+  if (campaign.accessRole === "viewer") return campaign.status === "completed" ? "צפייה בסיכום הקמפיין" : "צפייה בקמפיין";
+  return campaign.accessRole === "analyst" ? "צפייה בנתוני הקמפיין" : "ניהול הקמפיין";
+}
+
+export function mountAccountHome(root: HTMLElement, session: AccountSession, signal: AbortSignal, page: "projects" | "users" = "projects", onReady = () => {}) {
   const element = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
+  const manageUsers = page === "users" && session.permissions?.manageUsers === true;
+  element("account-home-kicker").textContent = manageUsers ? "ניהול האתר" : "החשבון שלי";
+  element("account-home-title").textContent = manageUsers ? "משתמשים והרשאות" : "הפרויקטים שלי";
+  element("account-home-description").textContent = manageUsers
+    ? "כאן מאשרים חשבונות ומגדירים גישה לארגונים ולפרויקטים."
+    : "בחרו פרויקט כדי לפתוח את אזור הניהול שלו. פרויקטים שהסתיימו מופיעים בנפרד בהמשך.";
+  element("account-active-projects").hidden = manageUsers;
+  element("account-completed-projects").hidden = manageUsers;
   const active = (session.accessibleCampaigns || []).filter((campaign) => campaign.status !== "completed");
   const completed = (session.accessibleCampaigns || []).filter((campaign) => campaign.status === "completed");
   const activeList = element("active-projects-list");
   const completedList = element("completed-projects-list");
   activeList.replaceChildren();
   completedList.replaceChildren();
-  active.forEach((campaign) => appendProjectCard(activeList, campaign));
-  completed.forEach((campaign) => appendProjectCard(completedList, campaign));
+  const cards = [
+    ...active.map((campaign) => appendProjectCard(activeList, campaign)),
+    ...completed.map((campaign) => appendProjectCard(completedList, campaign)),
+  ];
+  const resetNavigation = mountProjectNavigation(cards, element("project-navigation-status"), signal);
   element("active-projects-count").textContent = String(active.length);
   element("completed-projects-count").textContent = String(completed.length);
   element("active-projects-empty").hidden = active.length > 0;
   element("completed-projects-empty").hidden = completed.length > 0;
 
   const management = element("site-access-management");
-  if (!session.permissions?.manageUsers) {
+  if (!manageUsers) {
     management.hidden = true;
-    return () => {};
+    onReady();
+    return resetNavigation;
   }
   management.hidden = false;
 
@@ -135,6 +161,9 @@ export function mountAccountHome(root: HTMLElement, session: AccountSession, sig
   const status = element("account-management-status");
   let data: AccountManagementPayload = { users: [], organizations: [] };
   let editingEmail = "";
+  let saving = false;
+  let endSave: (() => void) | undefined;
+  signal.addEventListener("abort", () => endSave?.(), { once: true });
 
   const setStatus = (message: string, tone = "") => {
     status.textContent = message;
@@ -196,6 +225,7 @@ export function mountAccountHome(root: HTMLElement, session: AccountSession, sig
   siteAdminInput.addEventListener("change", toggleSiteAdmin, { signal });
 
   const resetForm = () => {
+    if (saving) return;
     editingEmail = "";
     form.reset();
     activeInput.checked = true;
@@ -207,6 +237,7 @@ export function mountAccountHome(root: HTMLElement, session: AccountSession, sig
   };
 
   const editAccount = (account: ManagedAccount) => {
+    if (saving) return;
     editingEmail = account.email;
     emailInput.value = account.email;
     emailInput.readOnly = true;
@@ -239,13 +270,13 @@ export function mountAccountHome(root: HTMLElement, session: AccountSession, sig
     }
   };
 
-  const loadAccounts = async () => {
+  const loadAccounts = async (reset = true) => {
     setStatus("טוענים משתמשים והרשאות…");
     const { response, payload } = await requestJson<AccountManagementPayload & { message?: string }>(authConfig.accountsEndpoint, {}, signal);
     if (!response.ok) throw new Error(payload.message || "טעינת המשתמשים נכשלה.");
     data = payload;
     renderAccounts();
-    resetForm();
+    if (reset) resetForm();
     setStatus("");
   };
 
@@ -254,8 +285,12 @@ export function mountAccountHome(root: HTMLElement, session: AccountSession, sig
   element("add-membership-button").addEventListener("click", () => addMembershipRow(), { signal });
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (saving) return;
+    saving = true;
+    endSave = beginPageBusy("שומרים משתמש והרשאות…");
     const submit = element<HTMLButtonElement>("save-managed-account");
-    submit.disabled = true;
+    setButtonBusy(submit, true, "שומרים…", "שמירת משתמש והרשאות");
+    let saved = false;
     try {
       const memberships = [...membershipsContainer.querySelectorAll<HTMLElement>(".managed-membership-row")].map((row) => {
         const selects = row.querySelectorAll<HTMLSelectElement>("select");
@@ -275,17 +310,25 @@ export function mountAccountHome(root: HTMLElement, session: AccountSession, sig
         },
       }, signal);
       if (!response.ok) throw new Error(payload.message || "שמירת המשתמש נכשלה.");
-      await loadAccounts();
+      saved = true;
+      await loadAccounts(false);
+      saving = false;
+      resetForm();
       setStatus(payload.message || "המשתמש נשמר.", "success");
     } catch (error) {
-      if (!signal.aborted) setStatus(error instanceof Error ? error.message : "שמירת המשתמש נכשלה.", "error");
+      if (!signal.aborted) setStatus(saved
+        ? "המשתמש נשמר, אך רענון הרשימה נכשל. אין צורך לשמור שוב; רעננו את העמוד."
+        : error instanceof Error ? error.message : "שמירת המשתמש נכשלה.", saved ? "warning" : "error");
     } finally {
-      submit.disabled = false;
+      saving = false;
+      setButtonBusy(submit, false, "שומרים…", "שמירת משתמש והרשאות");
+      endSave?.();
+      endSave = undefined;
     }
   }, { signal });
 
   void loadAccounts().catch((error) => {
     if (!signal.aborted) setStatus(error instanceof Error ? error.message : "טעינת המשתמשים נכשלה.", "error");
-  });
-  return () => {};
+  }).finally(() => { if (!signal.aborted) onReady(); });
+  return resetNavigation;
 }

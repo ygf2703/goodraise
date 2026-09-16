@@ -24,7 +24,7 @@ html { scroll-padding-top: 105px; }
 .site-header-nav { display: flex; gap: 32px; align-items: center; margin-inline-start: auto; font-size: 17px; font-weight: 600; }
 .site-header-nav a { padding-block: 12px; }
 .site-header-nav a:hover, .site-header-login:hover { color: #075eb5; }
-.site-header-nav a.is-active { color: #075eb5; box-shadow: inset 0 -2px #075eb5; }
+.site-header-nav a[aria-current="page"], .site-header-login[aria-current="page"] { color: #075eb5; font-weight: 800; box-shadow: inset 0 -3px currentColor; }
 .site-header-error { max-width: 160px; font-size: 14px; color: #a32828; }
 .site-header-actions { display: flex; gap: 24px; align-items: center; font-size: 17px; font-weight: 700; }
 .site-header .site-header-toggle { display: none; }
@@ -62,6 +62,7 @@ html { scroll-padding-top: 105px; }
   .site-header-nav { display: none; order: 4; width: 100%; margin: 0; flex-direction: column; align-items: stretch; gap: 0; padding-bottom: 15px; }
   .site-header-nav.is-open { display: flex; }
   .site-header-nav a { padding: 10px; border-top: 1px solid #dce5ed; }
+  .site-header-nav a[aria-current="page"] { background: #eaf3fc; border-inline-start: 3px solid currentColor; box-shadow: none; }
   .site-header-mobile-login { display: block; }
   .footer .container { width: calc(100% - 40px); }
   .footer-main { grid-template-columns: repeat(3, 1fr); gap: 36px 20px; padding-block: 42px; }

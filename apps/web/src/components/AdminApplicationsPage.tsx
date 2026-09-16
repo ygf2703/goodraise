@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { requestJson } from "../api";
 import { requestSession, type ManagerSession } from "../auth-gate";
@@ -6,6 +6,8 @@ import { Header } from "./Header";
 import { SiteFooter } from "./SiteFooter";
 import { SkipLink } from "./SkipLink";
 import { Button, ButtonLink } from "./Button";
+import { useRouteLifecycle } from "../route-lifecycle";
+import { beginPageBusy, navigateSite } from "../../../../work/assets/page-feedback.js";
 
 interface CampaignApplication {
   id: string;
@@ -70,6 +72,10 @@ function formatDate(value: string) {
 }
 
 export function AdminApplicationsPage() {
+  const route = useRouteLifecycle();
+  const decisionPending = useRef(false);
+  const decisionAbort = useRef<AbortController | null>(null);
+  const endDecision = useRef<(() => void) | null>(null);
   const [session, setSession] = useState<ManagerSession | null>(null);
   const [applications, setApplications] = useState<CampaignApplication[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
@@ -78,14 +84,17 @@ export function AdminApplicationsPage() {
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [organizationSelections, setOrganizationSelections] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState("");
+  const [busyAction, setBusyAction] = useState("");
+  const [decisionMessage, setDecisionMessage] = useState<{ id: string; text: string; error: boolean } | null>(null);
   const [filter, setFilter] = useState("pending");
 
   useEffect(() => {
+    if (route.paused) return;
     const abort = new AbortController();
     void requestSession(abort.signal).then(async ({ response, payload }) => {
       if (!response.ok || !payload.authenticated) {
         const returnTo = `${window.location.pathname}${window.location.search}`;
-        window.location.replace(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+        navigateSite(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replace: true });
         return;
       }
       setSession(payload);
@@ -106,13 +115,16 @@ export function AdminApplicationsPage() {
         setMessage(error instanceof Error ? error.message : "טעינת הבקשות נכשלה.");
       }
     });
-    return () => abort.abort();
-  }, []);
+    return () => { abort.abort(); decisionAbort.current?.abort(); endDecision.current?.(); };
+  }, [route.paused]);
+
+  useEffect(() => { if (!route.paused && status !== "loading") route.ready(); }, [status, route.paused, route.ready]);
 
   const visible = useMemo(() => applications.filter((application) => filter === "all"
     || (filter === "pending" ? ["submitted", "under_review"].includes(application.status) : application.status === filter)), [applications, filter]);
 
   const decide = async (application: CampaignApplication, action: "approve" | "reject") => {
+    if (decisionPending.current) return;
     const reviewNote = notes[application.id]?.trim() || "";
     if (action === "reject" && reviewNote.length < 3) {
       setMessage("כדי לדחות בקשה יש להוסיף הסבר קצר בשדה ההערה.");
@@ -122,20 +134,36 @@ export function AdminApplicationsPage() {
       ? `לאשר את ${application.referenceCode}? הפעולה תיצור ארגון, טיוטת קמפיין וגישת מנהל/ת ארגון.`
       : `לדחות את ${application.referenceCode}?`;
     if (!window.confirm(confirmation)) return;
+    decisionPending.current = true;
+    const abort = new AbortController();
+    decisionAbort.current = abort;
+    endDecision.current = beginPageBusy(action === "approve" ? "מאשרים ופותחים טיוטה…" : "שומרים את הדחייה…");
     setBusyId(application.id);
+    setBusyAction(action);
+    setDecisionMessage(null);
     setMessage(action === "approve" ? "יוצרים את הקמפיין והגישה…" : "שומרים את ההחלטה…");
     try {
       const { response, payload } = await requestJson<{ application?: CampaignApplication; message?: string; emailDelivered?: boolean }>(
         `/api/admin/applications/${encodeURIComponent(application.id)}/decision`,
-        { method: "POST", body: { action, reviewNote, organizationId: organizationSelections[application.id] || "" } },
+        { method: "POST", body: { action, reviewNote, organizationId: organizationSelections[application.id] || "" } }, abort.signal,
       );
       if (!response.ok || !payload.application) throw new Error(payload.message || "שמירת ההחלטה נכשלה.");
       setApplications((current) => current.map((item) => item.id === application.id ? payload.application! : item));
-      setMessage(`${payload.message || "ההחלטה נשמרה."}${payload.emailDelivered === false ? " מייל העדכון למגיש/ה לא נשלח ויש ליצור קשר ידנית." : ""}`);
+      const result = `${application.referenceCode}: ${payload.message || "ההחלטה נשמרה."}${payload.emailDelivered === false ? " מייל העדכון למגיש/ה לא נשלח ויש ליצור קשר ידנית." : ""}`;
+      setMessage(result);
+      setDecisionMessage({ id: application.id, text: result, error: false });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "שמירת ההחלטה נכשלה.");
+      if (!abort.signal.aborted) {
+        const result = error instanceof Error ? error.message : "שמירת ההחלטה נכשלה.";
+        setMessage(result);
+        setDecisionMessage({ id: application.id, text: result, error: true });
+      }
     } finally {
+      endDecision.current?.();
+      endDecision.current = null;
+      decisionPending.current = false;
       setBusyId("");
+      setBusyAction("");
     }
   };
 
@@ -184,7 +212,8 @@ export function AdminApplicationsPage() {
               {!!application.publicLinks.length && <div className="admin-application-links">{application.publicLinks.map((link) => <a href={link} target="_blank" rel="noreferrer" key={link}>קישור מצורף</a>)}</div>}
             </section>
             {application.notificationError && !application.adminNotifiedAt && <p className="admin-application-warning">הודעת המייל למנהלי האתר נכשלה: {application.notificationError}</p>}
-            {reviewable ? <div className="admin-application-review">
+            {decisionMessage?.id === application.id && <p role="status" className={decisionMessage.error ? "admin-application-warning" : "admin-application-decision"}>{decisionMessage.text}</p>}
+            {reviewable ? <fieldset disabled={Boolean(busyId)} className="admin-application-review">
               <div className="admin-application-review-fields">
                 <label>שיוך ארגוני באישור
                   <select value={organizationSelections[application.id] || ""} onChange={(event) => setOrganizationSelections((current) => ({ ...current, [application.id]: event.target.value }))}>
@@ -197,10 +226,10 @@ export function AdminApplicationsPage() {
                 </label>
               </div>
               <div>
-                <Button busy={busyId === application.id} onClick={() => void decide(application, "approve")}>אישור ופתיחת טיוטה</Button>
-                <Button variant="danger" busy={busyId === application.id} onClick={() => void decide(application, "reject")}>דחיית הבקשה</Button>
+                <Button busy={busyId === application.id && busyAction === "approve"} onClick={() => void decide(application, "approve")}>{busyId === application.id && busyAction === "approve" ? "מאשרים…" : "אישור ופתיחת טיוטה"}</Button>
+                <Button variant="danger" busy={busyId === application.id && busyAction === "reject"} onClick={() => void decide(application, "reject")}>{busyId === application.id && busyAction === "reject" ? "שומרים…" : "דחיית הבקשה"}</Button>
               </div>
-            </div> : <footer className="admin-application-decision">
+            </fieldset> : <footer className="admin-application-decision">
               <strong>{statusLabels[application.status] || application.status}</strong>
               {application.reviewNote && <span>{application.reviewNote}</span>}
               {application.approvedOrganizationId && application.approvedCampaignId && <a href={`/admin?organizationId=${encodeURIComponent(application.approvedOrganizationId)}&campaignId=${encodeURIComponent(application.approvedCampaignId)}`}>פתיחת טיוטת הקמפיין</a>}

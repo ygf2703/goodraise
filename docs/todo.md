@@ -2,6 +2,19 @@
 
 Updated 2026-09-16. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
 
+## Logged-in UX: one small change at a time
+
+- [x] Clarify the current page: keep the post-login URL, browser title and active menu item aligned; separate My Projects from Users & Permissions. My Projects no longer requests the admin account list. Implemented locally; deployment pending.
+- [x] Add shared spinner styling and pending labels to login/setup, logout and project-opening actions, prevent duplicate requests/navigation, restore retry after auth failures, and preserve new-tab/Back behavior. Implemented locally; deployment pending.
+- [x] Apply a shared, centered loading overlay to login/logout, managed-page transitions, user saving and application decisions; block conflicting input, preserve failed-form values and distinguish successful saving from a failed list refresh. Implemented locally; deployment pending.
+- [x] Keep managed navigation inside the current document; prepare the next view off-document, retain the previous page under the overlay and reveal the destination only after its data loads. Preserve native new-tab links and the existing single-request campaign/prize switch.
+- [x] Separate global navigation from campaign navigation: project cards expose role-appropriate actions; selected campaigns show their name, local management/project/prizes links and a working return to My Projects. Explicit portfolio links show the selector even with one project. Implemented locally; deployment pending.
+- [ ] Review each authenticated page in order: My Projects → campaign dashboard → project/prizes → Users & Permissions → campaign applications. Include empty/error/loading states, keyboard navigation and mobile reflow.
+- [ ] Measure cold/warm page loads before optimizing: session/portfolio requests, account/application requests, campaign payloads, database time and browser rendering. Remove duplicate work based on measurements.
+- [ ] Correct the Node static-server cache rule: its broad hyphenated-name matcher treats stable `site-header.css`/`.js` filenames as immutable. Version shared assets and revalidate non-fingerprinted files; verify previously cached clients receive updates. Browser review encountered old header styles even after a normal reload.
+- [ ] Recheck mobile overflow on My Projects and the application-review page, plus shared-header styles with fresh assets; keep layout changes separate from the navigation fix.
+- [ ] Fix existing horizontal overflow inside campaign/prize report content at narrow mobile widths. The main grid now keeps campaign navigation within the viewport, but the wide report content still needs its own responsive review.
+
 ## Now: finish the current production rollout
 
 - [x] Take or confirm a recoverable production database snapshot before changing the schema. Manual snapshot created 2026-09-15 at 20:56:21 UTC; see the [rollout record](database-rollout-2026-09-16.md).

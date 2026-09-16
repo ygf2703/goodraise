@@ -119,6 +119,12 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   gap: var(--space-5);
 }
 
+/* Wide campaign reports must not stretch sibling navigation beyond the viewport. */
+#goodraise-root .app-content {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
 #goodraise-root .admin-session-bar {
   display: none;
 }
@@ -2989,6 +2995,94 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   }
 }
 
+#goodraise-root .campaign-navigation {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: white;
+  box-shadow: var(--shadow-card);
+}
+
+#goodraise-root .campaign-navigation[hidden],
+#goodraise-root .campaign-navigation-links a[hidden] {
+  display: none;
+}
+
+#goodraise-root .campaign-navigation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+}
+
+#goodraise-root .campaign-navigation-heading > div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+#goodraise-root .campaign-navigation-label {
+  color: var(--graphite);
+  font-size: 0.875rem;
+}
+
+#goodraise-root [data-campaign-name] {
+  color: var(--navy-950);
+  font-size: clamp(1.2rem, 3vw, 1.6rem);
+  overflow-wrap: anywhere;
+}
+
+#goodraise-root .campaign-navigation-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  color: var(--gr-action-ink);
+  font-weight: 700;
+  text-underline-offset: 4px;
+}
+
+#goodraise-root .campaign-navigation-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border-light);
+  padding-top: var(--space-3);
+}
+
+#goodraise-root .campaign-navigation-links a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--navy-950);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+#goodraise-root .campaign-navigation-links a:hover {
+  background: var(--gr-action-hover-surface);
+}
+
+#goodraise-root .campaign-navigation-links a.is-active {
+  color: var(--gr-action-ink);
+  background: var(--gr-action-hover-surface);
+  border-color: currentColor;
+}
+
+#goodraise-root .campaign-navigation a:focus-visible,
+#goodraise-root .account-project-card:focus-visible {
+  outline: 3px solid var(--gr-action-focus);
+  outline-offset: 3px;
+}
+
 #goodraise-root .account-home {
   display: grid;
   gap: var(--space-6);
@@ -2997,7 +3091,9 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   padding: var(--space-7) var(--space-5) var(--space-8);
 }
 
-#goodraise-root .account-home[hidden] {
+#goodraise-root .account-home[hidden],
+#goodraise-root .account-project-section[hidden],
+#goodraise-root .site-access-management[hidden] {
   display: none;
 }
 
@@ -3073,6 +3169,12 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   background: rgba(255, 214, 41, 0.24);
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+#goodraise-root .account-project-action {
+  justify-self: start;
+  align-self: end;
+  margin-top: var(--space-3);
 }
 
 #goodraise-root .account-project-role {
@@ -3677,6 +3779,9 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 #goodraise-application-root .admin-application-review {
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 18px;

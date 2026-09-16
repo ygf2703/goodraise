@@ -3,7 +3,10 @@ import defaultCampaign from '../default-campaign.json';
 import { authConfig, getInitialPage, getCampaignRoute, getCampaignViewEndpoint } from '../platform';
 import { migrateBrowserStorage } from '../storage';
 import { requestJson } from '../api';
-import { canAccessManagerPages, setSiteSession, logoutSiteSession } from '../../../../work/assets/site-header.js';
+import { canAccessManagerPages, setSiteSession, bindLogoutButton, setSitePage } from '../../../../work/assets/site-header.js';
+import { beginPageBusy } from '../../../../work/assets/page-feedback.js';
+import { setButtonBusy } from '../../../../work/assets/action-feedback.js';
+import { renderCampaignNavigation } from '../campaign-navigation';
 
 /** Existing campaign controls, scoped to one React mount. Dynamic chart/table containers
  * are owned by this adapter until they are converted to individual React components. */
@@ -38,6 +41,7 @@ const elements = {
   loginCampaignLogo: root.querySelector("#login-campaign-logo"),
   loginOrgLogo: root.querySelector("#login-org-logo"),
   navButtons: Array.from(root.querySelectorAll("[data-page-target]")),
+  campaignNavigation: root.querySelector("[data-campaign-navigation]"),
   metricButtons: Array.from(root.querySelectorAll("[data-metric-select]")),
   pageProject: root.querySelector("#page-project"),
   pagePrizes: root.querySelector("#page-prizes"),
@@ -2366,17 +2370,6 @@ function applyServerScope(payload = {}, fallbackScope = getActiveCampaignIdentit
   };
   if (hasSummaries) state.auth.accessibleCampaigns = summaries;
   syncActiveCampaignRegistryWithScope(state.auth.currentScope);
-  // Real links also retain the selected campaign when opened in another tab.
-  root.querySelectorAll(".site-header [data-page-target]").forEach((link) => {
-    const url = new URL(`/${link.dataset.pageTarget}`, window.location.origin);
-    if (organizationId && campaignId) {
-      url.searchParams.set("organizationId", organizationId);
-      url.searchParams.set("campaignId", campaignId);
-    }
-    const ambassador = getCampaignRoute(window.location.href).ambassadorSlug;
-    if (ambassador) url.searchParams.set("ambassador", ambassador);
-    link.href = `${url.pathname}${url.search}`;
-  });
 }
 
 function buildScopeFromCampaignSummary(summary = {}) {
@@ -2568,9 +2561,9 @@ function setAuthenticatedSession(payload) {
   }
 }
 
-function clearSessionState() {
+function clearSessionState({ publish = true } = {}) {
   state.session = null;
-  setSiteSession(null);
+  if (publish) setSiteSession(null);
   state.auth.campaignAccessError = "";
   state.auth.accessibleCampaigns = [];
   state.auth.publicScope = {
@@ -2638,7 +2631,7 @@ async function authRequest(endpoint, options = {}) {
 }
 
 async function hydrateAuthSession(session = null, campaignData = null) {
-  clearSessionState();
+  clearSessionState({ publish: !session });
   if (!canUseBackendAuth()) {
     state.auth.backendAvailable = false;
     setLoginMessage(getLocalAdminEntryHint(), "warning");
@@ -2681,8 +2674,10 @@ async function hydrateAuthSession(session = null, campaignData = null) {
       }
       syncSourceAutoRefresh();
     }
-  } catch (_error) {
+  } catch (error) {
+    if (signal.aborted) return;
     state.auth.backendAvailable = false;
+    throw error;
   }
   renderSourceConfigControls();
 }
@@ -3305,30 +3300,29 @@ function setPage(page) {
   Object.entries(pageMap).forEach(([key, element]) => {
     element.classList.toggle("is-active", key === nextPage);
   });
-  elements.navButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.pageTarget === nextPage);
-    if (button.dataset.pageTarget === nextPage) button.setAttribute("aria-current", "page");
-    else button.removeAttribute("aria-current");
-  });
   refreshAccessUi();
+  setSitePage(nextPage);
 }
 
 let navigationRevision = 0;
 async function navigateToPage(page, { updateHistory = false } = {}) {
-  const revision = ++navigationRevision;
-  const publicPage = page === "project" || page === "prizes";
-  // Revalidate the selected campaign in one request without rebooting the app.
-  if (publicPage) {
-    const loaded = await loadPublicDataset(getActiveCampaignIdentity(), { preferRequestedScope: updateHistory, isCurrent: () => revision === navigationRevision }).catch(() => false);
-    if (revision !== navigationRevision) return;
-    if (!loaded) { renderAll(); return; }
-  }
-  if (updateHistory) {
-    const link = root.querySelector(`.site-header [data-page-target="${page}"]`);
-    window.history.pushState(null, "", link?.getAttribute("href") || `/${page}`);
-  }
-  setPage(page);
-  renderAll();
+  const endLoading = beginPageBusy("טוענים את העמוד…");
+  try {
+    const revision = ++navigationRevision;
+    const publicPage = page === "project" || page === "prizes";
+    // Revalidate the selected campaign in one request without rebooting the app.
+    if (publicPage) {
+      const loaded = await loadPublicDataset(getActiveCampaignIdentity(), { preferRequestedScope: updateHistory, isCurrent: () => revision === navigationRevision }).catch(() => false);
+      if (signal.aborted || revision !== navigationRevision) return;
+      if (!loaded) { renderAll(); return; }
+    }
+    if (updateHistory) {
+      const link = elements.campaignNavigation.querySelector(`[data-page-target="${page}"]`);
+      window.history.pushState(null, "", link?.getAttribute("href") || `/${page}`);
+    }
+    setPage(page);
+    renderAll();
+  } finally { endLoading(); }
 }
 
 function setAdminTab(tab) {
@@ -3375,6 +3369,14 @@ function refreshAccessUi() {
   const hasAccess = isManager && !state.auth.campaignAccessError;
   const isAdminPage = state.ui.page === "admin";
   const isCompleted = getActiveCampaignStatus() === "completed";
+  renderCampaignNavigation(elements.campaignNavigation, {
+    authorized: hasAccess,
+    canAnalyze: canAnalyzeCampaign(),
+    page: state.ui.page,
+    scope: state.auth.currentScope,
+    campaignName: getActiveCampaignIdentity().campaignName,
+    ambassadorSlug: getCampaignRoute(window.location.href).ambassadorSlug,
+  });
   elements.sessionStatus.textContent = state.session ? `מחובר/ת: ${state.session.email}` : "מצב ניהול: אורח/ת";
   elements.sessionStatus.hidden = !isAdminPage;
   elements.logoutButton.hidden = !state.session;
@@ -7785,17 +7787,17 @@ function bindEvents() {
     });
   }
 
-  listen(elements.logoutButton, "click", async () => {
-    try {
-      await logoutSiteSession();
-    } catch (_error) {
+  bindLogoutButton(elements.logoutButton, {
+    signal,
+    onError: () => {
       setLoginMessage("ההתנתקות נכשלה. נסו שוב.", "error");
       setImportMessage("ההתנתקות נכשלה. נסו שוב.", "error");
-    }
+    },
   });
 
   listen(elements.loginForm, "submit", async (event) => {
     event.preventDefault();
+    if (elements.loginButton.disabled) return;
     if (!canUseBackendAuth()) {
       setLoginMessage(getLocalAdminEntryHint(), "error");
       return;
@@ -7820,6 +7822,8 @@ function bindEvents() {
       setLoginMessage("אימות הסיסמה לא תואם.", "error");
       return;
     }
+    const endLoading = beginPageBusy("מתחברים…");
+    setButtonBusy(elements.loginButton, true, "מתחברים…", "כניסה לחשבון");
     try {
       const endpoint = state.auth.setupMode ? AUTH_CONFIG.setupEndpoint : AUTH_CONFIG.loginEndpoint;
       const { response, payload } = await authRequest(endpoint, {
@@ -7858,6 +7862,9 @@ function bindEvents() {
     } catch (_error) {
       state.auth.backendAvailable = false;
       setLoginMessage("שירות הניהול אינו זמין כרגע. נסו שוב בעוד רגע.", "error");
+    } finally {
+      endLoading();
+      setButtonBusy(elements.loginButton, false, "", state.auth.setupMode ? "שמירת סיסמה וכניסה" : "כניסה לחשבון");
     }
   });
 
@@ -8238,10 +8245,12 @@ try {
   setPage(getInitialPage(window.location.pathname));
   renderAll();
   await hydrateAuthSession(initialSession, initialCampaignData);
+  if (signal.aborted) return;
   // Campaign data is loaded only after the server confirms manager access.
   if (isManagerAuthenticated() && !state.auth.adminDatasetLoaded && state.auth.publicDatasetStatus === "pending") {
     await loadPublicDataset().catch(() => false);
   }
+  if (signal.aborted) return;
   applyAmbassadorContextFromUrl();
   setPage(getInitialPage(window.location.pathname, isManagerAuthenticated()));
   if (state.ui.page === "admin") setAdminTab(state.ui.adminTab);

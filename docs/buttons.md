@@ -18,7 +18,19 @@ Choose `size="sm"` for compact/header actions (44 px minimum height), default `m
 <ButtonLink href="/contact" size="lg">בואו נדבר</ButtonLink>
 ```
 
-`Button` defaults to `type="button"`, so incidental actions never submit forms. `busy` sets native `disabled` and `aria-busy`; disabled fieldsets are also respected. `ButtonLink` stays a real anchor for navigation and open-in-new-tab behavior. Its optional `disabled` removes the destination/tab stop and blocks click handling. Preserve IDs/data attributes used by the existing controllers. Native refs are forwarded as React 19 props.
+`Button` defaults to `type="button"`, so incidental actions never submit forms. `busy` sets native `disabled` and `aria-busy`; disabled fieldsets are also respected. Busy buttons show the shared CSS spinner (static under reduced motion). Use a specific pending label such as “שומרים…” as well. Imperative controls use `setButtonBusy` from `work/assets/action-feedback.js` for the same appearance and semantics. `ButtonLink` stays a real anchor for navigation and open-in-new-tab behavior. Its optional `disabled` removes the destination/tab stop and blocks click handling. Preserve IDs/data attributes used by the existing controllers. Native refs are forwarded as React 19 props.
+
+Login keeps its pending state through authentication, portfolio loading and redirects, and restores the appropriate login/setup label on failure. All logout controls use `bindLogoutButton`; simultaneous surfaces share a single request, failures restore retry, and success stays pending until redirect. Project cards preserve their native destinations and modified/new-tab clicks, show a spinner and live status for same-tab navigation, suppress duplicate same-tab activation, and reset when restored with browser Back.
+
+For blocking work, use `beginPageBusy(label)` from `work/assets/page-feedback.js`
+and call its returned cleanup in `finally` (or route disposal). It displays one
+fixed, centered overlay, makes the app inert, preserves scrollbar space, restores
+focus and respects reduced motion. Each operation owns its own cleanup, so one
+completed request cannot hide another request's progress. Managed navigation uses
+this overlay instead of relying on a briefly visible project-card spinner. User
+saving and approve/reject actions keep the current page beneath it; only the
+selected decision button is busy. Saving success and list-refresh failure are
+reported separately, and decision messages identify the application.
 
 The static homepage uses the same classes: `gr-button gr-button--primary gr-button--lg`. Existing dashboard templates may retain `button-primary`, `button-secondary`, `button-ghost`, and `action-button` (`secondary` modifier supported): these are aliases in the shared stylesheet, not separate designs. Use the component/classes above for new work.
 

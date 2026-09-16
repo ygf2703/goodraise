@@ -4,13 +4,14 @@ export function AccountHomePanel() {
   return (<section id="account-home" className="account-home" hidden>
     <div className="account-home-heading">
       <div>
-        <span className="brand-kicker">החשבון שלי</span>
-        <h1>הפרויקטים שלי</h1>
-        <p>הגישה לכל פרויקט נקבעת לפי התפקיד שהוגדר עבורך על ידי מנהלי האתר.</p>
+        <span id="account-home-kicker" className="brand-kicker">החשבון שלי</span>
+        <h1 id="account-home-title" tabIndex={-1}>הפרויקטים שלי</h1>
+        <p id="account-home-description">הגישה לכל פרויקט נקבעת לפי התפקיד שהוגדר עבורך על ידי מנהלי האתר.</p>
       </div>
     </div>
 
-    <section className="account-project-section" aria-labelledby="active-projects-title">
+    <div id="project-navigation-status" role="status" aria-live="polite"></div>
+    <section id="account-active-projects" className="account-project-section" aria-labelledby="active-projects-title">
       <div className="public-panel-header">
         <h2 id="active-projects-title">פרויקטים פעילים</h2>
         <span id="active-projects-count" className="status-chip"></span>
@@ -19,7 +20,7 @@ export function AccountHomePanel() {
       <p id="active-projects-empty" className="account-empty" hidden>אין כרגע פרויקטים פעילים המשויכים לחשבון.</p>
     </section>
 
-    <section className="account-project-section" aria-labelledby="completed-projects-title">
+    <section id="account-completed-projects" className="account-project-section" aria-labelledby="completed-projects-title">
       <div className="public-panel-header">
         <h2 id="completed-projects-title">פרויקטים שהסתיימו</h2>
         <span id="completed-projects-count" className="status-chip"></span>

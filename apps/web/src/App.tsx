@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { DashboardLayout } from "./components/DashboardLayout";
 import bootstrap from "./generated/bootstrap.json";
 import { mountAuthGate, requestSession } from "./auth-gate";
@@ -11,23 +11,28 @@ import { CampaignApplicationPage, CampaignApplicationVerificationPage } from "./
 import { AdminApplicationsPage } from "./components/AdminApplicationsPage";
 import { PublicHelpPage } from "./components/HelpPages";
 import type { PublicHelpRoute } from "./platform";
+import { getSitePage, setSitePage } from "../../../work/assets/site-header.js";
+import { useRouteLifecycle } from "./route-lifecycle";
 
 // The adapter owns the empty chart/table containers inside this fixed layout.
 // Memoization prevents React from reconciling those containers on status changes.
 const CampaignLayout = memo(DashboardLayout);
 
 function ManagerApplication({ sessionRequest }: { sessionRequest?: ReturnType<typeof requestSession> } = {}) {
+  const container = useRef<HTMLDivElement>(null);
+  const route = useRouteLifecycle();
   const [status, setStatus] = useState<"loading" | "ready" | "error">("ready");
   useEffect(() => {
+    if (route.paused) return;
     const abort = new AbortController();
     const gate = new AbortController();
     let dispose: (() => void) | undefined;
-    const root = document.getElementById("goodraise-root");
+    const root = container.current?.querySelector<HTMLElement>("#goodraise-root");
     if (!root) throw new Error("The application layout is missing.");
     const disposeGate = mountAuthGate(root, {
       signal: gate.signal,
       sessionRequest: sessionRequest || requestSession(abort.signal),
-      onReady: () => { if (!abort.signal.aborted) setStatus("ready"); },
+      onReady: () => { if (!abort.signal.aborted) { setStatus("ready"); route.ready(); } },
       onAuthenticated: async (session) => {
         setStatus("loading");
         const page = getInitialPage(window.location.pathname, true);
@@ -45,20 +50,20 @@ function ManagerApplication({ sessionRequest }: { sessionRequest?: ReturnType<ty
           session,
           initialCampaignData: campaignData?.payload,
           signal: abort.signal,
-          onReady: () => { if (!abort.signal.aborted) setStatus("ready"); },
-          onError: () => { if (!abort.signal.aborted) setStatus("error"); },
+          onReady: () => { if (!abort.signal.aborted) { root.setAttribute("data-campaign-ready", ""); setStatus("ready"); route.ready(); } },
+          onError: () => { if (!abort.signal.aborted) { setStatus("error"); route.ready(); } },
         });
       },
     });
-    return () => { disposeGate(); gate.abort(); abort.abort(); dispose?.(); };
-  }, [sessionRequest]);
+    return () => { root.removeAttribute("data-campaign-ready"); disposeGate(); gate.abort(); abort.abort(); dispose?.(); };
+  }, [sessionRequest, route.paused, route.ready]);
 
-  return <>
-    {status !== "ready" && <div className="application-status" role="status" dir="rtl">
-      {status === "loading" ? "טוענים את נתוני הקמפיין…" : "טעינת הקמפיין נכשלה. אפשר לרענן את העמוד ולנסות שוב."}
+  return <div ref={container}>
+    {status === "error" && <div className="application-status" role="status" dir="rtl">
+      טעינת הקמפיין נכשלה. אפשר לרענן את העמוד ולנסות שוב.
     </div>}
     <CampaignLayout />
-  </>;
+  </div>;
 }
 
 export function App({ sessionRequest, archiveRoute, applicationRoute, helpRoute }: {
@@ -77,25 +82,12 @@ export function App({ sessionRequest, archiveRoute, applicationRoute, helpRoute 
   applicationRoute?: never;
   helpRoute: PublicHelpRoute;
 } = {}) {
+  const route = useRouteLifecycle();
   useEffect(() => {
-    const path = window.location.pathname.replace(/\/$/, "");
-    const page = getInitialPage(window.location.pathname);
-    const title = helpRoute === "faq" ? "שאלות נפוצות" : helpRoute === "contact" ? "יצירת קשר"
-      : archiveRoute?.kind === "index" ? "קמפיינים שהסתיימו"
-      : archiveRoute?.kind === "detail" ? "קמפיין שהסתיים"
-        : applicationRoute === "start" ? "פתיחת קמפיין"
-          : applicationRoute === "verify" ? "אימות בקשת קמפיין"
-            : applicationRoute === "admin" ? "בקשות לפתיחת קמפיין"
-              : path === "/login" ? "כניסה לחשבון"
-                : path === "/admin/users" ? "משתמשים והרשאות"
-                  : page === "rules" ? "תנאי שימוש"
-                    : page === "privacy" ? "מדיניות פרטיות"
-                      : page === "accessibility" ? "הצהרת נגישות"
-                        : page === "prizes" ? "פרסים ותחרות"
-                          : page === "admin" ? "ניהול הקמפיינים"
-                            : "דף הקמפיין";
-    document.title = `${title} | GoodRaise`;
-  }, [archiveRoute, applicationRoute, helpRoute]);
+    if (route.paused) return;
+    setSitePage(getSitePage(window.location.href));
+    if (archiveRoute || helpRoute || applicationRoute === "start" || applicationRoute === "verify") route.ready();
+  }, [archiveRoute, applicationRoute, helpRoute, route.paused, route.ready]);
 
   if (helpRoute) return <PublicHelpPage route={helpRoute} />;
   if (archiveRoute) return <PublicArchivePage route={archiveRoute} />;

@@ -95,10 +95,27 @@
 }
 :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button)[aria-busy="true"],
 :where([aria-busy="true"]) :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button):disabled { cursor: wait; }
+.gr-loading-indicator { display: inline-flex; align-items: center; gap: 8px; }
+:is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button)[aria-busy="true"]::before,
+.gr-loading-indicator::before {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  animation: gr-action-spin 700ms linear infinite;
+}
+@keyframes gr-action-spin { to { transform: rotate(360deg); } }
 :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button)[hidden] { display: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button) { transition: none; }
+  :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button)[aria-busy="true"]::before,
+  .gr-loading-indicator::before { animation: none; }
 }
 @media (forced-colors: active) {
   :is(.gr-button, .button-primary, .button-secondary, .button-ghost, .action-button) { border-color: ButtonText; }

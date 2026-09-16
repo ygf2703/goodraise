@@ -19,20 +19,17 @@ export function Header({ loadSession = false }: { loadSession?: boolean } = {}) 
       </a>
       <nav id="main-nav" className="site-header-nav" aria-label="ניווט ראשי">
         <a data-site-audience="public" href="/#how-it-works">איך זה עובד</a>
-        <a data-site-audience="public" href="/campaigns">קמפיינים שהסתיימו</a>
+        <a data-site-audience="public" data-site-page="campaigns" href="/campaigns">קמפיינים שהסתיימו</a>
         <a data-site-audience="public" href="/#about">קצת עלינו</a>
-        <a data-site-audience="public" href="/contact">בואו נדבר</a>
-        <a data-site-audience="analyst" data-page-target="admin" href="/admin" hidden>דשבורד ניהולי</a>
-        <a data-site-audience="session" href="/admin" hidden>הפרויקטים שלי</a>
-        <a data-site-audience="site-admin" href="/admin/applications" hidden>בקשות לקמפיינים</a>
-        <a data-site-audience="site-admin" href="/admin/users" hidden>משתמשים והרשאות</a>
-        <a data-site-audience="manager" data-page-target="project" href="/project" hidden>דף הפרויקט</a>
-        <a data-site-audience="manager" data-page-target="prizes" href="/prizes" hidden>פרסים ותחרות</a>
-        <a data-site-audience="guest" className="site-header-mobile-login" href="/login" hidden>כניסה למערכת</a>
+        <a data-site-audience="public" data-site-page="contact" href="/contact">בואו נדבר</a>
+        <a data-site-audience="session" data-site-page="projects" href="/admin" hidden>הפרויקטים שלי</a>
+        <a data-site-audience="site-admin" data-site-page="applications" href="/admin/applications" hidden>בקשות לקמפיינים</a>
+        <a data-site-audience="site-admin" data-site-page="users" href="/admin/users" hidden>משתמשים והרשאות</a>
+        <a data-site-audience="guest" data-site-page="login" className="site-header-mobile-login" href="/login" hidden>כניסה למערכת</a>
       </nav>
       <div className="site-header-actions">
-        <a data-site-audience="guest" className="site-header-login" href="/login" hidden>כניסה</a>
-        <ButtonLink data-site-audience="guest" className="site-header-cta" size="sm" href="/start" hidden>מתחילים לגייס <span aria-hidden="true">←</span></ButtonLink>
+        <a data-site-audience="guest" data-site-page="login" className="site-header-login" href="/login" hidden>כניסה</a>
+        <ButtonLink data-site-audience="guest" data-site-page="start" className="site-header-cta" size="sm" href="/start" hidden>מתחילים לגייס <span aria-hidden="true">←</span></ButtonLink>
         <Button data-site-audience="session" className="site-header-logout" variant="secondary" size="sm" hidden>התנתקות</Button>
         <span className="site-header-error" role="status" hidden></span>
       </div>

@@ -8,6 +8,7 @@ import { AdminPage } from './AdminPage';
 import { ManualContributionDialog } from './ManualContributionDialog';
 import { SiteFooter } from './SiteFooter';
 import { SkipLink } from './SkipLink';
+import { CampaignNavigation } from './CampaignNavigation';
 
 export function DashboardLayout() {
   return (<div id="goodraise-root" dir="rtl">
@@ -17,6 +18,7 @@ export function DashboardLayout() {
   <div className="app-shell">
 
     <main id="main" className="app-content" tabIndex={-1}>
+      <CampaignNavigation />
       <ProjectPage />
 
       <PrizesPage />

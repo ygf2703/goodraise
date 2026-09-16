@@ -62,6 +62,9 @@ test("one shared stylesheet supplies static, React and legacy action-button appe
   assert.match(css, /\[hidden\] \{ display: none !important; \}/);
   assert.match(css, /prefers-reduced-motion/);
   assert.match(css, /forced-colors/);
+  assert.match(css, /\[aria-busy="true"\]::before/);
+  assert.match(css, /animation: gr-action-spin/);
+  assert.match(css, /\.gr-loading-indicator::before \{ animation: none; \}/);
   for (const shell of ["apps/web/index.html", "work/goodraise-landing.html"]) assert.match(await source(shell), /href="\/assets\/buttons\.css"/);
   const dashboard = await source("apps/web/src/styles/dashboard.css");
   assert.doesNotMatch(dashboard, /#goodraise-root \.(?:button-primary|button-secondary|button-ghost|action-button)(?:[:.,\s{])/);

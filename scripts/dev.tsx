@@ -35,9 +35,9 @@ server.on("request", (request, response) => {
       const html = await vite.transformIndexHtml(url, template);
       // Let Vite own frontend module invalidation. Importing App through Node
       // would make every React edit restart the API and race the HMR response.
-      const { App } = await vite.ssrLoadModule("/src/App.tsx") as { App: ComponentType };
+      const { ApplicationRouter } = await vite.ssrLoadModule("/src/ApplicationRouter.tsx") as { ApplicationRouter: ComponentType };
       response.setHeader("content-type", "text/html; charset=utf-8");
-      response.end(html.replace("<!--app-html-->", renderToString(<App />)));
+      response.end(html.replace("<!--app-html-->", renderToString(<ApplicationRouter />)));
     })().catch((error: unknown) => { console.error(error); response.writeHead(500); response.end(); });
   });
 });

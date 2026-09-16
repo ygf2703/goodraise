@@ -8,27 +8,68 @@ session-aware navigation and mobile menu behavior.
 
 Guests see homepage section links, `/login`, and a separate “start fundraising”
 CTA that remains outside the existing-user login flow. After login, all approved
-accounts see “my projects”; assigned accounts see project/prize links, analysts+
-see the dashboard, and site admins also see `/admin/users`. Logout is available
+accounts see “my projects”; site admins also see campaign applications and
+`/admin/users`. Campaign-specific links are not part of the global header. Logout is available
 to every authenticated account.
 
 | Existing destination | Direct URL | Current navigation | Migration status |
 | --- | --- | --- | --- |
 | כניסת משתמש קיים | `/login` | Guest header | Implemented; approval required before first-password setup |
-| הפרויקטים שלי | `/admin` | Authenticated header | Implemented; direct single project or active/completed selector |
+| הפרויקטים שלי | `/admin` | Authenticated header | Implemented; explicit navigation always opens the active/completed selector |
 | ניהול משתמשים | `/admin/users` | Site-admin header | Implemented; approvals, roles, memberships and deactivation |
-| דף הפרויקט | `/project`, `/<campaign>` or `/<campaign>/<ambassador>` | Main menu for assigned users | Access migrated; content migration pending |
-| פרסים ותחרות | `/prizes` | Main menu for assigned users | Access migrated; content migration pending |
+| דף הפרויקט | `/project`, `/<campaign>` or `/<campaign>/<ambassador>` | Local navigation inside an accessible campaign | Access migrated; content migration pending |
+| פרסים ותחרות | `/prizes` | Local navigation inside an accessible campaign | Access migrated; content migration pending |
 | תנאי שימוש ותקנון השתתפות | `/rules` | Shared footer on every page | Content migration pending |
 | מדיניות פרטיות | `/privacy` | Shared footer on every page | Removed from the header; content migration pending |
 | הצהרת נגישות | `/accessibility` | Shared footer on every page | Public statement; direct contact details and independent audit pending |
-| דשבורד ניהולי | `/admin?organizationId=…&campaignId=…` | Analyst+ main menu/project selector | Content migration pending |
+| ניהול הקמפיין | `/admin?organizationId=…&campaignId=…` | Project card and analyst+ local campaign navigation | Content migration pending |
 | התנתקות | Shared header and `/admin` | Available for any authenticated account | Ends the server session and returns to the homepage |
 
 Direct private campaign and prizes URLs redirect guests to `/login` with a safe
 return target. Successful login resumes the requested page only if the scoped
-authorization succeeds. Header links retain the selected organization, campaign
+authorization succeeds. Local campaign links retain the selected organization, campaign
 and ambassador context, including when opened in a new tab. Legal pages remain public.
+
+When login opens the project selector, the URL is replaced with `/admin` without
+an extra page reload. `/admin` and `/admin/users` have separate headings and
+content: the selector never initializes or fetches the account editor, and the
+user-management page hides the project lists. The single-project shortcut applies
+only to login; explicit `/admin` links, including “back to my projects”, always show
+the selector. Authorization checks are unchanged.
+
+Each project card is one real link with a visible shared-style action: management
+for managers, data viewing for analysts, and campaign/archived-summary viewing for
+viewers. Inside a selected campaign, `CampaignNavigation` shows its name, a back
+link, and the three campaign destinations with the active page marked. It stays
+hidden until the controller has authorized a server-resolved campaign scope; the
+management link is omitted for viewers. Links and the name update together when
+the selected campaign changes and disappear on lost access. No campaign is chosen
+implicitly by a global dashboard button.
+
+The shared header identifies destinations with `data-site-page`; the current
+visible destination receives `aria-current="page"` and an active visual marker.
+`getSitePage` resolves direct URLs, while `setSitePage` updates the browser title
+and selection after authentication and in-app campaign/prize navigation. This
+keeps the project selector distinct from the campaign-scoped `/admin?...` dashboard.
+
+`ApplicationRouter` handles same-tab login, management, campaign and prize routes
+without a document reload. It pauses the previous route's requests/timers, prepares
+the destination in a detached React portal and attaches it only after session and
+page data are ready. The previous DOM stays in place beneath the fixed loading
+overlay, with background interaction disabled. Detached preparation avoids
+duplicate IDs or unfinished/login content appearing in the live document.
+Back/Forward cancel stale preparation; direct links still work through the server.
+External links, downloads, fragments, modified/new-tab clicks and public-site
+destinations retain native browser behavior. Active campaign project/prize links
+keep their existing one-request revalidation rather than remounting the controller.
+
+The first application shell stays hidden until ready, preventing the guest-login
+flash on direct authenticated loads. The overlay lives outside page layout, uses
+stable scrollbar space and releases on handled load failures. No private rendered
+page or API result is persisted for navigation caching. A delayed, read-only local
+proxy check confirmed unchanged document identity and heading position while the
+next page loaded; a failed users-list request displayed its error and released the
+overlay. Public-site page transitions are not part of this client-routing change.
 
 Completed campaigns use anonymous read-only routes: `/campaigns` lists the archive and `/campaigns/:organization/:campaign` shows a minimal historical detail page. Homepage carousel cards link to these scoped URLs, avoiding campaign-slug collisions between organizations.
 
@@ -41,7 +82,7 @@ Project and Prizes load one `/api/campaign-view` response containing the scoped
 presentation configuration and prize rules. Viewer responses contain aggregate
 campaign/ambassador totals and no donation rows. Analyst+ campaign views receive
 redacted rows; donor contact fields and source/settings payloads are omitted.
-Header navigation between these two views retains the application
+Local navigation between these two views retains the application
 and revalidates the campaign through the server. Back/forward navigation is
 supported; entering the management dashboard loads its full data and settings.
 
