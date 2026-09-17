@@ -55,6 +55,10 @@ export async function prepareAssets(): Promise<void> {
   await mkdir(resolve(root, "apps/web/public/assets"), { recursive: true });
   await cp(resolve(root, "work/assets"), resolve(root, "apps/web/public/assets"), { recursive: true });
   let landing = await readFile(resolve(root, "work/goodraise-landing.html"), "utf8");
+  const main = landing.match(/<main\b[\s\S]*?<\/main>/)?.[0];
+  if (!main) throw new Error("The landing template must contain its main content.");
+  // Trusted, repository-owned markup: keep one source for the landing design.
+  await writeFile(resolve(root, "apps/web/src/generated/landing.json"), JSON.stringify({ html: main }));
   landing = landing.replace("__SITE_HEADER__", renderToStaticMarkup(createElement(Header)));
   landing = landing.replace("__SITE_FOOTER__", renderToStaticMarkup(createElement(SiteFooter)));
   const images: Record<string, string> = {

@@ -48,8 +48,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   background-position: center, top left, top right, center top, center;
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
   padding: 0;
-  min-height: 100%;
-  min-height: 100vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -139,7 +138,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 #goodraise-root.public-archive {
-  min-height: 100vh;
+  min-height: 0;
   background: #f5f9fc;
 }
 
@@ -3306,7 +3305,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   --application-yellow: #ffd629;
   --application-border: #dce5ed;
   --application-muted: #566b80;
-  min-height: 100vh;
+  min-height: 0;
   color: #25384b;
   background:
     radial-gradient(circle at 12% 8%, rgba(255, 214, 41, 0.2), transparent 25rem),

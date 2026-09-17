@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PublicHelpPage } from "../apps/web/src/components/HelpPages";
+import { ApplicationRouter } from "../apps/web/src/ApplicationRouter";
+import type { AppProps } from "../apps/web/src/App";
 import { SiteFooter } from "../apps/web/src/components/SiteFooter";
 import { getCampaignRoute, getPublicHelpRoute } from "../apps/web/src/platform";
 import { isLandingRequest } from "../shared/routes.mjs";
@@ -26,7 +27,7 @@ test("public help uses the shared footer, accessible FAQ and labelled contact fi
   assert.match(footer, /href="\/contact"/);
   assert.doesNotMatch(footer, /שותפים לדרך|placeholder|<dialog/);
   for (const route of ["faq", "contact"] as const) {
-    const html = renderToStaticMarkup(createElement(PublicHelpPage, { route }));
+    const html = renderToStaticMarkup(createElement<AppProps>(ApplicationRouter, { helpRoute: route }));
     assert.equal((html.match(/<h1>/g) || []).length, 1);
     assert.match(html, /<main id="main"[^>]*tabindex="-1"/);
     assert.ok(html.includes(footer.replace(/^<link[^>]+\/>/, "")), "Shared footer rendered on help pages");

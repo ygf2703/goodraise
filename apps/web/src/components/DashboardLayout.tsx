@@ -1,4 +1,3 @@
-import { Header } from './Header';
 import { ProjectPage } from './ProjectPage';
 import { PrizesPage } from './PrizesPage';
 import { RulesPage } from './RulesPage';
@@ -6,14 +5,11 @@ import { PrivacyPage } from './PrivacyPage';
 import { AccessibilityPage } from './AccessibilityPage';
 import { AdminPage } from './AdminPage';
 import { ManualContributionDialog } from './ManualContributionDialog';
-import { SiteFooter } from './SiteFooter';
-import { SkipLink } from './SkipLink';
 import { CampaignNavigation } from './CampaignNavigation';
 
 export function DashboardLayout() {
   return (<div id="goodraise-root" dir="rtl">
-  <SkipLink />
-  <Header />
+
 
   <div className="app-shell">
 
@@ -32,7 +28,7 @@ export function DashboardLayout() {
       <AdminPage />
     </main>
   </div>
-  <SiteFooter />
+
   <ManualContributionDialog />
 
 </div>);

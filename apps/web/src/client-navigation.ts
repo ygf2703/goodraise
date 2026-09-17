@@ -1,11 +1,24 @@
-import { getCampaignRoute } from "./platform";
+import { getCampaignRoute, getPublicHelpRoute, getPublicArchiveRoute, getCampaignApplicationRoute } from "./platform";
+import { isLandingRequest } from "../../../shared/routes.mjs";
+
+export function getApplicationRoute(address: string) {
+  const url = new URL(address);
+  if (isLandingRequest(url)) return { landingRoute: true };
+  const helpRoute = getPublicHelpRoute(url.pathname);
+  if (helpRoute) return { helpRoute };
+  const archiveRoute = getPublicArchiveRoute(url.pathname);
+  if (archiveRoute) return { archiveRoute };
+  const applicationRoute = getCampaignApplicationRoute(url.pathname);
+  return applicationRoute ? { applicationRoute } : {};
+}
 
 export function isAppDestination(address: string, origin: string) {
   const url = new URL(address, origin);
   if (url.origin !== origin) return false;
   const path = url.pathname.replace(/\/$/, "");
-  if (["/login", "/admin", "/admin/users", "/admin/applications", "/project", "/prizes"].includes(path)) return true;
-  // Preserve campaign/ambassador URLs, but do not hijack assets or public-site routes.
+  if (isLandingRequest(url) || getPublicHelpRoute(path) || getPublicArchiveRoute(path) || getCampaignApplicationRoute(path)) return true;
+  if (["/login", "/admin", "/admin/users", "/project", "/prizes", "/rules", "/privacy", "/accessibility"].includes(path)) return true;
+  // Preserve campaign/ambassador URLs, but never hijack assets or external links.
   return !url.pathname.includes(".") && Boolean(getCampaignRoute(url.href).projectSlug);
 }
 

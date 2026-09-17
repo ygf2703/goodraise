@@ -1,8 +1,10 @@
 # Navigation migration
 
-The landing page and all campaign, legal and admin pages render the same
-`Header` component from `apps/web/src/components/Header.tsx`. The static homepage
-receives the component during asset preparation; React renders it in the app.
+The landing page and all campaign, legal and admin pages share one persistent
+`Header` component from `apps/web/src/components/Header.tsx`. `ApplicationRouter`
+owns the header, skip link and footer outside the replaceable route frames.
+The build server-renders the homepage into the same shell, retaining its content
+before JavaScript starts; preparation extracts its markup from `work/goodraise-landing.html`.
 `work/assets/site-header.css` and `site-header.js` provide the shared appearance,
 session-aware navigation and mobile menu behavior.
 
@@ -52,24 +54,31 @@ visible destination receives `aria-current="page"` and an active visual marker.
 and selection after authentication and in-app campaign/prize navigation. This
 keeps the project selector distinct from the campaign-scoped `/admin?...` dashboard.
 
-`ApplicationRouter` handles same-tab login, management, campaign and prize routes
+`ApplicationRouter` handles same-tab homepage, help, archive, application, login,
+management, legal, campaign and prize routes
 without a document reload. It pauses the previous route's requests/timers, prepares
 the destination in a detached React portal and attaches it only after session and
 page data are ready. The previous DOM stays in place beneath the fixed loading
 overlay, with background interaction disabled. Detached preparation avoids
 duplicate IDs or unfinished/login content appearing in the live document.
 Back/Forward cancel stale preparation; direct links still work through the server.
-External links, downloads, fragments, modified/new-tab clicks and public-site
-destinations retain native browser behavior. Active campaign project/prize links
+External links, downloads, same-page fragments and modified/new-tab clicks
+retain native browser behavior. Cross-page homepage anchors scroll after the new
+content is attached. Active campaign project/prize links
 keep their existing one-request revalidation rather than remounting the controller.
 
-The first application shell stays hidden until ready, preventing the guest-login
-flash on direct authenticated loads. The overlay lives outside page layout, uses
+The first application's content stays hidden until ready, preventing the guest-login
+flash on direct authenticated loads; the shared header remains in place. The
+server-rendered homepage is visible immediately. Header actions reserve space
+during the initial session check; subsequent navigation reuses the session-aware
+header without repeating that lookup. A late header response cannot overwrite a
+newer login result. The blue CTA has a stable width, active links keep their usual
+font weight, and every route uses the same font stylesheet. The overlay lives outside page layout, uses
 stable scrollbar space and releases on handled load failures. No private rendered
 page or API result is persisted for navigation caching. A delayed, read-only local
 proxy check confirmed unchanged document identity and heading position while the
 next page loaded; a failed users-list request displayed its error and released the
-overlay. Public-site page transitions are not part of this client-routing change.
+overlay.
 
 Completed campaigns use anonymous read-only routes: `/campaigns` lists the archive and `/campaigns/:organization/:campaign` shows a minimal historical detail page. Homepage carousel cards link to these scoped URLs, avoiding campaign-slug collisions between organizations.
 

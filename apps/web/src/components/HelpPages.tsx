@@ -2,9 +2,6 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { CONTACT_LIMITS, CONTACT_TOPICS } from "../../../../shared/contact.mjs";
 import { requestJson } from "../api";
 import type { PublicHelpRoute } from "../platform";
-import { Header } from "./Header";
-import { SiteFooter } from "./SiteFooter";
-import { SkipLink } from "./SkipLink";
 import { Button, ButtonLink } from "./Button";
 
 const faqGroups: { title: string; items: { question: string; answer: ReactNode }[] }[] = [
@@ -141,10 +138,9 @@ function ContactContent() {
 
 export function PublicHelpPage({ route }: { route: PublicHelpRoute }) {
   return <div id="goodraise-help-root" dir="rtl">
-    <div id="top" /><SkipLink /><Header />
     <main id="main" className="help-main" tabIndex={-1}>
       {route === "faq" ? <FaqContent /> : <ContactContent />}
     </main>
-    <SiteFooter />
+
   </div>;
 }

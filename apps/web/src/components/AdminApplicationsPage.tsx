@@ -2,9 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { requestJson } from "../api";
 import { requestSession, type ManagerSession } from "../auth-gate";
-import { Header } from "./Header";
-import { SiteFooter } from "./SiteFooter";
-import { SkipLink } from "./SkipLink";
 import { Button, ButtonLink } from "./Button";
 import { useRouteLifecycle } from "../route-lifecycle";
 import { beginPageBusy, navigateSite } from "../../../../work/assets/page-feedback.js";
@@ -168,8 +165,7 @@ export function AdminApplicationsPage() {
   };
 
   return <div id="goodraise-application-root" className="admin-applications-root" dir="rtl">
-    <SkipLink />
-    <Header loadSession />
+
     <main id="main" className="admin-applications-main" tabIndex={-1}>
       <header className="admin-applications-heading">
         <div>
@@ -239,6 +235,6 @@ export function AdminApplicationsPage() {
       </div>
       {session?.email && <p className="admin-applications-session">מחובר/ת: {session.email}</p>}
     </main>
-    <SiteFooter />
+
   </div>;
 }

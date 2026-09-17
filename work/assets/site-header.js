@@ -1,7 +1,8 @@
 import { setButtonBusy } from "./action-feedback.js";
 import { beginPageBusy } from "./page-feedback.js";
 
-let siteSession = null;
+let siteSession;
+let sessionRevision = 0;
 let logoutRequest = null;
 
 const pageTitles = {
@@ -55,6 +56,7 @@ export function canAccessManagerPages(session) {
 
 export function setSiteSession(session) {
   siteSession = session;
+  sessionRevision++;
   window.dispatchEvent(new CustomEvent("goodraise:session", { detail: session }));
 }
 
@@ -89,7 +91,7 @@ export function bindLogoutButton(button, { signal, onError, onStart = () => {} }
   }, { signal });
 }
 
-/** Shared session-aware navigation for the static homepage and React application.
+/** Persistent session-aware navigation shared by every application route.
  * @param {HTMLElement} header
  */
 export function mountSiteHeader(header, { loadSession = true } = {}) {
@@ -109,6 +111,7 @@ export function mountSiteHeader(header, { loadSession = true } = {}) {
   }
 
   function renderSession(session) {
+    if (session === undefined) return;
     const manager = canAccessManagerPages(session);
     const authenticated = Boolean(session?.authenticated && session?.email);
     const analyst = Boolean(authenticated && session?.permissions?.analytics === true);
@@ -122,24 +125,28 @@ export function mountSiteHeader(header, { loadSession = true } = {}) {
             : audience === "public" ? manager
               : authenticated;
     });
+    header.removeAttribute("data-session-pending");
+    header.removeAttribute("aria-busy");
     renderCurrentPage();
     closeMenu();
   }
 
   window.addEventListener("goodraise:session", (event) => renderSession(event.detail), options);
-  window.addEventListener("goodraise:page", (event) => renderCurrentPage(event.detail), options);
+  window.addEventListener("goodraise:page", (event) => { renderCurrentPage(event.detail); closeMenu(); }, options);
   window.addEventListener("popstate", () => renderCurrentPage(), options);
   window.addEventListener("pageshow", (event) => {
     if (event.persisted) window.location.reload();
   }, options);
   renderSession(siteSession);
-  if (loadSession) {
+  if (loadSession && siteSession === undefined) {
+    const revision = sessionRevision;
     fetch("/api/auth/status?includeCampaigns=false", { credentials: "same-origin", cache: "no-store", signal: abort.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Session unavailable");
-        setSiteSession(await response.json());
+        const session = await response.json();
+        if (!abort.signal.aborted && sessionRevision === revision) setSiteSession(session);
       })
-      .catch(() => { if (!abort.signal.aborted) setSiteSession(null); });
+      .catch(() => { if (!abort.signal.aborted && sessionRevision === revision) setSiteSession(null); });
   }
 
   const logout = header.querySelector(".site-header-logout");

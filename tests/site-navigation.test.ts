@@ -8,6 +8,9 @@ import { mountAccountHome } from "../apps/web/src/account-home";
 import { getProjectActionLabel, getProjectDestination } from "../apps/web/src/account-home";
 import { CampaignNavigation } from "../apps/web/src/components/CampaignNavigation";
 import { renderCampaignNavigation } from "../apps/web/src/campaign-navigation";
+import { ApplicationRouter } from "../apps/web/src/ApplicationRouter";
+import { App, type AppProps } from "../apps/web/src/App";
+import { getApplicationRoute } from "../apps/web/src/client-navigation";
 
 test("page identity distinguishes the project selector, management routes and campaign dashboard", () => {
   const cases: Record<string, string> = {
@@ -114,6 +117,65 @@ test("the global header has only platform links; campaign links live in a hidden
   assert.match(local, /<section[^>]*data-campaign-navigation[^>]*hidden/);
   for (const page of ["admin", "project", "prizes"]) assert.match(local, new RegExp(`<a data-page-target="${page}" hidden`));
   assert.match(local, /href="\/admin">חזרה לפרויקטים שלי/);
+});
+
+test("every route has one shared shell, while replaceable page content never owns the global header or footer", () => {
+  for (const path of ["/", "/contact", "/faq", "/campaigns", "/campaigns/org/past", "/start", "/admin/applications", "/login", "/admin", "/rules"]) {
+    const props = getApplicationRoute(`https://goodraise.example${path}`);
+    const content = renderToStaticMarkup(createElement<AppProps>(App, props));
+    assert.doesNotMatch(content, /id="site-header"|<footer|class="skip-link"/, path);
+    const shell = renderToStaticMarkup(createElement<AppProps>(ApplicationRouter, props));
+    assert.equal((shell.match(/id="site-header"/g) || []).length, 1, path);
+    assert.equal((shell.match(/<footer/g) || []).length, 1, path);
+    assert.ok(shell.indexOf('id="site-header"') < shell.indexOf('class="app-route-frame"'), path);
+  }
+  const header = renderToStaticMarkup(createElement(Header));
+  assert.match(header, /data-session-pending=""/);
+  assert.doesNotMatch(header.match(/<a[^>]*class="[^"]*site-header-cta[^>]*>/)?.[0] || "", /\bhidden\b/, "Reserve the CTA's layout while its visibility waits for the session");
+});
+
+test("a delayed header lookup cannot overwrite a newer login, and known sessions do not refetch on mount", async (context) => {
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const browser = Object.assign(new EventTarget(), {
+    location: new URL("https://goodraise.example/"),
+    matchMedia: () => new EventTarget(),
+  });
+  Object.defineProperty(globalThis, "window", { configurable: true, value: browser });
+  let resolveSession!: (response: Response) => void;
+  const request = new Promise<Response>(resolve => { resolveSession = resolve; });
+  const fetch = context.mock.method(globalThis, "fetch", () => request);
+  const guest = Object.assign(new ElementStub(), { dataset: { siteAudience: "guest" } });
+  const account = Object.assign(new ElementStub(), { hidden: true, dataset: { siteAudience: "session", sitePage: "projects" } });
+  const nodes = new Map([".site-header-toggle", ".site-header-nav", ".site-header-logout", ".site-header-error"].map(key => [key, new ElementStub()]));
+  const header = Object.assign(new ElementStub(), {
+    querySelector: (selector: string) => nodes.get(selector),
+    querySelectorAll: () => [guest, account],
+  });
+  let dispose: (() => void) | undefined;
+  try {
+    setSiteSession(undefined);
+    header.setAttribute("data-session-pending", "");
+    dispose = mountSiteHeader(header as unknown as HTMLElement);
+    assert.equal(fetch.mock.callCount(), 1);
+    assert.equal(header.attributes.has("data-session-pending"), true);
+    setSiteSession({ authenticated: true, email: "owner@example.org", permissions: { campaignPages: true } });
+    resolveSession(Response.json({ authenticated: false }));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(account.hidden, false);
+    assert.equal(guest.hidden, true);
+    assert.equal(header.attributes.has("data-session-pending"), false);
+    nodes.get(".site-header-toggle")!.dispatchEvent(new Event("click"));
+    assert.equal(nodes.get(".site-header-nav")!.classList.contains("is-open"), true);
+    browser.dispatchEvent(new CustomEvent("goodraise:page", { detail: "contact" }));
+    assert.equal(nodes.get(".site-header-nav")!.classList.contains("is-open"), false);
+    dispose();
+    dispose = mountSiteHeader(header as unknown as HTMLElement);
+    assert.equal(fetch.mock.callCount(), 1);
+  } finally {
+    dispose?.();
+    setSiteSession(null);
+    if (windowDescriptor) Object.defineProperty(globalThis, "window", windowDescriptor); else Reflect.deleteProperty(globalThis, "window");
+  }
 });
 
 test("campaign navigation requires resolved access, preserves scope, and marks only the current local page", () => {

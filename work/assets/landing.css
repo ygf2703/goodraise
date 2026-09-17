@@ -1,0 +1,122 @@
+.goodraise-landing { --blue:#075eb5; --blue-dark:#08457f; --navy:#102d4c; --yellow:#ffd234; --ink:#142e49; --muted:#566b80; --line:#dce5ed; --pale:#f0f7fc; }
+.goodraise-landing * { box-sizing:border-box; }
+
+.goodraise-landing { margin:0; background:#fff; color:var(--ink); font-family:"Assistant",Arial,sans-serif; font-size:18px; line-height:1.65; }
+:where(.goodraise-landing) a { color:inherit; text-decoration:none; }
+:where(.goodraise-landing) button { font:inherit; cursor:pointer; }
+.goodraise-landing button, .goodraise-landing a { -webkit-tap-highlight-color:transparent; }
+.goodraise-landing a:focus-visible, .goodraise-landing button:focus-visible, .goodraise-landing summary:focus-visible { outline:3px solid var(--blue); outline-offset:5px; }
+.goodraise-landing h1, .goodraise-landing h2, .goodraise-landing h3, .goodraise-landing p, .goodraise-landing figure { margin:0; }
+.goodraise-landing h1, .goodraise-landing h2, .goodraise-landing h3 { line-height:1.15; }
+.goodraise-landing svg { display:block; }
+.goodraise-landing .container { width:min(1200px,calc(100% - 64px)); margin-inline:auto; }
+.goodraise-landing .hero { background:var(--pale); overflow:hidden; }
+.goodraise-landing .hero-grid { display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:84px; padding-block:92px 96px; }
+.goodraise-landing .eyebrow { display:flex; align-items:center; gap:10px; color:var(--blue); font-size:16px; font-weight:700; margin-bottom:23px; }
+.goodraise-landing .eyebrow::before { content:""; width:22px; height:3px; background:var(--blue); }
+.goodraise-landing h1 { font-size:clamp(46px,5.6vw,76px); font-weight:800; letter-spacing:-2px; }
+.goodraise-landing h1 span { display:inline-block; position:relative; isolation:isolate; }
+.goodraise-landing h1 span::after { content:""; position:absolute; z-index:-1; bottom:3px; right:-5px; left:-9px; height:17px; background:var(--yellow); transform:rotate(-2deg); }
+.goodraise-landing .hero-description { max-width:460px; margin-top:28px; font-size:21px; color:var(--muted); line-height:1.65; }
+.goodraise-landing .hero-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:32px; }
+.goodraise-landing .hero-note { display:flex; align-items:center; gap:8px; margin-top:23px; color:var(--muted); font-size:15px; }
+.goodraise-landing .hero-note svg { color:var(--blue); }
+.goodraise-landing .hero-visual { position:relative; padding:12px 0 20px 18px; }
+.goodraise-landing .community-image { position:relative; overflow:hidden; }
+.goodraise-landing .community-image img { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:cover; }
+.goodraise-landing .hero-image { aspect-ratio:1.08; background:#dbeaf6; border:1px solid #c5dbea; border-radius:100px 12px 12px 12px; box-shadow:-18px 20px 0 #c8deef; }
+.goodraise-landing .hero-image img { object-position:50% 40%; }
+.goodraise-landing .image-label { position:absolute; inset-block-start:16px; inset-inline-start:16px; padding:4px 10px; border-radius:5px; background:#fff; color:var(--navy); font-size:13px; font-weight:600; line-height:1.5; }
+.goodraise-landing .visual-note { position:absolute; top:-12px; left:-19px; width:120px; height:120px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:5px; background:var(--yellow); color:var(--navy); font-size:15px; font-weight:700; line-height:1.25; text-align:center; transform:rotate(-10deg); }
+.goodraise-landing .visual-caption { position:absolute; bottom:-1px; right:-25px; display:flex; align-items:center; gap:14px; background:#fff; border:1px solid var(--line); border-radius:9px; padding:17px 23px; box-shadow:0 8px 25px #123c5d0a; }
+.goodraise-landing .caption-icon { width:42px; height:42px; display:grid; place-items:center; color:var(--blue); background:var(--pale); border-radius:50%; }
+.goodraise-landing .visual-caption strong { display:block; font-size:17px; }
+.goodraise-landing .visual-caption small { display:block; color:var(--muted); font-size:14px; }
+.goodraise-landing .section { padding-block:88px; }
+.goodraise-landing .section-heading { text-align:center; max-width:630px; margin-inline:auto; }
+.goodraise-landing .section-kicker { display:block; color:var(--blue); font-size:15px; font-weight:700; margin-bottom:12px; }
+.goodraise-landing h2 { font-size:clamp(32px,3.6vw,44px); font-weight:800; letter-spacing:-.7px; }
+.goodraise-landing .section-heading p { margin-top:17px; color:var(--muted); font-size:19px; }
+.goodraise-landing .steps { display:grid; grid-template-columns:repeat(3,1fr); gap:56px; margin-top:58px; }
+.goodraise-landing .step { position:relative; padding-inline-start:22px; border-inline-start:1px solid var(--line); }
+.goodraise-landing .step-number { display:block; color:var(--blue); font-size:15px; font-weight:700; margin-bottom:15px; }
+.goodraise-landing .step h3 { font-size:24px; margin-bottom:12px; }
+.goodraise-landing .step p { color:var(--muted); font-size:18px; }
+.goodraise-landing .past-campaigns { background:var(--pale); }
+.goodraise-landing .campaign-carousel-wrap { position:relative; margin-top:48px; }
+.goodraise-landing .campaign-carousel { display:grid; grid-auto-flow:column; grid-auto-columns:calc((100% - 48px) / 3); gap:24px; overflow-x:auto; overscroll-behavior-inline:contain; scroll-behavior:smooth; scroll-snap-type:inline mandatory; scrollbar-width:none; padding:4px 3px 24px; }
+.goodraise-landing .campaign-carousel.is-single { grid-auto-columns:min(380px,100%); justify-content:center; }
+.goodraise-landing .campaign-carousel::-webkit-scrollbar { display:none; }
+.goodraise-landing .campaign-card { overflow:hidden; scroll-snap-align:start; border:1px solid var(--line); border-radius:16px; background:#fff; box-shadow:0 12px 30px #102d4c10; }
+.goodraise-landing .campaign-card-link { display:block; height:100%; }
+.goodraise-landing .campaign-card-link:focus-visible { outline-offset:-4px; }
+.goodraise-landing .campaign-card-media { position:relative; display:grid; place-items:center; aspect-ratio:16/9; overflow:hidden; color:var(--blue); background:#dbeaf6; font-weight:800; }
+.goodraise-landing .campaign-card-media img { width:100%; height:100%; object-fit:cover; }
+.goodraise-landing .campaign-card-status { position:absolute; top:13px; right:13px; padding:6px 11px; border-radius:999px; color:#fff; background:var(--navy); font-size:13px; font-weight:800; }
+.goodraise-landing .campaign-card-body { display:grid; gap:11px; padding:20px; }
+.goodraise-landing .campaign-card-org { color:var(--blue); font-size:14px; font-weight:800; }
+.goodraise-landing .campaign-card h3 { font-size:23px; }
+.goodraise-landing .campaign-card-description { min-height:3.2em; display:-webkit-box; overflow:hidden; color:var(--muted); font-size:16px; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.goodraise-landing .campaign-progress { height:7px; overflow:hidden; border-radius:99px; background:#e2ebf2; }
+.goodraise-landing .campaign-progress span { display:block; height:100%; border-radius:inherit; background:var(--blue); }
+.goodraise-landing .campaign-card-total { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.goodraise-landing .campaign-card-total strong { color:var(--navy); font-size:21px; }
+.goodraise-landing .campaign-card-total span, .goodraise-landing .campaign-card-meta { color:var(--muted); font-size:14px; }
+.goodraise-landing .campaign-card-meta { display:flex; justify-content:space-between; gap:10px; padding-top:9px; border-top:1px solid var(--line); }
+.goodraise-landing .carousel-controls { display:flex; justify-content:center; gap:10px; margin-top:8px; }
+.goodraise-landing .campaigns-all { display:flex; justify-content:center; margin-top:24px; }
+.goodraise-landing .about { padding-top:0; }
+.goodraise-landing .about-grid { display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:80px; border-top:1px solid var(--line); padding-top:80px; }
+.goodraise-landing .about-image { aspect-ratio:1.6; background:#edf1f5; border-radius:12px; border:1px solid #dce4ec; }
+.goodraise-landing .about-image img { object-position:50% 45%; }
+.goodraise-landing .about-copy h2 { max-width:440px; }
+.goodraise-landing .about-copy p { margin-top:22px; color:var(--muted); font-size:19px; max-width:460px; }
+.goodraise-landing .text-link { display:inline-flex; align-items:center; gap:16px; margin-top:25px; color:var(--blue); font-size:18px; font-weight:700; }
+.goodraise-landing .text-link:hover { text-decoration:underline; text-underline-offset:5px; }
+.goodraise-landing [hidden] { display:none !important; }
+@media (max-width:1050px) {
+  .goodraise-landing .hero-grid { gap:50px; padding-block:72px 80px; }
+  .goodraise-landing .hero-description { font-size:19px; }
+  .goodraise-landing .visual-note { width:98px; height:98px; left:-5px; }
+  .goodraise-landing .visual-caption { right:-12px; padding:13px 17px; }
+}
+@media (max-width:800px) {
+
+  .goodraise-landing .container { width:calc(100% - 40px); }
+  .goodraise-landing .hero-grid { grid-template-columns:1fr; padding-block:48px 64px; gap:47px; }
+  .goodraise-landing .hero-copy { max-width:550px; }
+  .goodraise-landing h1 { font-size:clamp(46px,9vw,66px); }
+  .goodraise-landing .hero-description { max-width:490px; }
+  .goodraise-landing .hero-visual { width:100%; max-width:520px; margin-inline:auto; padding-inline:15px; }
+  .goodraise-landing .hero-image { aspect-ratio:1.4; border-start-start-radius:70px; }
+  .goodraise-landing .visual-note { top:-13px; left:0; }
+  .goodraise-landing .visual-caption { right:0; bottom:0; }
+  .goodraise-landing .section { padding-block:64px; }
+  .goodraise-landing .steps { gap:26px; margin-top:40px; }
+  .goodraise-landing .step { padding-inline-start:16px; }
+  .goodraise-landing .step h3 { font-size:21px; }
+  .goodraise-landing .step p { font-size:17px; }
+  .goodraise-landing .campaign-carousel { grid-auto-columns:calc((100% - 24px) / 2); }
+  .goodraise-landing .about { padding-top:0; }
+  .goodraise-landing .about-grid { grid-template-columns:1fr; gap:32px; padding-top:58px; }
+  .goodraise-landing .about-copy { grid-row:1; }
+  .goodraise-landing .about-copy p { max-width:none; }
+}
+@media (max-width:480px) {
+  .goodraise-landing .container { width:calc(100% - 36px); }
+  .goodraise-landing .eyebrow { font-size:14px; margin-bottom:18px; }
+  .goodraise-landing h1 { font-size:48px; }
+  .goodraise-landing .hero-description { font-size:19px; margin-top:24px; }
+  .goodraise-landing .hero-actions { gap:10px; }
+  .goodraise-landing .hero-note { font-size:14px; }
+  .goodraise-landing .hero-image { aspect-ratio:1.05; }
+  .goodraise-landing .visual-caption { padding:12px 16px; }
+  .goodraise-landing .image-label { inset-block-start:12px; inset-inline-start:12px; }
+  .goodraise-landing .steps { grid-template-columns:1fr; gap:28px; }
+  .goodraise-landing .step { padding-inline-start:22px; }
+  .goodraise-landing .step-number { margin-bottom:8px; }
+  .goodraise-landing .step h3 { font-size:24px; margin-bottom:8px; }
+  .goodraise-landing .step p { font-size:18px; }
+  .goodraise-landing .campaign-carousel { grid-auto-columns:88%; }
+  .goodraise-landing .campaign-card-meta { flex-direction:column; }
+}

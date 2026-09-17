@@ -30,7 +30,9 @@ const homepage = await readFile(resolve(output, "index.html"), "utf8");
 assert.equal(homepage, landing, "The default index document must be the landing page.");
 assert.match(homepage, /id="hero-title"/);
 assert.match(homepage, /class="skip-link"[^>]+href="#main"/);
-assert.match(homepage, /<main id="main" tabindex="-1">/);
+assert.match(homepage, /<main id="main"[^>]*tabindex="-1">/);
+assert.match(homepage, /type="module"[^>]+src="\/assets\/.+\.js"/, "The homepage must initialize the same router as every other page.");
+assert.doesNotMatch(homepage, /<div\b[^>]*id="app"[^>]*\bdata-app-booting/, "Server-rendered homepage content must remain visible before JavaScript initializes.");
 assert.doesNotMatch(homepage, /href="\/admin"[^>]*>מתחילים/);
 assert.match(homepage, /href="\/login"[^>]*>כניסה למערכת/);
 assert.doesNotMatch(homepage, /id="goodraise-root"/);
@@ -58,7 +60,7 @@ assert.doesNotMatch(footer, /שותפים לדרך|data-placeholder|<dialog/);
 assert.match(html, /<main id="main"[^>]*tabindex="-1"/);
 const homeFooter = homepage.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] || "";
 assert.equal(footer, homeFooter, "The homepage and application must use the same footer.");
-for (const asset of ["assets/site-header.css", "assets/site-header.js", "assets/buttons.css", "assets/action-feedback.js", "assets/page-feedback.js", "assets/page-feedback.css"]) {
+for (const asset of ["assets/site-header.css", "assets/site-header.js", "assets/buttons.css", "assets/action-feedback.js", "assets/page-feedback.js", "assets/page-feedback.css", "assets/landing.css", "assets/landing-carousel.js"]) {
   assert.ok(files.includes(asset), `Missing shared header asset: ${asset}`);
 }
 for (const page of [html, homepage]) assert.match(page, /href="\/assets\/buttons\.css"/, "Every application shell must load the shared button styles.");

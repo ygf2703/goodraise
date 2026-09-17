@@ -1,9 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 
 import { requestJson } from "../api";
-import { Header } from "./Header";
-import { SiteFooter } from "./SiteFooter";
-import { SkipLink } from "./SkipLink";
 import { Button } from "./Button";
 
 interface SubmissionResponse {
@@ -70,8 +67,7 @@ export function CampaignApplicationPage() {
   };
 
   return <div id="goodraise-application-root" dir="rtl">
-    <SkipLink />
-    <Header />
+
     <main id="main" className="application-page-main" tabIndex={-1}>
       <section className="application-intro">
         <span>מתחילים בפשטות</span>
@@ -190,7 +186,7 @@ export function CampaignApplicationPage() {
         <p className="application-submit-note">לא ייפתח חשבון ולא ייווצר קמפיין לפני אישור של מנהל/ת האתר.</p>
       </form>}
     </main>
-    <SiteFooter />
+
   </div>;
 }
 
@@ -219,8 +215,7 @@ export function CampaignApplicationVerificationPage() {
   };
 
   return <div id="goodraise-application-root" dir="rtl">
-    <SkipLink />
-    <Header />
+
     <main id="main" className="application-verification-page" tabIndex={-1}>
       <section className="application-success">
         <div className="application-success-mark" aria-hidden="true">{status === "success" ? "✓" : "✉"}</div>
@@ -233,6 +228,6 @@ export function CampaignApplicationVerificationPage() {
         {status === "success" && <a className="application-secondary-link" href="/">חזרה לדף הבית</a>}
       </section>
     </main>
-    <SiteFooter />
+
   </div>;
 }

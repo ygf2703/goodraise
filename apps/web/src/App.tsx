@@ -13,6 +13,7 @@ import { PublicHelpPage } from "./components/HelpPages";
 import type { PublicHelpRoute } from "./platform";
 import { getSitePage, setSitePage } from "../../../work/assets/site-header.js";
 import { useRouteLifecycle } from "./route-lifecycle";
+import { LandingPage } from "./components/LandingPage";
 
 // The adapter owns the empty chart/table containers inside this fixed layout.
 // Memoization prevents React from reconciling those containers on status changes.
@@ -66,29 +67,23 @@ function ManagerApplication({ sessionRequest }: { sessionRequest?: ReturnType<ty
   </div>;
 }
 
-export function App({ sessionRequest, archiveRoute, applicationRoute, helpRoute }: {
+export interface AppProps {
   sessionRequest?: ReturnType<typeof requestSession>;
   archiveRoute?: PublicArchiveRoute;
-  applicationRoute?: never;
-  helpRoute?: never;
-} | {
-  sessionRequest?: ReturnType<typeof requestSession>;
-  archiveRoute?: never;
   applicationRoute?: CampaignApplicationRoute;
-  helpRoute?: never;
-} | {
-  sessionRequest?: never;
-  archiveRoute?: never;
-  applicationRoute?: never;
-  helpRoute: PublicHelpRoute;
-} = {}) {
+  helpRoute?: PublicHelpRoute;
+  landingRoute?: boolean;
+}
+
+export function App({ sessionRequest, archiveRoute, applicationRoute, helpRoute, landingRoute }: AppProps = {}) {
   const route = useRouteLifecycle();
   useEffect(() => {
     if (route.paused) return;
     setSitePage(getSitePage(window.location.href));
-    if (archiveRoute || helpRoute || applicationRoute === "start" || applicationRoute === "verify") route.ready();
-  }, [archiveRoute, applicationRoute, helpRoute, route.paused, route.ready]);
+    if (helpRoute || applicationRoute === "start" || applicationRoute === "verify") route.ready();
+  }, [archiveRoute, applicationRoute, helpRoute, landingRoute, route.paused, route.ready]);
 
+  if (landingRoute) return <LandingPage />;
   if (helpRoute) return <PublicHelpPage route={helpRoute} />;
   if (archiveRoute) return <PublicArchivePage route={archiveRoute} />;
   if (applicationRoute === "start") return <CampaignApplicationPage />;

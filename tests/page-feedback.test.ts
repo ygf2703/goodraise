@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { beginPageBusy, isPageBusy, navigateSite } from "../work/assets/page-feedback.js";
-import { isAppDestination, shouldHandleLink } from "../apps/web/src/client-navigation";
+import { getApplicationRoute, isAppDestination, shouldHandleLink } from "../apps/web/src/client-navigation";
 
 class NodeStub {
   id = "";
@@ -60,10 +60,10 @@ test("one fixed overlay remains until all operations finish, locks background an
   } finally { endData(); endRoute(); }
 });
 
-test("client navigation only owns app routes, retaining external, public-site, fragment and new-tab behavior", () => {
+test("client navigation owns public and private site routes, retaining external, fragment and new-tab behavior", () => {
   const origin = "https://goodraise.example";
-  for (const path of ["/admin", "/admin/users", "/admin/applications", "/project?campaignId=one", "/prizes", "/login", "/campaign/ambassador"]) assert.equal(isAppDestination(path, origin), true, path);
-  for (const path of ["/", "/faq", "/contact", "/rules", "/privacy", "/accessibility", "/campaigns", "/campaigns/org/one", "/start", "/assets/image.png", "https://elsewhere.example/admin"]) assert.equal(isAppDestination(path, origin), false, path);
+  for (const path of ["/admin", "/admin/users", "/admin/applications", "/project?campaignId=one", "/prizes", "/login", "/campaign/ambassador", "/", "/#about", "/goodraise", "/index.html", "/faq", "/contact", "/rules", "/privacy", "/accessibility", "/campaigns", "/campaigns/org/one", "/start", "/start/verify?token=example"]) assert.equal(isAppDestination(path, origin), true, path);
+  for (const path of ["/assets/image.png", "https://elsewhere.example/admin"]) assert.equal(isAppDestination(path, origin), false, path);
   const event = { defaultPrevented: false, button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false };
   const link = { href: `${origin}/admin/users`, target: "", hasAttribute: () => false } as unknown as HTMLAnchorElement;
   assert.equal(shouldHandleLink(event, link, `${origin}/admin`), true);
@@ -71,6 +71,19 @@ test("client navigation only owns app routes, retaining external, public-site, f
   assert.equal(shouldHandleLink(event, { ...link, target: "_blank" } as HTMLAnchorElement, `${origin}/admin`), false);
   assert.equal(shouldHandleLink(event, { ...link, hasAttribute: () => true } as HTMLAnchorElement, `${origin}/admin`), false);
   assert.equal(shouldHandleLink(event, { ...link, href: `${origin}/admin#main` } as HTMLAnchorElement, `${origin}/admin`), false);
+});
+
+test("public destinations prepare the matching page instead of a manager/login shell", () => {
+  const route = (path: string) => getApplicationRoute(`https://goodraise.example${path}`);
+  assert.deepEqual(route("/#about"), { landingRoute: true });
+  assert.deepEqual(route("/?utm_source=email"), { landingRoute: true });
+  assert.deepEqual(route("/contact"), { helpRoute: "contact" });
+  assert.deepEqual(route("/faq"), { helpRoute: "faq" });
+  assert.deepEqual(route("/campaigns"), { archiveRoute: { kind: "index" } });
+  assert.deepEqual(route("/campaigns/org/campaign"), { archiveRoute: { kind: "detail", organizationId: "org", campaignId: "campaign" } });
+  assert.deepEqual(route("/start"), { applicationRoute: "start" });
+  assert.deepEqual(route("/start/verify?token=example"), { applicationRoute: "verify" });
+  for (const path of ["/admin", "/login", "/rules", "/?project=campaign"]) assert.deepEqual(route(path), {});
 });
 
 test("programmatic redirects use the app router when available and keep the native fallback", context => {

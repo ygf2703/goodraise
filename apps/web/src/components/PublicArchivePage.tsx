@@ -5,9 +5,7 @@ import type {
   PublicCompletedCampaignIndex,
 } from "../../../../shared/contracts/campaign";
 import { getPublicArchiveEndpoint, type PublicArchiveRoute } from "../platform";
-import { Header } from "./Header";
-import { SiteFooter } from "./SiteFooter";
-import { SkipLink } from "./SkipLink";
+import { useRouteLifecycle } from "../route-lifecycle";
 
 function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat("he-IL", {
@@ -105,9 +103,11 @@ function ArchiveDetail({ campaign }: { campaign: PublicCompletedCampaign }) {
 }
 
 export function PublicArchivePage({ route }: { route: PublicArchiveRoute }) {
+  const lifecycle = useRouteLifecycle();
   const [data, setData] = useState<PublicCompletedCampaignIndex | PublicCompletedCampaign | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
+    if (lifecycle.paused) return;
     const abort = new AbortController();
     fetch(getPublicArchiveEndpoint(route), { signal: abort.signal })
       .then(async (response) => {
@@ -117,11 +117,11 @@ export function PublicArchivePage({ route }: { route: PublicArchiveRoute }) {
       })
       .catch((reason) => { if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : "טעינת הקמפיין נכשלה."); });
     return () => abort.abort();
-  }, [route.kind, route.kind === "detail" ? route.organizationId : "", route.kind === "detail" ? route.campaignId : ""]);
+  }, [route.kind, route.kind === "detail" ? route.organizationId : "", route.kind === "detail" ? route.campaignId : "", lifecycle.paused]);
+  useEffect(() => { if (!lifecycle.paused && (data || error)) lifecycle.ready(); }, [data, error, lifecycle.paused, lifecycle.ready]);
 
   return <div id="goodraise-root" className="public-archive" dir="rtl">
-    <SkipLink />
-    <Header loadSession />
+
     <main id="main" className="archive-content" tabIndex={-1}>
       {!data && !error && <div className="archive-loading" role="status">טוענים קמפיינים שהסתיימו…</div>}
       {error && <div className="archive-main"><div className="archive-empty is-error">{error}</div></div>}
@@ -129,6 +129,6 @@ export function PublicArchivePage({ route }: { route: PublicArchiveRoute }) {
         ? <ArchiveIndex data={data as PublicCompletedCampaignIndex} />
         : <ArchiveDetail campaign={data as PublicCompletedCampaign} />)}
     </main>
-    <SiteFooter />
+
   </div>;
 }
