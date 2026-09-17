@@ -54,3 +54,28 @@ test("Netlify exposes help routes and contact API; static carousel has no stale 
   assert.doesNotMatch(landing, /placeholder-dialog|data-placeholder|שותפים לדרך/);
   assert.match(landing, /campaign-carousel/);
 });
+
+test("the homepage introduction links to the contact form, while How it works stays a homepage section", async () => {
+  const landing = await readFile(new URL("../work/goodraise-landing.html", import.meta.url), "utf8");
+  const homepage = renderToStaticMarkup(createElement<AppProps>(ApplicationRouter, { landingRoute: true }));
+  for (const html of [landing, homepage]) {
+    assert.match(html, /<a\b[^>]*href="\/contact"[^>]*>בואו נכיר\s/);
+    assert.match(html, /<section\b[^>]*id="how-it-works"/);
+  }
+  const footer = renderToStaticMarkup(createElement(SiteFooter));
+  assert.match(footer, /href="\/#how-it-works">איך זה עובד<\/a>/);
+});
+
+test("How it works explains email verification, review and conditional draft access without promising automatic launch", async () => {
+  const landing = await readFile(new URL("../work/goodraise-landing.html", import.meta.url), "utf8");
+  const homepage = renderToStaticMarkup(createElement<AppProps>(ApplicationRouter, { landingRoute: true }));
+  for (const html of [landing, homepage]) {
+    const section = html.match(/<section\b[^>]*id="how-it-works"[\s\S]*?<\/section>/)?.[0] || "";
+    assert.equal((section.match(/<article class="step">/g) || []).length, 3);
+    assert.match(section, /שולחים בקשה ומאמתים אימייל/);
+    assert.match(section, /אפשר להגיש בקשה גם בלי חשבון/);
+    assert.match(section, /לאחר אימות האימייל הבקשה עוברת לבדיקת הצוות, שמחליט אם לאשר אותה/);
+    assert.match(section, /אם הבקשה מאושרת, נוצר קמפיין במצב טיוטה/);
+    assert.match(section, /האישור אינו מפרסם את הקמפיין או מפעיל גביית תשלומים/);
+  }
+});
