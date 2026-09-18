@@ -21,9 +21,10 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
+  --space-5: var(--site-card-padding);
+  --space-6: var(--site-panel-padding);
+  --space-7: var(--site-section-padding);
+  --space-8: 64px;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 18px;
@@ -100,10 +101,11 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   position: relative;
   z-index: 1;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
   max-width: 1600px;
   margin: 0 auto;
-  padding: var(--space-4);
+  padding: var(--site-workspace-gutter);
   width: 100%;
   flex: 1 0 auto;
 }
@@ -1884,7 +1886,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 #goodraise-root .comparison-lists {
   display: grid;
   gap: var(--space-4);
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
 }
 
 #goodraise-root .bucket-row,
@@ -1933,7 +1935,6 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 #goodraise-root .chart-surface {
   width: 100%;
   min-height: 320px;
-  overflow-x: auto;
   overflow-y: hidden;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(17, 29, 74, 0.08);
@@ -1949,13 +1950,9 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 #goodraise-root .chart-surface > svg {
-  min-width: 100%;
-}
-
-/* Keep the ambassador summary lane readable; narrow screens scroll inside the chart. */
-#goodraise-root .chart-surface > svg.movement-matrix {
-  width: max(100%, 1180px);
-  min-width: 1180px;
+  /* Preserve readable labels and hit targets instead of scaling an entire
+     desktop chart down to a phone. The shared surface contains its scrolling. */
+  min-width: var(--chart-min-width, 100%);
 }
 
 #goodraise-root .metric-toolbar {
@@ -2069,12 +2066,13 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 
 #goodraise-root .tooltip {
   position: absolute;
-  inset-inline-start: 0;
-  inset-block-start: 0;
-  transform: translate(-9999px, -9999px);
+  /* Coordinates are measured from the physical left edge, also in RTL.
+     Hidden tooltips stay in bounds instead of enlarging the scrollable page. */
+  left: 0;
+  top: 0;
   visibility: hidden;
   pointer-events: none;
-  max-width: 18rem;
+  max-width: min(18rem, 100%);
   padding: 0.75rem 0.85rem;
   border: 1px solid rgba(17, 29, 74, 0.14);
   border-radius: var(--radius-md);
@@ -2124,18 +2122,17 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 
 #goodraise-root .tier-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: var(--space-4);
 }
 
 #goodraise-root .daily-winners-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: var(--space-4);
 }
 
 #goodraise-root .daily-winners-table-wrap {
-  overflow-x: auto;
   border: 1px solid rgba(17, 29, 74, 0.1);
   border-radius: var(--radius-lg);
   background: var(--white);
@@ -2448,7 +2445,6 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 #goodraise-root .table-wrap {
-  overflow: auto;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(17, 29, 74, 0.12);
   background: rgba(255, 255, 255, 0.98);
@@ -2816,10 +2812,6 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 @media (max-width: 1024px) {
-  #goodraise-root .app-shell {
-    padding: var(--space-3);
-  }
-
   #goodraise-root .project-hero-grid,
   #goodraise-root .project-body-grid {
     grid-template-columns: 1fr;
@@ -2860,6 +2852,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 
   #goodraise-root .place-card--1 {
     transform: none;
+    order: 0;
   }
 }
 
@@ -2920,7 +2913,9 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   }
 
   #goodraise-root .session-chip,
-  #goodraise-root .hero-badge {
+  #goodraise-root .hero-badge,
+  #goodraise-root .status-chip,
+  #goodraise-root .prize-pill {
     white-space: normal;
   }
 
@@ -3085,6 +3080,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 #goodraise-root .account-home {
   display: grid;
   gap: var(--space-6);
+  width: 100%;
   max-width: 1180px;
   margin: 0 auto;
   padding: var(--space-7) var(--space-5) var(--space-8);
@@ -3277,6 +3273,28 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 @media (max-width: 560px) {
+  #goodraise-root .admin-tabbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  #goodraise-root .admin-tab-button {
+    padding: 0.7rem 0.5rem;
+  }
+
+  #goodraise-root .winner-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  #goodraise-root .winner-rank {
+    grid-row: span 2;
+  }
+
+  #goodraise-root .winner-amount {
+    grid-column: 2;
+  }
+
   #goodraise-root .account-home {
     padding-inline: var(--space-3);
   }
@@ -3334,7 +3352,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 #goodraise-application-root .application-page-main,
 #goodraise-application-root .application-verification-page,
 #goodraise-application-root .admin-applications-main {
-  width: min(1000px, calc(100% - 40px));
+  width: min(1000px, calc(100% - 2 * var(--site-gutter)));
   margin-inline: auto;
   padding: 64px 0 96px;
   flex: 1 0 auto;
@@ -3617,7 +3635,7 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
 }
 
 #goodraise-application-root .admin-applications-main {
-  width: min(1180px, calc(100% - 40px));
+  width: min(1180px, calc(100% - 2 * var(--site-gutter)));
 }
 
 #goodraise-application-root .admin-applications-heading {
@@ -3863,7 +3881,6 @@ html, body { margin: 0; min-height: 100%; background: #F6F7FA; }
   #goodraise-application-root .application-page-main,
   #goodraise-application-root .application-verification-page,
   #goodraise-application-root .admin-applications-main {
-    width: min(100% - 24px, 1000px);
     padding: 28px 0 64px;
   }
 

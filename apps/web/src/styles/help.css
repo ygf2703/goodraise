@@ -1,6 +1,6 @@
 #goodraise-help-root { display: flex; flex-direction: column; color: #142e49; background: #fff; font: 18px/1.65 "Assistant", Arial, sans-serif; }
 #goodraise-help-root *, #goodraise-help-root *::before, #goodraise-help-root *::after { box-sizing: border-box; }
-#goodraise-help-root .help-main { flex: 1; width: min(1120px, calc(100% - 64px)); margin-inline: auto; padding-block: 64px 88px; }
+#goodraise-help-root .help-main { flex: 1; width: min(1120px, calc(100% - 2 * var(--site-gutter))); margin-inline: auto; padding-block: 64px 88px; }
 #goodraise-help-root .help-main a:not(.gr-button) { color: #075eb5; text-underline-offset: 4px; }
 #goodraise-help-root .help-main :focus-visible:not(.gr-button) { outline: 3px solid #075eb5; outline-offset: 4px; }
 #goodraise-help-root .help-intro { max-width: 740px; margin: 0 auto 48px; text-align: center; }
@@ -42,7 +42,7 @@
 #goodraise-help-root .help-success-mark { display: block; color: #075eb5; margin-bottom: 20px; font-size: 38px; }
 #goodraise-help-root .help-success a { display: inline-block; margin-top: 22px; }
 @media (max-width: 800px) {
-  #goodraise-help-root .help-main { width: calc(100% - 40px); padding-block: 40px 56px; }
+  #goodraise-help-root .help-main { padding-block: 40px 56px; }
   #goodraise-help-root .help-intro { margin-bottom: 32px; }
   #goodraise-help-root .help-contact-grid { grid-template-columns: 1fr; gap: 32px; }
   #goodraise-help-root .help-contact-aside { order: 1; padding-block: 0; }

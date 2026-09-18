@@ -1,6 +1,6 @@
 # GoodRaise product and engineering TODO
 
-Updated 2026-09-16. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
+Updated 2026-09-18. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
 
 ## Logged-in UX: one small change at a time
 
@@ -13,8 +13,9 @@ Updated 2026-09-16. This is the current working backlog. Historical assessment d
 - [ ] Review each authenticated page in order: My Projects → campaign dashboard → project/prizes → Users & Permissions → campaign applications. Include empty/error/loading states, keyboard navigation and mobile reflow.
 - [ ] Measure cold/warm page loads before optimizing: session/portfolio requests, account/application requests, campaign payloads, database time and browser rendering. Remove duplicate work based on measurements.
 - [ ] Correct the Node static-server cache rule: its broad hyphenated-name matcher treats stable `site-header.css`/`.js` filenames as immutable. Version shared assets and revalidate non-fingerprinted files; verify previously cached clients receive updates. Browser review encountered old header styles even after a normal reload.
-- [ ] Recheck mobile overflow on My Projects and the application-review page, plus shared-header styles with fresh assets; keep layout changes separate from the navigation fix.
-- [ ] Fix existing horizontal overflow inside campaign/prize report content at narrow mobile widths. The main grid now keeps campaign navigation within the viewport, but the wide report content still needs its own responsive review.
+- [x] Fix mobile overflow in My Projects, campaign management/design, project/prizes and Users & Permissions. Shared shrink-safe layout, wrapping status labels, contained charts/tables and in-bounds tooltips replace the overflowing RTL layout. Checked locally in Chrome at phone widths, with tablet/desktop regression checks; deployment pending.
+- [x] Add one [shared responsive CSS foundation](ui-styles.md) for all pages, retaining shared buttons/header components and page-specific composition. Prize cards stack in rank order on mobile, winner amounts no longer squeeze names, and report regions support keyboard scrolling.
+- [ ] Verify the application-review page with populated pending/approved/rejected cards at mobile widths; this pass verified the empty queue only. Also check real-device iOS Safari and Android Chrome, including touch scrolling, orientation and the on-screen keyboard.
 
 ## Now: finish the current production rollout
 

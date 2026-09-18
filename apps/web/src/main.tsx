@@ -1,5 +1,6 @@
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { ApplicationRouter } from "./ApplicationRouter";
+import "../../../work/assets/site-layout.css";
 import "./styles/dashboard.css";
 import "./styles/help.css";
 import "../../../work/assets/page-feedback.css";

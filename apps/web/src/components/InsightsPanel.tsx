@@ -381,7 +381,7 @@ export function InsightsPanel() {
                     <option value="count">מספר עסקאות</option>
                     <option value="average">ממוצע לעסקה</option>
                   </select>
-                  <div id="daily-chart" className="chart-surface"></div>
+                  <div id="daily-chart" className="chart-surface" tabIndex={0} role="region" aria-label="מגמה יומית — ניתן לגלול לצדדים"></div>
                   <div className="chart-footnote">לחיצה על עמוד או נקודה בגרף תסנן את הדשבורד לאותו יום.</div>
                 </div>
                 <div id="daily-tooltip" className="tooltip" role="status" aria-live="polite"></div>
@@ -408,7 +408,7 @@ export function InsightsPanel() {
                     <option value="amount">סכום גיוס</option>
                     <option value="count">מספר עסקאות</option>
                   </select>
-                  <div id="heatmap-chart" className="chart-surface chart-surface--wide"></div>
+                  <div id="heatmap-chart" className="chart-surface chart-surface--wide" tabIndex={0} role="region" aria-label="מפת חום — ניתן לגלול לצדדים"></div>
                   <div className="chart-footnote">לחיצה על תא במפה תפעיל פילוח משולב של יום ושעה.</div>
                 </div>
                 <div id="heatmap-tooltip" className="tooltip" role="status" aria-live="polite"></div>
@@ -431,7 +431,7 @@ export function InsightsPanel() {
                     <option value="amount">סכום גיוס</option>
                     <option value="count">מספר עסקאות</option>
                   </select>
-                  <div id="movement-chart" className="chart-surface chart-surface--wide"></div>
+                  <div id="movement-chart" className="chart-surface chart-surface--wide" tabIndex={0} role="region" aria-label="תנועת שגרירים — ניתן לגלול לצדדים"></div>
                   <div className="chart-footnote">לחיצה על שגריר או על תא במטריצה תעדכן את כל המסכים לפי אותו חיתוך.</div>
                 </div>
                 <div id="movement-tooltip" className="tooltip" role="status" aria-live="polite"></div>
@@ -478,7 +478,7 @@ export function InsightsPanel() {
                   </div>
                 </div>
                 <div id="table-panel" className="table-panel" hidden>
-                  <div id="table-root" className="table-wrap"></div>
+                  <div id="table-root" className="table-wrap" tabIndex={0} role="region" aria-label="טבלת הרשומות — ניתן לגלול לצדדים"></div>
                 </div>
               </section>
             </div>);

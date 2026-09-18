@@ -1,0 +1,52 @@
+/* Site-wide responsive foundation. Page styles own composition, not these
+   defaults. Low-specificity rules preserve explicit chart/table minimums. */
+:root {
+  --site-font-family: "Assistant", Arial, sans-serif;
+  --site-control-font-size: 16px;
+  --site-gutter: 32px;
+  --site-workspace-gutter: 16px;
+  --site-card-padding: 24px;
+  --site-panel-padding: 32px;
+  --site-section-padding: 48px;
+}
+
+:where(*, *::before, *::after) { box-sizing: border-box; }
+/* Automatic grid/flex minimums otherwise let a long label or native input
+   expand every ancestor. Wide reports opt back into a minimum locally. */
+:where(*) { min-width: 0; }
+:where(body) { margin: 0; font-family: var(--site-font-family); overflow-wrap: anywhere; }
+:where(input, select, textarea) {
+  max-width: 100%;
+  font-family: inherit;
+  font-size: var(--site-control-font-size);
+}
+:where(img, video, canvas) { max-width: 100%; }
+
+/* Existing report components share one containment rule. Never hide overflow
+   on the body: touch/keyboard users must still be able to reach wide data. */
+:where(.table-wrap, .daily-winners-table-wrap, .chart-surface) {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+:where(.table-wrap, .daily-winners-table-wrap, .chart-surface):focus-visible {
+  outline: 3px solid var(--gr-action-focus, #142e49);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1024px) {
+  :root { --site-workspace-gutter: 12px; }
+}
+@media (max-width: 800px) {
+  :root { --site-gutter: 20px; }
+}
+@media (max-width: 560px) {
+  :root {
+    --site-card-padding: 16px;
+    --site-panel-padding: 20px;
+    --site-section-padding: 28px;
+  }
+}
+@media (max-width: 480px) {
+  :root { --site-gutter: 18px; }
+}

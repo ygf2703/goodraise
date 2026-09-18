@@ -7,6 +7,7 @@ import { canAccessManagerPages, setSiteSession, bindLogoutButton, setSitePage } 
 import { beginPageBusy } from '../../../../work/assets/page-feedback.js';
 import { setButtonBusy } from '../../../../work/assets/action-feedback.js';
 import { renderCampaignNavigation } from '../campaign-navigation';
+import { showTooltip, hideTooltip } from '../chart-tooltip';
 
 /** Existing campaign controls, scoped to one React mount. Dynamic chart/table containers
  * are owned by this adapter until they are converted to individual React components. */
@@ -5221,7 +5222,7 @@ function renderPrizeBoard(prizeRows) {
             <h3>טבלת דירוג יומית - עולים לדשא</h3>
             <div class="text-small text-muted">עד עשרה עולים שונים: בכל יום נבחר/ת המוביל/ה היומי/ת. מי שכבר עלה/תה לדשא ביום קודם מדולג/ת והבא/ה בדירוג נבחר/ת במקומו/ה.</div>
           </div>
-          <div class="daily-winners-table-wrap">
+          <div class="daily-winners-table-wrap" tabindex="0" role="region" aria-label="טבלת דירוג יומית — ניתן לגלול לצדדים">
             <table class="daily-winners-table">
               <thead>
                 <tr>
@@ -5376,25 +5377,10 @@ function renderPrizeAmbassadorDirectory(leaderboard) {
 
 function createSvg(width, height, ariaLabel) {
   return `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeAttribute(ariaLabel)}">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="--chart-min-width: ${width}px" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeAttribute(ariaLabel)}">
       <rect x="0" y="0" width="${width}" height="${height}" fill="transparent"></rect>
     </svg>
   `;
-}
-
-function showTooltip(target, tooltip, html, clientX, clientY) {
-  tooltip.innerHTML = html;
-  tooltip.classList.add("is-visible");
-  const rect = target.getBoundingClientRect();
-  const tipRect = tooltip.getBoundingClientRect();
-  const left = Math.min(Math.max(clientX - rect.left - tipRect.width / 2, 8), rect.width - tipRect.width - 8);
-  const top = Math.max(clientY - rect.top - tipRect.height - 14, 8);
-  tooltip.style.transform = `translate(${left}px, ${top}px)`;
-}
-
-function hideTooltip(tooltip) {
-  tooltip.classList.remove("is-visible");
-  tooltip.style.transform = "translate(-9999px, -9999px)";
 }
 
 function setInsightSummary(element, items) {
