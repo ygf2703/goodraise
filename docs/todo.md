@@ -1,19 +1,45 @@
 # GoodRaise product and engineering TODO
 
-Updated 2026-09-18. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
+Updated 2026-09-27. This is the current working backlog. Historical assessment documents may describe older limitations that have already been resolved; use this file for active work.
+
+## Verified status and execution order
+
+The [production Netlify deploy](https://app.netlify.com/projects/goodraise/deploys/6aad2846437caf00085afa1f) publishes `7a42ffd` (2026-09-18), including the checked UI changes below. On 2026-09-27, an existing authenticated site-admin session opened My Projects and a campaign dashboard. Later, Ran submitted the login form with the existing password and that tab moved from `/login` to My Projects. Noam's password login was deferred at the owner's request because his password is unavailable; his active account and set password were verified during migration, but live login is untested. The application-review queue was empty in every filter, so populated-card QA is still open. There are no completed campaigns in the portfolio; completed-page behavior was not checked against real production data.
+
+The Netlify environment-variable list showed `GOODRAISE_DATABASE_URL`, `GOODRAISE_GOOGLE_SERVICE_ACCOUNT_JSON`, and `GOODRAISE_INGEST_API_KEY` using the same value in all deploy contexts. The ingest key was marked secret on 2026-09-27 and the setting persisted after reload; its deploy contexts are still broad. The four email-delivery variables listed below and `GOODRAISE_CONTACT_EMAILS` were absent; the latter has a code default. Credential values were not reported. This confirms configuration gaps, not whether mail reaches an inbox.
+
+Owner constraint (2026-09-27): no new spending for email now. Resend's current free plan allows up to 3,000 transactional emails per month and 100 per day, with up to three verified domains. Use it only if an already-owned domain can be verified; do not buy a domain or enable a paid plan. If no such domain is available, keep local outbox testing and defer hosted sending. Email-dependent contact and application flows remain unverified launch blockers while hosted delivery is absent.
+
+`P0` means launch/security blocker; `P1` means visible reliability or usability. Effort is an estimate: S = hours, M = 1–3 days, L = more than 3 days or external coordination. Work in priority order, then effort order within a priority; tasks requiring existing passwords, provider credentials, or production configuration are called out explicitly.
+
+| Order | Priority | Effort | Next work | Status / dependency |
+| --- | --- | --- | --- | --- |
+| 1 | P0 | S | Mark the ingest API key secret in Netlify. | Done 2026-09-27; persisted after reload. Deploy-context scope remains open in row 2. |
+| 2 | P0 | M | Restrict database and service-account secrets to required deploy contexts. | Both currently use the same value in all contexts; preview data access must be resolved before testing application emails. |
+| 3 | P0 | M | Configure free hosted Resend delivery and test application/contact emails and Reply-To in a safe preview. | No paid services or domain purchase. Requires an already-owned verifiable domain, free provider key and real inbox checks; otherwise deferred and still a launch blocker. |
+| 4 | P0 | M | Add an explicit deployment migration stage. | The repository build workflow has no migration stage. |
+| 5 | P0 | M | Split runtime and inspection database roles from the migration owner. | The restricted-role configuration is still open. |
+| 6 | P0 | M | Add edge protection and retention for public contact submissions. | Application quotas are process-local; production protection not verified. |
+| 7 | P0 | M | Run the application approval journey in staging. | Complete journey unverified. |
+| 8 | P0 | L | Remove source credentials from campaign payloads, then rotate them. | Requires a server-side secret mapping and coordinated credential rotation. |
+| 9 | P1 | S | Fix shared-asset caching in the Node static server. | Fixed locally on 2026-09-27; build and cache-header test pass. Awaiting deployment. |
+| 10 | P1 | M | Review authenticated loading/error/keyboard/mobile states, including populated application cards and real phones. | Empty application queue reviewed only; real-device checks remain. |
+| 11 | P1 | M | Measure cold/warm page and API loads before optimizing. | No current production timing profile recorded. |
+
+Noam's live password login is deferred at the owner's request, not a launch gate. Payment-provider selection/onboarding, accessibility audit/remediation, and the database-platform cutover are larger product/platform tracks below; they are not implied complete by this short execution queue.
 
 ## Logged-in UX: one small change at a time
 
-- [x] Clarify the current page: keep the post-login URL, browser title and active menu item aligned; separate My Projects from Users & Permissions. My Projects no longer requests the admin account list. Implemented locally; deployment pending.
-- [x] Add shared spinner styling and pending labels to login/setup, logout and project-opening actions, prevent duplicate requests/navigation, restore retry after auth failures, and preserve new-tab/Back behavior. Implemented locally; deployment pending.
-- [x] Apply a shared, centered loading overlay to login/logout, managed-page transitions, user saving and application decisions; block conflicting input, preserve failed-form values and distinguish successful saving from a failed list refresh. Implemented locally; deployment pending.
+- [x] Clarify the current page: keep the post-login URL, browser title and active menu item aligned; separate My Projects from Users & Permissions. My Projects no longer requests the admin account list. Published in production; My Projects observed 2026-09-27.
+- [x] Add shared spinner styling and pending labels to login/setup, logout and project-opening actions, prevent duplicate requests/navigation, restore retry after auth failures, and preserve new-tab/Back behavior. Published in production; full interaction QA remains below.
+- [x] Apply a shared, centered loading overlay to login/logout, managed-page transitions, user saving and application decisions; block conflicting input, preserve failed-form values and distinguish successful saving from a failed list refresh. Published in production; full interaction QA remains below.
 - [x] Keep managed navigation inside the current document; prepare the next view off-document, retain the previous page under the overlay and reveal the destination only after its data loads. Preserve native new-tab links and the existing single-request campaign/prize switch.
-- [x] Keep the global header mounted across public and private routes; reserve action space during session lookup, use a fixed-width CTA and one font stylesheet, and avoid active-link font-weight shifts. Checked locally on desktop and narrow mobile screens; deployment pending.
-- [x] Separate global navigation from campaign navigation: project cards expose role-appropriate actions; selected campaigns show their name, local management/project/prizes links and a working return to My Projects. Explicit portfolio links show the selector even with one project. Implemented locally; deployment pending.
+- [x] Keep the global header mounted across public and private routes; reserve action space during session lookup, use a fixed-width CTA and one font stylesheet, and avoid active-link font-weight shifts. Checked locally on desktop and narrow mobile screens; published in production.
+- [x] Separate global navigation from campaign navigation: project cards expose role-appropriate actions; selected campaigns show their name, local management/project/prizes links and a working return to My Projects. Explicit portfolio links show the selector even with one project. Published in production; project selection and campaign navigation observed 2026-09-27.
 - [ ] Review each authenticated page in order: My Projects → campaign dashboard → project/prizes → Users & Permissions → campaign applications. Include empty/error/loading states, keyboard navigation and mobile reflow.
 - [ ] Measure cold/warm page loads before optimizing: session/portfolio requests, account/application requests, campaign payloads, database time and browser rendering. Remove duplicate work based on measurements.
-- [ ] Correct the Node static-server cache rule: its broad hyphenated-name matcher treats stable `site-header.css`/`.js` filenames as immutable. Version shared assets and revalidate non-fingerprinted files; verify previously cached clients receive updates. Browser review encountered old header styles even after a normal reload.
-- [x] Fix mobile overflow in My Projects, campaign management/design, project/prizes and Users & Permissions. Shared shrink-safe layout, wrapping status labels, contained charts/tables and in-bounds tooltips replace the overflowing RTL layout. Checked locally in Chrome at phone widths, with tablet/desktop regression checks; deployment pending.
+- [ ] Correct the Node static-server cache rule: its broad hyphenated-name matcher treats stable `site-header.css`/`.js` filenames as immutable. Version shared assets and revalidate non-fingerprinted files; verify previously cached clients receive updates. Fixed and verified locally 2026-09-27; production deployment and cached-client check remain.
+- [x] Fix mobile overflow in My Projects, campaign management/design, project/prizes and Users & Permissions. Shared shrink-safe layout, wrapping status labels, contained charts/tables and in-bounds tooltips replace the overflowing RTL layout. Checked locally in Chrome at phone widths, with tablet/desktop regression checks; published in production.
 - [x] Add one [shared responsive CSS foundation](ui-styles.md) for all pages, retaining shared buttons/header components and page-specific composition. Prize cards stack in rank order on mobile, winner amounts no longer squeeze names, and report regions support keyboard scrolling.
 - [ ] Verify the application-review page with populated pending/approved/rejected cards at mobile widths; this pass verified the empty queue only. Also check real-device iOS Safari and Android Chrome, including touch scrolling, orientation and the on-screen keyboard.
 
@@ -22,13 +48,15 @@ Updated 2026-09-18. This is the current working backlog. Historical assessment d
 - [x] Take or confirm a recoverable production database snapshot before changing the schema. Manual snapshot created 2026-09-15 at 20:56:21 UTC; see the [rollout record](database-rollout-2026-09-16.md).
 - [x] Apply migrations `004_completed_campaign_snapshots.sql`, `005_account_memberships.sql`, and `006_campaign_applications.sql` to the production Neon database.
 - [x] Apply `007_site_admins.ts` through the Node migration runner and verify both owner accounts are active global site admins. Existing IDs/passwords were preserved; no new passwords were generated.
-- [ ] Verify both owner accounts can log in and select projects using their existing production passwords.
+- [x] Verify Ran can log in with the existing production password and open My Projects (2026-09-27).
+- [ ] Verify Noam can log in with the existing production password and select projects. Deferred at the owner's request; the existing password is unavailable.
 - [x] Verify both migration names and checksums in `goodraise.schema_migrations`; rerun the runner to confirm it skips already-applied migrations.
 - [x] Verify `campaign_public_snapshots`, `admin_memberships`, `campaign_applications`, `campaign_application_events`, `admin_users.access_config_hash`, constraints, and indexes exist.
 - [ ] Backfill public snapshots for real campaigns that are already completed. The 2026-09-16 production check found zero campaigns with status `completed` and zero snapshots.
 - [ ] Keep the three scraped Giveback placeholder campaigns limited to development or staging; do not seed them into production.
 - [x] Verify production `/api/health`, `/api/auth/status`, and `/api/public/campaigns`: all returned HTTP 200 after migration; health reported `ok: true`.
-- [ ] Verify production login, project selection, and completed-campaign pages end to end.
+- [x] Verify an existing authenticated production session can open My Projects and select a campaign dashboard (2026-09-27).
+- [ ] Verify production password login and completed-campaign pages end to end.
 - [ ] Configure `GOODRAISE_PUBLIC_URL`, `GOODRAISE_EMAIL_MODE=resend`, `GOODRAISE_RESEND_API_KEY`, and `GOODRAISE_EMAIL_FROM`, then verify applicant, admin-notification, approval and rejection messages from a deploy preview.
 - [ ] Confirm the contact recipients (`GOODRAISE_CONTACT_EMAILS`, defaults to Ran and Noam), verify real inbox delivery and Reply-To from a deploy preview, and confirm the inboxes are monitored. Local outbox tests do not verify real delivery.
 - [ ] Before opening the public contact form broadly, add/verify edge-level abuse protection for `/api/contact` (the application quotas are best-effort across simultaneous Netlify instances) and define cleanup/retention for rate-limit metadata and received messages. Consider a privacy/accessibility-reviewed CAPTCHA only if needed.
