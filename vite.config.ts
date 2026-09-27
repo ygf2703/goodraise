@@ -8,6 +8,7 @@ export default defineConfig({
   build: {
     outDir: fileURLToPath(new URL("./dist", import.meta.url)),
     emptyOutDir: true,
+    manifest: true,
     target: "es2022",
     sourcemap: false,
   },

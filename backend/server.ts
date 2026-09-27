@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { extname, resolve, sep } from "node:path";
 import { serveApi } from "./transport";
 import { closeDatabasePool } from "./database";
@@ -9,6 +10,8 @@ const output = resolve(import.meta.dirname, "../dist");
 const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml", ".webp": "image/webp", ".woff2": "font/woff2", ".ico": "image/x-icon" };
 
 export function createApplicationServer() {
+  const manifest = JSON.parse(readFileSync(resolve(output, ".vite/manifest.json"), "utf8")) as Record<string, { file?: string; css?: string[] }>;
+  const versionedAssets = new Set(Object.values(manifest).flatMap((entry) => [entry.file, ...(entry.css || [])].filter((file): file is string => Boolean(file))));
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url || "/", "http://localhost");
@@ -27,7 +30,7 @@ export function createApplicationServer() {
       if (!content) { response.writeHead(404); response.end("Not found"); return; }
       response.writeHead(200, {
         "content-type": types[extname(file)] || "application/octet-stream",
-        "cache-control": /\/assets\/.*-[\w-]+\.(js|css)$/.test(file) ? "public, max-age=31536000, immutable" : "no-cache",
+        "cache-control": versionedAssets.has(file.slice(output.length + 1).split(sep).join("/")) ? "public, max-age=31536000, immutable" : "no-cache",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
         "referrer-policy": "strict-origin-when-cross-origin",

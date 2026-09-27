@@ -63,5 +63,9 @@ assert.equal(footer, homeFooter, "The homepage and application must use the same
 for (const asset of ["assets/site-header.css", "assets/site-header.js", "assets/buttons.css", "assets/action-feedback.js", "assets/page-feedback.js", "assets/page-feedback.css", "assets/landing.css", "assets/landing-carousel.js"]) {
   assert.ok(files.includes(asset), `Missing shared header asset: ${asset}`);
 }
-for (const page of [html, homepage]) assert.match(page, /href="\/assets\/buttons\.css"/, "Every application shell must load the shared button styles.");
+for (const page of [html, homepage]) {
+  for (const asset of ["site-header", "buttons"]) {
+    assert.match(page, new RegExp(`href="/assets/${asset}\\.css\\?v=[a-f0-9]{12}"`), `Every application shell must version ${asset}.css.`);
+  }
+}
 console.log(`Release verified: React shell ${Buffer.byteLength(html).toLocaleString()} bytes; protected data excluded.`);
